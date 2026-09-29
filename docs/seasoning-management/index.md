@@ -8,16 +8,19 @@
 
 ## 仕様の位置づけ
 
-- **現行**: `master` の `src/SeasoningManager` は単一の `Seasoning` Core Data エンティティと種類別の一覧画面を持つ。一覧セルの詳細表示、登録画面、状態管理は完成していない。
-- **参考**: `src/old/SeasoningManagement` には商品情報・在庫個体・栄養素を分けたモデルと一部画面がある。ただし使用中画面には仮データや空画面があり、完成済み機能とはみなさない。
-- **目標**: 本文書は今後実現する機能要件。現行の振る舞いをそのまま保証する文書ではない。新しい SwiftUI アプリとして画面を作り直し、Apple 標準の永続化・iCloud 同期を使う。
+- **現行**: `master` の `src/SeasoningManager` は新規作成した SwiftUI / SwiftData のひな形。`Item` に時刻を保存するサンプル画面があり、調味料の機能はこれから実装する。
+- **参考**: 旧 UIKit / Core Data アプリは `old/src/SeasoningManager` に移された。さらに古い `old/src/old/SeasoningManagement` には商品情報・在庫個体・栄養素を分けたモデルと一部画面がある。これらを完成済み機能とはみなさない。
+- **目標**: 本文書は今後実現する機能要件。SwiftUI の画面と SwiftData の保存モデルを使い、iCloud 同期を加える。
 
 ## プロジェクト刷新方針
 
-- 同じリポジトリ内に新しい iOS App の Xcode プロジェクトを作成し、SwiftUI の `App` ライフサイクルで画面を構成する。旧 UIKit / Storyboard / XIB の画面は参考資料として扱い、段階的な画面移植は前提としない。
+- 新しい iOS App プロジェクト `src/SeasoningManager/SeasoningManager.xcodeproj` を起点に、SwiftUI の `App` ライフサイクルで画面を構成する。旧 UIKit / Storyboard / XIB の画面は参考資料として扱う。
 - CocoaPods を使わず、RxSwift / RxCocoa / RxDataSources / RxGesture / RxBlocking / RxTest / LicensePlist への依存を新アプリに持ち込まない。外部ライブラリの追加が必要になった場合は個別に判断する。
-- 保存済みデータの保持と iCloud 同期が要件のため、初版の永続化は Core Data を基本とする。SwiftUI への変更は保存済みデータの破棄を意味しない。CloudKit 連携の具体方式は[同期・移行仕様](./sync-migration-spec.md)と技術設計で検証する。
+- 初版の永続化は SwiftData とする。旧 Core Data データの保持は[同期・移行仕様](./sync-migration-spec.md)に従う。SwiftData の CloudKit 対応スキーマと同期の実現性は実装前に検証する。
+- 新プロジェクトにはアプリ、Swift Testing の単体テスト、XCTest の UI テストのターゲットがある。フレームワークを同じ `.xcodeproj` 内にターゲットとして追加する場合、別の `.xcworkspace` は作らない。
 - 既存アプリの更新として配布する場合はアプリの識別子と署名・配布上の連続性を維持し、旧ストアを読み取れるようにする。別アプリとして配布する場合は既存データを自動継承できると仮定しない。
+
+現行Xcode設定のデプロイメントターゲットは iOS 27.0。製品としての最小対応OSは別途決める。現行のCloudKit entitlementはコンテナ識別子が空で、同期の動作はまだ確認されていない。
 
 ## 対象範囲
 
@@ -60,7 +63,7 @@ flowchart TD
 | [inventory-spec.md](./inventory-spec.md) | 個体の登録、一覧、詳細、期限、状態変更 |
 | [ocr-spec.md](./ocr-spec.md) | 商品名・賞味期限の撮影、文字認識、候補の確認 |
 | [history-spec.md](./history-spec.md) | 使い切り履歴と削除 |
-| [data-model-spec.md](./data-model-spec.md) | Core Data の論理モデルと整合性 |
+| [data-model-spec.md](./data-model-spec.md) | SwiftData の論理モデルと整合性 |
 | [sync-migration-spec.md](./sync-migration-spec.md) | iCloud 同期、オフライン、既存データ移行 |
 
 ## 用語
