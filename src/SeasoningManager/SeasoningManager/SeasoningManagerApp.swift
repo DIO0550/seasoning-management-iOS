@@ -13,8 +13,12 @@ struct SeasoningManagerApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,
+            Product.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        // CloudKit の設定・実スキーマ検証が完了するまではローカル保存する。
+        let modelConfiguration = ModelConfiguration(
+            schema: schema, isStoredInMemoryOnly: false, cloudKitDatabase: .none
+        )
 
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
