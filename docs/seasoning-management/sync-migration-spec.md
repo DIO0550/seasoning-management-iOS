@@ -47,6 +47,72 @@ CloudKit 同期ではリレーションの Optional 化が必要で、永続化�
 
 `old/src/old` は別の試作コードであり、その保存領域の存在や旧 `SeasoningManager` アプリへの継承は確認できていない。この別試作アプリからの自動移行は別途調査する。
 
+### 更新インストールの前提調査（Issue #15）
+
+2026-10-01、`master` の `832ea0286b30bce5a116210c2a7e6c3371a78371` を調査した。以下はリポジトリの設定とコードからの確認結果であり、配布済みバイナリの署名や実機での更新成功を確認したものではない。**Bundle ID は一致するが、新アプリの Team は未設定で、更新可否は未検証**である。
+
+| 項目 | 旧 UIKit アプリ | 新 SwiftUI アプリ | 判定 |
+|:--|:--|:--|:--|
+| 対象 | `old/src/SeasoningManager` | `src/SeasoningManager` | `old/src/old` の試作は対象外。 |
+| App の Bundle ID（Debug / Release） | `DIO0550.SeasoningManager` | `DIO0550.SeasoningManager` | 設定値は一致。 |
+| 署名方式（Debug / Release） | `CODE_SIGN_STYLE = Automatic` | `CODE_SIGN_STYLE = Automatic` | 自動署名の指定だけでは更新可能とは判断しない。 |
+| Team（Debug / Release） | `DEVELOPMENT_TEAM = RMVJT9K8W3` | `DEVELOPMENT_TEAM` の指定なし | 旧配布物の Team を確認して新アプリに設定する必要がある。 |
+| 署名済み `application-identifier` / 証明書 / Profile | リポジトリ内に確認資料なし | リポジトリ内に確認資料なし | 実物を比較する。App ID Prefix を Team ID と同一と推定しない。 |
+| バージョン / ビルド | `Info.plist` で `1.0` / `1` | `MARKETING_VERSION = 1.0` / `CURRENT_PROJECT_VERSION = 1` | 配布済みの値は不明。配布経路の更新要件に合わせて更新する。 |
+| 最低 iOS | App ターゲットで `12.0`（プロジェクトは `13.0`） | `27.0` | 新版に対応する OS・端末で更新検証する。旧版の実際の対応範囲は配布物で確認する。 |
+| App Groups | 共有コンテナの設定・参照なし | entitlements に App Groups なし | 別アプリの保存領域を共有する仕組みはない。 |
+
+根拠ファイル：
+
+- [旧 project.pbxproj](../../old/src/SeasoningManager/SeasoningManager.xcodeproj/project.pbxproj)、[旧 Info.plist](../../old/src/SeasoningManager/SeasoningManager/Info.plist)
+- [新 project.pbxproj](../../src/SeasoningManager/SeasoningManager.xcodeproj/project.pbxproj)、[新 entitlements](../../src/SeasoningManager/SeasoningManager/SeasoningManager.entitlements)
+- [旧 AppDelegate.swift](../../old/src/SeasoningManager/SeasoningManager/AppDelegate.swift)、[旧 Core Data モデル](../../old/src/SeasoningManager/SeasoningManager/SeasoningManager.xcdatamodeld/SeasoningManager.xcdatamodel/contents)、[新 SeasoningManagerApp.swift](../../src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift)
+
+### 保存場所と読み取り条件
+
+旧アプリは `NSPersistentContainer(name: "SeasoningManager")` を作り、保存 URL を変更せずに `loadPersistentStores` している。既定の保存先から推定される旧ストアは **`<アプリのデータコンテナ>/Library/Application Support/SeasoningManager.sqlite`** である。実端末の URL は未取得のため、旧版の `persistentStoreCoordinator.persistentStores` の各 `url` と実ファイルを照合して確定する。データコンテナの UUID を含む絶対パスは固定せず、更新後のコンテナ内で保存先を解決する。
+
+新アプリは `ModelConfiguration(schema:isStoredInMemoryOnly: false)` の既定の保存先を使い、URL を明示していない。現在のモデルはひな形の `Item(timestamp)` で、旧ストアの読み取りは未実装である。移行実装時には新しい `ModelConfiguration.url` を記録し、旧ストアと異なる URL を明示する。既定のファイル名だけを根拠に安全と判断しない。
+
+- 旧ストアが存在することを確認してから、旧 `SeasoningManager` モデルで読み取る。読み取り失敗時に空ストアを作って「移行成功」と扱わない。
+- バックアップは書き込みを停止した整合的な状態で取得する。SQLite 本体だけでなく、存在する `SeasoningManager.sqlite-wal` / `SeasoningManager.sqlite-shm` と関連ファイルも保全する。稼働中に本体だけコピーしない。
+- 更新でデータコンテナへアクセスできることと、旧モデルのレコードを読み取れること、新モデルへ変換できることは別々に検証する。
+
+### 更新として配布する条件と自動移行できないケース
+
+通常の更新では同じ Bundle ID を維持し、旧配布元の Team・App ID に対応する有効な署名を使用する。新旧の署名済み `application-identifier`（App ID Prefix を含む）と Profile の権限を照合する。Team 移管や Prefix 変更がある場合は Apple の移管手順を別途確認し、Bundle ID の一致だけで上書きできると判断しない。CloudKit・Push の権限も新しい Profile と整合させる。
+
+App Store 配布済みなら同じ App Store Connect のアプリレコードへの更新とし、受理されるバージョン・ビルド番号を設定する。開発・Ad Hoc 配布なら対応する署名と端末登録などを確認する。実際の旧配布経路は未確認であり、その経路に合わせた更新を検証する。
+
+| 条件 | 扱い |
+|:--|:--|
+| 同じアプリとして削除せず上書きし、旧データが残っている | 自動移行の候補。署名・旧ストア読み取り・変換の検証が必要。 |
+| Bundle ID を変更して別アプリとして配布する | 別サンドボックスになる。現在の構成では旧コンテナを直接読めず、自動移行できない。同じ Team や同じ iCloud アカウントでも解決しない。 |
+| 署名不整合で更新が拒否される | 署名を修正する。旧アプリを削除してインストールし直す方法を移行手順にしない。 |
+| 旧アプリをデータごと削除済み、または別端末へ新規インストールする | 旧ストアがないためローカル自動移行はできない。復元可能なバックアップ等があれば別途扱う。 |
+| 端末が新アプリの最低 iOS を満たさない | その端末では更新・移行を実行できない。 |
+
+別アプリ配布を選ぶ場合は、旧アプリ側のエクスポートと新版側のインポートなど、利用者がデータを受け渡せる経路が別途必要になる。後から新アプリだけに App Groups を追加しても、旧アプリの私有ストアが共有領域へ移るわけではない。
+
+### 実機検証手順と未確認事項
+
+1. 旧配布物、配布経路、端末 OS、新旧ビルドのコミットと Xcode バージョンを記録する。旧版で実データを保存し、件数・識別子・画像・開封日・賞味期限を記録してバックアップを取得する。
+2. Mac 上で新旧の署名済み `.app` を調べる。`codesign -d --entitlements :- /path/to/SeasoningManager.app` と `codesign -dv --verbose=4 /path/to/SeasoningManager.app` で `application-identifier`、Team、署名を確認する。埋め込み Profile がある配布物では `security cms -D -i /path/to/SeasoningManager.app/embedded.mobileprovision` も照合する。Profile の全文や端末識別子をリポジトリへ保存しない。
+3. 旧版のロード済みストア URL とバックアップ内のファイルを照合する。新版の保存 URL が別であることも確認する。
+4. 移行処理を実装した新版を、旧版を削除せず同じテスト端末へ更新インストールする。旧ストアを開けること、データ変換後の件数・画像・日付、旧データの保全、再起動しても重複しないことを確認する。空データでの新規インストールやシミュレータのみの検証で署名検証を代替しない。
+5. インストール結果、署名の比較結果、コンテナ内の相対パス、移行前後の件数と未解決事項をこの節へ追記する。
+
+| 検証 | 2026-10-01 の結果 |
+|:--|:--|
+| 新旧プロジェクト・モデル・初期化コードの静的照合 | 実施済み。上記の設定値と保存先を確認（実パスは推定）。 |
+| 署名済み配布物・Profile の比較 | 未実施。配布物と署名環境が必要。 |
+| Xcode ビルド・実機への更新インストール | 未実施。この作業環境は Linux で `xcodebuild` と iOS 実機を利用できない。 |
+| 実ストアの読み取り・SwiftData 変換・再起動 | 未実施。旧実データと移行処理の実装が必要。 |
+
+Issue #15 のビルドまたは動作確認条件は未達であり、本調査だけで旧アプリから安全に更新できるとは判定しない。
+
+参照：[Apple: NSPersistentContainer.defaultDirectoryURL](https://developer.apple.com/documentation/coredata/nspersistentcontainer/defaultdirectoryurl())、[Apple TN2415: Entitlements Troubleshooting](https://developer.apple.com/library/archive/technotes/tn2415/_index.html)、[Apple TN2319: Installation Failure Troubleshooting for iOS](https://developer.apple.com/library/archive/technotes/tn2319/_index.html)。TN2319 は開発・ベータ版のインストール診断資料であり、App Store 配布の実機確認を代替しない。
+
 ## 確認条件
 
 | 場面 | 期待する結果 |
