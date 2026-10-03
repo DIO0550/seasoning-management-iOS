@@ -15,3 +15,11 @@
 `src/SeasoningManager/SeasoningManager.xcodeproj` を Xcode で開いてください。新アプリは CocoaPods を使用しないため、`pod install` や独立した `.xcworkspace` の作成は不要です。同じ `.xcodeproj` にフレームワークのターゲットを追加する場合も、このプロジェクトからビルドできます。
 
 現在のデプロイメントターゲットは iOS 27.0、Bundle ID は `DIO0550.SeasoningManager` です。CloudKit のコンテナ識別子はまだ設定されていません。iCloud 同期と旧 Core Data から SwiftData への移行は未実装です。旧アプリのデータがある端末へ更新としてインストールする前に、移行を実装して検証してください。
+
+## UIモックアップ
+
+画面構成や操作の検討用に、[単体HTMLのUIモックアップ](docs/seasoning-management/mockups/seasoning-management-mockup.html)を置いています。在庫・テンプレート・設定の画面を試せます。
+
+リポジトリをクローンするかリンク先のHTMLをダウンロードして、手元のブラウザーで開いてください。GitHub上ではHTMLのソースが表示されます。CSS・JavaScriptは内蔵しているため、サーバー起動や依存パッケージのインストールは不要です。
+
+架空のデータを使うデザイン・操作確認用のモックです。変更はメモリ内だけに保存され、再読み込みすると初期状態に戻ります。
