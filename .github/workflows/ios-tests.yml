@@ -14,8 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  unit-tests:
-    name: Unit tests
+  tests:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Unit tests
+            target: SeasoningManagerTests
+          - name: UI tests
+            target: SeasoningManagerUITests
     # iOS 27.0 is the minimum deployment target decided in #13.
     runs-on: xcode-27
     timeout-minutes: 30
@@ -23,6 +31,7 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       PROJECT: src/SeasoningManager/SeasoningManager.xcodeproj
       SCHEME: SeasoningManager
+      TEST_TARGET: ${{ matrix.target }}
     defaults:
       run:
         shell: bash
@@ -51,7 +60,7 @@ jobs:
           echo "Selected simulator: $simulator_id"
           xcrun simctl bootstatus "$simulator_id" -b
 
-      - name: Run unit tests
+      - name: Run tests
         run: |
           xcodebuild test \
             -project "$PROJECT" \
@@ -59,6 +68,6 @@ jobs:
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -destination-timeout 120 \
-            -only-testing:SeasoningManagerTests \
+            -only-testing:"$TEST_TARGET" \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO
