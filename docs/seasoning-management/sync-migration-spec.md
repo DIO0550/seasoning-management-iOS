@@ -17,6 +17,67 @@
 
 ローカル保存成功とクラウド反映完了は別の状態として扱う。同期失敗をローカル保存失敗として見せない。
 
+## Product / Item の CloudKit スキーマ検証（Issue #21）
+
+2026-10-03、#20 のマージコミット `05335d09353aae72ea05ac919cb28d73f12e8737` を調査した。マージ先は `issue-19-item-status` であり、同日時点の `master` には Product / 個体 Item は入っていない。本節はその実装ブランチのモデルを対象にする。
+
+**ソースの条件確認と検証テストの追加まで実施。ローカルテスト実行・CloudKit コンテナ起動・実機同期は未実施であり、互換性が実証済みとは判定しない。** この作業環境は Linux で、Swift・Xcode・署名環境・iOS 実機を利用できない。
+
+### ソースから確認した内容
+
+| 観点 | 現在のモデル | 実行時に確認する内容 |
+|:--|:--|:--|
+| 関係 | `Product.items: [Item]?`、`Item.product: Product?` | 生成された両関係が Optional である。 |
+| 逆関係 | `Item.product` に `inverse: \Product.items` を指定 | 両方向の逆関係が一致し、参照先が同じスキーマに存在する。 |
+| 必須属性のデフォルト | Product の `id`・`name`・`type`・`updatedAt`、Item の `id`・`statusRawValue`・`updatedAt` に宣言時の値がある。ほかは Optional | 生成された永続化属性に Optional またはデフォルト値がある。イニシャライザーの引数デフォルトだけでは代用しない。 |
+| 一意制約 | `.unique` / `#Unique` の指定なし | 生成されたエンティティの一意制約が空である。ID 重複の業務検査は別途行う。 |
+| 削除規則 | 双方 `.nullify` | 生成された規則も `.nullifyDeleteRule`。個体がある商品の削除制限はアプリ層の後続実装。 |
+| 画像 | `@Attribute(.externalStorage) var image: Data?` | Optional の Binary 属性で外部保存が許可される。画像バイト列と個体関係を再オープン後に復元できる。 |
+| モデル構成 | Product / Item を同じ `Schema` に登録 | 両モデルを含むディスク上のコンテナが起動する。 |
+
+現時点でソース上のスキーマ修正は特定していない。これは「修正不要」の実証ではない。生成モデル・CloudKit 起動の検証が失敗した場合は、属性名・エラー全文・OS / Xcode・対象コミットを記録し、モデル修正を別の小さな変更として扱う。
+
+### ローカル検証
+
+[`CloudSchemaTests.swift`](../../src/SeasoningManager/SeasoningManagerTests/CloudSchemaTests.swift) に次のテストを追加した。モデルのコピーは作らず、実際の `Product.self` / `Item.self` から `NSManagedObjectModel.makeManagedObjectModel(for:)` で生成したメタデータを調べる。
+
+- `generatedAttributesHaveDefaultsOrAreOptionalAndHaveNoUniqueConstraints`：全エンティティの一意制約、属性の Optional / デフォルト、非対応の Undefined / Object ID 属性の不在。
+- `generatedRelationshipsAreOptionalWithNullifyAndReciprocalInverses`：Optional、削除規則、参照先、逆関係、多重度。
+- `imageIsOptionalBinaryWithExternalStorage`：画像の型、Optional、外部保存の許可。
+- `localStorePreservesImageBytesAndSharedProductAfterReopening`：一時 SQLite ストアへ商品・2個体・256 KiB のバイナリを保存し、コンテナの再生成後に内容と関係を照合。
+
+通常の実行では `cloudKitDatabase: .none` を指定し、CloudKit テストはスキップする。バイナリテストは画像デコード・画像サイズ上限・実際の外部ファイル配置・CloudKit アセット転送を保証しない。
+
+対応する Xcode で `src/SeasoningManager/SeasoningManager.xcodeproj` を開き、SeasoningManager のスキームの Test に SeasoningManagerTests を登録して実行する。この土台ブランチには #80 の共有スキームが未反映なので、未登録なら検証用のローカルスキームに追加する。#80 の取り込み後は共有スキームを利用できる。
+
+### CloudKit の起動確認と実機検証
+
+現在の entitlements のコンテナID配列は空で、Team は未設定。`Info.plist` の `UIBackgroundModes` には `remote-notification` があり、アプリの通常のコンテナ設定は `.none` である。
+
+#36 は #21 を前提にしているが、#21 の実機検証には署名・コンテナ設定が必要になる。検証用の作業コピーで下記の一時設定を行い、結果を本節へ追記する。本番アプリの設定変更は #36、通常起動への同期接続は #71 で扱う。検証用設定を用意できない間は、#21 の実機条件を未完了として残す。
+
+1. 検証専用の Development CloudKit コンテナとテスト用 iCloud アカウントを用意する。Xcode の Signing & Capabilities で有効な Team・CloudKit コンテナ・Push Notifications・Background Modes の Remote notifications を整合させる。Debug の署名済みアプリが Development 環境を使うことを確認する。
+2. スキームの Test で環境変数 `SEASONING_RUN_CLOUD_SCHEMA_TEST=1` と `SEASONING_CLOUDKIT_CONTAINER_ID=<実際に設定したコンテナID>` を渡す。対応する実機を選び、`cloudKitConfiguredContainerCanOpen` を実行する。テスト対象は実 Product / Item、一時ディスクストア、`.private(identifier)` である。ID が欠ける場合や起動で例外が発生した場合は失敗させ、`.none` にはフォールバックしない。このテストは Debug のみ有効。
+3. このテストの成功はコンテナ生成とローカル fetch の成功を示す。非同期の CloudKit セットアップ・認証・転送完了は保証しない。スキップを成功として扱わず、実機ログのセットアップ結果とエラーも別に記録する。
+4. 開発スキーマの初期化は [Apple の手順](https://developer.apple.com/documentation/swiftdata/syncing-model-data-across-a-persons-devices) に従い、検証用コピーで同じ Product / Item から生成したモデルを使う。Core Data のストアを同期ロードし、エラーを確認してから `initializeCloudKitSchema()` を実行し、ストアをアンロードしてから SwiftData を起動する。これはサーバーの開発スキーマへ書き込む操作であり、今回追加したテストでは自動実行しない。
+5. CloudKit Console の Development 環境で両モデルのレコード型・属性・関係を確認する。空のコンテナの起動だけで画像の転送成功を判断しない。別の検証用ストアで商品1件・個体2件・実画像を保存し、別端末の新規ストアへ同じ ID・関係・画像が到着することを確認する。画像は元の `Data` と読み戻した `Data` の一致で確認する。このための通常アプリの同期接続や試験用投入処理は今回の2ファイル変更には含めていない。
+6. 同期ログの失敗、参照の到着順、画像の更新・削除も記録する。競合・アカウント切替・オフライン復帰の包括的検証は #25・#78 で扱う。
+
+### 検証結果と残作業
+
+| 検証 | 2026-10-03 の結果 |
+|:--|:--|
+| 実モデル・設定のソース確認 | 実施済み。上記の宣言と未設定項目を確認。 |
+| 生成メタデータのテスト3件 | 追加済み、実行未実施。 |
+| SQLite 再オープン・画像バイト列のテスト1件 | 追加済み、実行未実施。 |
+| CloudKit 設定のコンテナ起動テスト1件 | 追加済み、実行未実施。通常実行ではスキップ。 |
+| 実機のセットアップ・開発スキーマ初期化・別端末への画像転送 | 未実施。署名、開発用コンテナ、アカウント、実機が必要。 |
+| 必要なモデル修正 | 未確定。ソース確認では修正を特定せず、実行結果待ち。 |
+
+追試時は対象コミット、Xcode / OS、実行テスト名、成功・失敗・スキップ件数、Development コンテナID、セットアップ結果、別端末での商品・個体件数と画像照合結果を追記する。個人の Apple ID や署名情報は記録しない。すべての完了条件を満たすまで #21 をクローズしない。
+
+参照：[Apple: Syncing model data across a person’s devices](https://developer.apple.com/documentation/swiftdata/syncing-model-data-across-a-persons-devices)、[Apple: Creating a Core Data Model for CloudKit](https://developer.apple.com/documentation/coredata/creating-a-core-data-model-for-cloudkit)。
+
 ## 競合と削除
 
 CloudKit 同期ではリレーションの Optional 化が必要で、永続化層の一意制約と `.deny` 削除規則に依存できない。商品の削除制限や個体の参照整合性はアプリ層で検証し、別端末からの同期後にも再検査する。
@@ -72,7 +133,7 @@ CloudKit 同期ではリレーションの Optional 化が必要で、永続化�
 
 旧アプリは `NSPersistentContainer(name: "SeasoningManager")` を作り、保存 URL を変更せずに `loadPersistentStores` している。既定の保存先から推定される旧ストアは **`<アプリのデータコンテナ>/Library/Application Support/SeasoningManager.sqlite`** である。実端末の URL は未取得のため、旧版の `persistentStoreCoordinator.persistentStores` の各 `url` と実ファイルを照合して確定する。データコンテナの UUID を含む絶対パスは固定せず、更新後のコンテナ内で保存先を解決する。
 
-新アプリは `ModelConfiguration(schema:isStoredInMemoryOnly: false)` の既定の保存先を使い、URL を明示していない。現在のモデルはひな形の `Item(timestamp)` で、旧ストアの読み取りは未実装である。移行実装時には新しい `ModelConfiguration.url` を記録し、旧ストアと異なる URL を明示する。既定のファイル名だけを根拠に安全と判断しない。
+Issue #15 の調査時点では新アプリはひな形の `Item(timestamp)` を使っていた。#20 反映後の対象ブランチは Product / 個体 Item と `cloudKitDatabase: .none` を使うが、保存 URL は依然として既定値で、旧ストアの読み取りは未実装である。移行実装時には新しい `ModelConfiguration.url` を記録し、旧ストアと異なる URL を明示する。既定のファイル名だけを根拠に安全と判断しない。
 
 - 旧ストアが存在することを確認してから、旧 `SeasoningManager` モデルで読み取る。読み取り失敗時に空ストアを作って「移行成功」と扱わない。
 - バックアップは書き込みを停止した整合的な状態で取得する。SQLite 本体だけでなく、存在する `SeasoningManager.sqlite-wal` / `SeasoningManager.sqlite-shm` と関連ファイルも保全する。稼働中に本体だけコピーしない。
