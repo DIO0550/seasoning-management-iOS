@@ -1,0 +1,64 @@
+name: iOS tests
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    # iOS 27.0 is the minimum deployment target decided in #13.
+    runs-on: xcode-27
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+      PROJECT: src/SeasoningManager/SeasoningManager.xcodeproj
+      SCHEME: SeasoningManager
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Only GitHub-owned actions are allowed; pin every action to a full commit SHA.
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show Xcode, schemes, and simulators
+        run: |
+          xcodebuild -version
+          xcodebuild -list -project "$PROJECT"
+          xcrun simctl list devices available
+          xcodebuild -showdestinations -project "$PROJECT" -scheme "$SCHEME"
+
+      - name: Select and boot an available iOS 27.0 simulator
+        run: |
+          simulator_id=$(xcrun simctl list devices available --json | jq -er '
+            [.devices["com.apple.CoreSimulator.SimRuntime.iOS-27-0"][]?
+             | select(.isAvailable and (.name | startswith("iPhone")))][0].udid
+            // error("No available iPhone simulator for iOS 27.0")
+          ')
+          echo "SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          echo "Selected simulator: $simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
+
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -destination-timeout 120 \
+            -only-testing:SeasoningManagerTests \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO
