@@ -4,7 +4,7 @@ design-composer の「規約・検証・記録・改善」の分担を、SwiftUI
 
 | 場所 | 役割 |
 | --- | --- |
-| `AGENTS.md` / `CLAUDE.md` | 共通の入口 / Claude Code の import |
+| `AGENTS.md` / `CLAUDE.md` | 共通の入口 / `AGENTS.md` へのシンボリックリンク |
 | `rules/` | 着手時に読む短い規約 |
 | `.claude/skills/` | 実装、マージ後の記録、蓄積からの改善を別々に実行 |
 | `.claude/agents/` | 計画、Swift 設計、テストの読み取り専用レビュー |
@@ -23,7 +23,7 @@ Python 3 と Bash を使う。追加のパッケージは不要。
 bash harness/githooks/pre-push
 ```
 
-ハーネス内のリンク・Claude import・スキル/レビュー定義の必須メタデータ・hook の参照先・
+ハーネス内の Markdown 参照・スキル/レビュー定義の必須メタデータ・hook の参照先・
 常時読む規約の行数、検査スクリプトの判定テスト、差分の空白を確認する。
 未コミット差分に加え、ローカルでは `origin/master...HEAD`、PR の CI では base と head の差分を検査する。
 Swift の構文・actor isolation・業務設計はこの検査で判定しない。
