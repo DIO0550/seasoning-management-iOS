@@ -1,0 +1,27 @@
+name: Agent harness
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate agent harness
+        env:
+          HARNESS_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HARNESS_DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash harness/githooks/pre-push
