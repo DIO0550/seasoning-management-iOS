@@ -1,0 +1,4 @@
+interface:
+  display_name: "マージ後の記録"
+  short_description: "マージ済みPRのレビューとCI結果を根拠付きで記録する"
+  default_prompt: "$harness-record でマージしたPRの記録を残してください。"

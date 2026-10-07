@@ -1,0 +1,4 @@
+interface:
+  display_name: "実装の進め方"
+  short_description: "小さなIssueの計画から検証とPR作成までを進める手順"
+  default_prompt: "$implementation-flow でこのIssueを実装してください。"

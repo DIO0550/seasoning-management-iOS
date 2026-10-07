@@ -1,0 +1,4 @@
+interface:
+  display_name: "ハーネスの改善"
+  short_description: "蓄積した記録をもとにルールと検証手順を小さく改善する"
+  default_prompt: "$harness-growth で記録から改善点を確認してください。"

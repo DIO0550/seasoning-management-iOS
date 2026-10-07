@@ -10,6 +10,11 @@
 - `old/src/SeasoningManager`: 旧 UIKit / Core Data アプリ。既存データ移行の参考として保持します。
 - `old/src/old/SeasoningManagement`: さらに古い試作コード。
 
+## エージェントでの開発
+
+共通の作業規約は [AGENTS.md](AGENTS.md)、Swift のルールと検査・記録の使い方は
+[エージェントのハーネス](harness/README.md)を参照してください。Claude Code は `CLAUDE.md` から同じ規約を読み込みます。
+
 ## 開き方
 
 `src/SeasoningManager/SeasoningManager.xcodeproj` を Xcode で開いてください。新アプリは CocoaPods を使用しないため、`pod install` や独立した `.xcworkspace` の作成は不要です。同じ `.xcodeproj` にフレームワークのターゲットを追加する場合も、このプロジェクトからビルドできます。
