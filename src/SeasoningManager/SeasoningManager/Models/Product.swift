@@ -21,6 +21,10 @@ final class Product {
     var nutrientBasisUnit: String?
     var updatedAt: Date = Date()
 
+    // 個体がある商品の削除拒否は保存操作側で行う。
+    @Relationship(deleteRule: .nullify)
+    var items: [Item]?
+
     init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) {
         self.id = id
         self.name = name
