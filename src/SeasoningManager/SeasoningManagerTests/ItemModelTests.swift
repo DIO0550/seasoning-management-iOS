@@ -36,7 +36,6 @@ struct ItemModelTests {
 
     @Test func sharedProductAndItemFieldsSurviveReopeningStore() throws {
         let directory = try makeStoreDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("items.store")
         let productID = UUID()
         let unopenedID = UUID()
@@ -106,7 +105,6 @@ struct ItemModelTests {
     @Test(arguments: ["", "futureStatus"])
     func missingReferenceAndUnknownStatusSurviveReopeningStore(_ rawValue: String) throws {
         let directory = try makeStoreDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("items.store")
         let itemID = UUID()
         let productID = UUID()
@@ -199,6 +197,8 @@ struct ItemModelTests {
     }
 
     private func makeStoreDirectory() throws -> URL {
+        // SQLiteの接続が残った状態でファイルを削除しないよう、ストアを隔離する。
+        // 一時ディレクトリの片付けはテスト実行環境の破棄に任せる。
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
