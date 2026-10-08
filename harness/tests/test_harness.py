@@ -46,6 +46,29 @@ class HarnessConfigurationTests(unittest.TestCase):
         path.write_text(source.replace("name: harness-record", "name: wrong-name"), encoding="utf-8")
         self.assertTrue(any("Invalid name" in error for error in CHECK.check(self.root)))
 
+    def test_missing_new_agent_blocks_validation(self):
+        for name in ("planner", "implementer"):
+            with self.subTest(agent=name):
+                path = self.root / ".claude/agents" / f"{name}.md"
+                source = path.read_text(encoding="utf-8")
+                path.unlink()
+                self.assertIn(f"Missing: .claude/agents/{name}.md", CHECK.check(self.root))
+                path.write_text(source, encoding="utf-8")
+
+    def test_invalid_new_agent_metadata_blocks_validation(self):
+        for name in ("planner", "implementer"):
+            path = self.root / ".claude/agents" / f"{name}.md"
+            source = path.read_text(encoding="utf-8")
+            for malformed, expected in (
+                ("# Missing metadata\n", "Missing frontmatter"),
+                (source.replace(f"name: {name}", "name: wrong-name"), "Invalid name"),
+                (source.replace("description:", "omitted-description:"), "Missing description"),
+            ):
+                with self.subTest(agent=name, failure=expected):
+                    path.write_text(malformed, encoding="utf-8")
+                    self.assertIn(f"{expected}: .claude/agents/{name}.md", CHECK.check(self.root))
+                    path.write_text(source, encoding="utf-8")
+
     def test_missing_hook_script_blocks_validation(self):
         (self.root / ".claude/hooks/post-edit-check.sh").unlink()
         self.assertTrue(any("Missing hook script" in error for error in CHECK.check(self.root)))
