@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ALWAYS_LOADED_CAP = 200
 RULES = ("swift", "swiftui", "swiftdata", "testing")
 SKILLS = ("implementation-flow", "harness-record", "harness-growth")
-REVIEWERS = ("plan-reviewer", "swift-reviewer", "test-reviewer")
+AGENTS = ("planner", "implementer", "plan-reviewer", "swift-reviewer", "test-reviewer")
 
 
 def markdown_files(root):
@@ -26,7 +26,7 @@ def check(root):
     required = [root / "AGENTS.md", root / "CLAUDE.md"]
     required.extend(root / "rules" / f"{name}.md" for name in RULES)
     required.extend(root / ".claude/skills" / name / "SKILL.md" for name in SKILLS)
-    required.extend(root / ".claude/agents" / f"{name}.md" for name in REVIEWERS)
+    required.extend(root / ".claude/agents" / f"{name}.md" for name in AGENTS)
     for path in required:
         if not path.is_file():
             errors.append(f"Missing: {path.relative_to(root)}")
@@ -47,8 +47,8 @@ def check(root):
                 errors.append(f"Broken reference in {path.relative_to(root)}: {target}")
 
         is_skill = path.name == "SKILL.md"
-        is_reviewer = path.parent == root / ".claude/agents"
-        if not is_skill and not is_reviewer:
+        is_agent = path.parent == root / ".claude/agents"
+        if not is_skill and not is_agent:
             continue
 
         frontmatter = re.match(r"\A---\n(.*?)\n---\n", source, re.DOTALL)
@@ -57,7 +57,7 @@ def check(root):
             continue
 
         expected_name = path.parent.name
-        if is_reviewer:
+        if is_agent:
             expected_name = path.stem
 
         metadata = frontmatter.group(1)

@@ -7,13 +7,32 @@ design-composer の「規約・検証・記録・改善」の分担を、SwiftUI
 | `AGENTS.md` / `CLAUDE.md` | 共通の入口 / `AGENTS.md` へのシンボリックリンク |
 | `rules/` | 着手時に読む短い規約 |
 | `.claude/skills/` | 実装、マージ後の記録、蓄積からの改善を別々に実行 |
-| `.claude/agents/` | 計画、Swift 設計、テストの読み取り専用レビュー |
+| `.claude/agents/` | 計画担当・実装担当と、計画 / Swift 設計 / テストの読み取り専用レビュー |
 | `.claude/settings.json` / `.claude/hooks/` | Claude Code で編集後に配置検査の結果を返す |
 | `harness/githooks/pre-push` | エージェントに依存しない push 前検査 |
 | `harness/records/` / `harness/case-law/` | PR ごとの結果 / 必要時だけ読む判断の実例 |
 
-Codex などのエージェントは `AGENTS.md` からスキル・レビュー定義を直接読む。
+Codex などのエージェントは `AGENTS.md` からスキル・役割定義を直接読み、委譲時に定義の内容を担当へ渡す。
+Claude の `tools` 設定は他環境の権限へ自動適用されないため、親が各環境の機能に合わせて担当範囲を指定する。
 Claude 固有の hook が動かない環境でも、下記の検査を直接実行できる。
+
+## 担当と実行順序
+
+| 担当 | 入力と役割 | 親へ返す結果 |
+| --- | --- | --- |
+| メインエージェント（親） | オーケストレーターとして会話、計画の採用、指示、レビュー判断、差分統合、Git / PR / CI を担当 | ユーザーへ変更と検証結果、未完了事項を報告 |
+| [planner](../.claude/agents/planner.md) | 依頼・仕様・既存差分と調査範囲を読み取り専用で調べる | 完了条件、対象外、変更ファイルと理由、方針と根拠、検証、未確定事項 |
+| [implementer](../.claude/agents/implementer.md) | 採用済み計画、許可ファイル、検証コマンドに従って実装し、親から受けた指摘を修正 | 変更と完了条件の結果、検証コマンド・環境・終了結果、未実施理由、残る指摘と逸脱 |
+| `plan-reviewer` | 親から計画・完了条件・仕様とコードの参照先を受け、読み取り専用で検証 | 根拠のある計画指摘と未確認事項 |
+| `swift-reviewer` / `test-reviewer` | 親から最終差分・完了条件・仕様と検証結果を受け、読み取り専用で検証 | 根拠のある差分指摘と未確認事項 |
+
+依頼 → planner → plan-reviewer → implementer → 差分レビュー → 親の pre-push / Git / PR の順に進める。
+親が計画指摘の根拠を確認して planner へ差し戻し、解消後に実装へ進む。
+差分の指摘は親が根拠を確認して implementer へ渡す。Swift を変えない場合は該当するレビュー観点だけ使う。
+実装担当は1人に限定し、親や他の担当は同時に編集しない。前提や許可ファイルの変更は親へ返し、親が計画を見直す。
+サブエージェントは再委譲・Git の変更操作・commit / push・PR 作成・外部通信を行わない。
+サブエージェントを使えなければ親が定義に従って代行し、委譲できなかった役割と自己レビューを報告して進める。
+具体的な受け渡しと差し戻しは [implementation-flow](../.claude/skills/implementation-flow/SKILL.md) に従う。
 
 ## 共通の検査
 
@@ -23,9 +42,11 @@ Python 3 と Bash を使う。追加のパッケージは不要。
 bash harness/githooks/pre-push
 ```
 
-ハーネス内の Markdown 参照・スキル/レビュー定義の必須メタデータ・hook の参照先・
+ハーネス内の Markdown 参照・スキル/エージェント定義の必須メタデータ・hook の参照先・
 常時読む規約の行数、検査スクリプトの判定テスト、差分の空白を確認する。
+planner / implementer を含む5役の定義を必須とし、各定義の frontmatter、名前、説明を検査する。
 未コミット差分に加え、ローカルでは `origin/master...HEAD`、PR の CI では base と head の差分を検査する。
+この配置検査は、実際の委譲や編集・Git 操作・外部通信の制限を実行時に強制するものではない。
 Swift の構文・actor isolation・業務設計はこの検査で判定しない。
 Swift の整形は下記の公式 `swift-format` を別に実行する。正規表現で Swift lint を自作せず、SwiftLint の依存は追加しない。
 

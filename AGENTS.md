@@ -25,14 +25,27 @@
 - 独立してマージできる変更は分ける。テスト・設定などを同時に変える必要があれば理由を残す。
 - 既存 Issue があれば計画・却下した案・理由をそこへ残す。直接の依頼では PR 本文に残せばよく、
   ハーネスのためだけに Issue を増やさない。Issue 対応の PR には `Closes #番号` を書く。
-- 既に依頼された実装・検証・PR 作成は進める。通常の実装判断で承認待ちにせず、マージは依頼時に行う。
+- メインエージェントは既に依頼された実装・検証・PR 作成を進める。
+  通常の実装判断で承認待ちにせず、マージは依頼時に行う。
 - GitHub Actions は GitHub 公式のものだけを使い、40 桁のコミット SHA に固定する。
+
+## 役割分担
+
+- ユーザーの依頼を受けるメインエージェントはオーケストレーターとして、会話・計画の採用・担当への指示・
+  レビューの判断・差分統合・Git 操作・PR 作成・CI 確認を担当する。計画作成と実装は各担当へ委譲する。
+- サブエージェントにも共通規約を適用するが、担当範囲は親が渡す依頼と各役割定義に限定する。
+  [planner](.claude/agents/planner.md) は計画、[implementer](.claude/agents/implementer.md) は指定ファイルの実装と検証を担当する。
+  サブエージェントは再委譲・Git の変更操作・外部通信を行わない。3つのレビュー役は読み取り専用を維持する。
+- 実装担当は1人に限定し、親や他の担当が同時に編集しない。計画・レビュー結果は親が根拠を確認して次へ渡す。
+- Codex 等でも役割定義を直接読み、委譲時に定義の内容と必要な入力を渡す。
+  サブエージェントを使えなければメインが各定義に従って代行し、委譲できなかった役割と自己レビューを報告する。
 
 ## 検証と記録
 
-- 計画と差分を `.claude/agents/` の観点で検証する。別エージェントが使えるときは読み取り専用で依頼する。
-  使えないときは同じ定義を読み、自己検証であることを PR に明記する。
-- push 前に `bash harness/githooks/pre-push`。iOS の検証は [検証コマンド](harness/README.md)に従う。
+- 計画は `plan-reviewer`、差分は `swift-reviewer` と `test-reviewer` の観点で検証する。
+  入力・差し戻し・実行順序は [implementation-flow](.claude/skills/implementation-flow/SKILL.md) に従う。
+- メインエージェントは push 前に `bash harness/githooks/pre-push` を実行する。
+  iOS の検証は [検証コマンド](harness/README.md)に従う。
 - 実行できなかった検証は未実施として報告する。Linux の配置検査を Swift のビルド成功と扱わない。
 - マージ後の記録依頼では [.claude/skills/harness-record/SKILL.md](.claude/skills/harness-record/SKILL.md)を使う。
   蓄積した記録からの改善は [.claude/skills/harness-growth/SKILL.md](.claude/skills/harness-growth/SKILL.md)で別に行う。
