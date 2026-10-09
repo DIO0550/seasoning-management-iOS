@@ -8,7 +8,7 @@ design-composer の「規約・検証・記録・改善」の分担を、SwiftUI
 | `rules/` | 着手時に読む短い規約 |
 | `.claude/skills/` | 実装、マージ後の記録、蓄積からの改善を別々に実行 |
 | `.claude/agents/` | 計画、Swift 設計、テストの読み取り専用レビュー |
-| `.claude/settings.json` / `.claude/hooks/` | Claude Code で編集後に配置検査の結果を返す |
+| `.claude/settings.json` / `.claude/hooks/` | Claude Code で編集後に配置検査と対象 Swift の lint 結果を返す |
 | `harness/githooks/pre-push` | エージェントに依存しない push 前検査 |
 | `harness/records/` / `harness/case-law/` | PR ごとの結果 / 必要時だけ読む判断の実例 |
 
@@ -24,10 +24,10 @@ bash harness/githooks/pre-push
 ```
 
 ハーネス内の Markdown 参照・スキル/レビュー定義の必須メタデータ・hook の参照先・
-常時読む規約の行数、検査スクリプトの判定テスト、差分の空白を確認する。
+常時読む規約の行数、検査スクリプトの判定テスト、差分の空白と、変更した Swift の lint を確認する。
 未コミット差分に加え、ローカルでは `origin/master...HEAD`、PR の CI では base と head の差分を検査する。
-Swift の構文・actor isolation・業務設計はこの検査で判定しない。
-Swift の整形は下記の公式 `swift-format` を別に実行する。正規表現で Swift lint を自作せず、SwiftLint の依存は追加しない。
+配置検査自体は Swift の構文・actor isolation・業務設計を判定しない。
+整形は下記の公式 `swift-format` で検査する。正規表現で Swift lint を自作せず、SwiftLint の依存は追加しない。
 
 ローカル Git に自動実行を設定する場合は、既存の `core.hooksPath` を確認してから実行する。
 既存の hook がある場合は統合を検討し、上書きしない。
@@ -37,13 +37,17 @@ git config --get core.hooksPath
 git config --local core.hooksPath harness/githooks
 ```
 
-CI の `Agent harness` も同じ入口を実行する。Claude の編集後 hook は配置検査だけで、push の検査は Git hook / CI が担う。
+通常の pre-push は lint を必須で実行し、対象があるのにツールがなければ失敗する。
+Git が渡す remote 名・URL の2引数にも対応し、Git の標準入力は formatter に渡さない。
+Linux の `Agent harness` CI は `bash harness/githooks/pre-push --configuration-only` を明示して、配置と回帰テストだけを検査する。
+このモードは「配置検査のみ・Swift lint 未実施」と表示し、実ツールの成功として扱わない。未知のオプションは失敗する。
+Swift の実行検証は Mac の `Swift format` CI が担う。
 Git hook が未設定の場合や GitHub API 経由の更新ではローカルの自動検査は走らないので、直接実行と CI 結果を確認する。
 
 ## Swift の整形とlint
 
 公式の Swift ツールチェーンに同梱された `swift format` を使う。専用 CI と同じ Xcode 16.4 を選択する。
-アプリのビルドと iOS テストが使う Xcode 27 とは別の検証で、Linux の pre-push へ Swift の必須依存は追加しない。
+アプリのビルドと iOS テストが使う Xcode 27 とは別の検証。Linux CI の配置検査だけは明示的に lint を省く。
 
 ```bash
 export DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer
@@ -76,9 +80,17 @@ push の初回で base がゼロ SHA の場合は head の `src/` 内のファ�
 整形ツールと Git の失敗は成功扱いせず終了コードを返す。lint は `--strict`、format は `--in-place` で実行する。
 
 共通 pre-push は偽ツールでファイル選択・引数・終了コードの境界を検証する。
+Claude の `PostToolUse` hook は `Edit|Write` の JSON 入力を Python で検証し、絶対パスの編集対象1件だけを lint する。
+範囲外・非 Swift・リンクは対象外。不正 JSON、必須値や型の不足、空・相対・NUL を含むパスは終了コード2を返す。
+formatter の失敗も診断を標準エラーへ返して hook を終了コード2とし、ファイルは自動整形しない。
+`PostToolUse` は完了した編集を取り消さず、診断を Claude へ返す。
+`Edit|Write` を使わない編集や対象外のツールによる変更は pre-push の差分 lint で捕捉する。
+指摘を受けたら上記の `python3 harness/swift-format.py format` で手動整形し、lint を再実行する。
+
 実ツールの fixture 検証は、lint 成功 → 整形違反で lint 失敗 → format → lint 成功を確認する。
 Swift のないローカル環境ではこの実ケースを未実施として skip する。
 専用 CI は `swift format --version` と `HARNESS_REQUIRE_SWIFT_FORMAT=1` により、実ケースを必須とし skip で成功させない。
+同じ Mac CI で編集後 hook と pre-push の実ツール検証も行い、整形違反を拒否してファイルを変更しないことを確認する。
 偽ツールのテスト成功を、Swift の実行・ビルド成功として記録しない。
 
 ## iOS の検証（Mac + Xcode）
