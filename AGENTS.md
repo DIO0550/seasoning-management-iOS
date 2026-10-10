@@ -34,6 +34,8 @@
   使えないときは同じ定義を読み、自己検証であることを PR に明記する。
 - push 前に `bash harness/githooks/pre-push`。iOS の検証は [検証コマンド](harness/README.md)に従う。
 - 実行できなかった検証は未実施として報告する。Linux の配置検査を Swift のビルド成功と扱わない。
+- 完了時は [PR の検証結果コメント](harness/README.md#pr-の検証結果コメント)に従い、テスト結果・
+  CI のカバレッジ・所要時間・未実施項目を PR コメントへ残す。最新コミットの CI 状態も確認する。
 - マージ後の記録依頼では [.claude/skills/harness-record/SKILL.md](.claude/skills/harness-record/SKILL.md)を使う。
   蓄積した記録からの改善は [.claude/skills/harness-growth/SKILL.md](.claude/skills/harness-growth/SKILL.md)で別に行う。
 - `rules/` は短い判断基準、`harness/case-law/` は必要時だけ読む実例、`harness/records/` は PR ごとの結果。
