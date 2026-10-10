@@ -61,5 +61,188 @@ jobs:
           xcrun simctl bootstatus "$simulator_id" -b
 
       - name: Run tests
+        env:
+          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.target }}.xcresult
         run: |
           bash harness/test-ios.sh "$TEST_TARGET" "platform=iOS Simulator,id=$SIMULATOR_ID"
+
+      - name: Collect test counts and app coverage
+        if: always()
+        env:
+          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.target }}.xcresult
+        run: |
+          report_directory="$RUNNER_TEMP/test-reports/$TEST_TARGET"
+          mkdir -p "$report_directory"
+          if [[ ! -d "$HARNESS_RESULT_BUNDLE" ]]; then
+            echo "::warning::No result bundle; test counts and coverage are unavailable."
+            echo 'Result bundle unavailable' > "$report_directory/unavailable.txt"
+            exit 0
+          fi
+
+          # Run both readers even if one fails. An export failure stays a CI failure.
+          export_status=0
+          xcrun xcresulttool get test-results summary --path "$HARNESS_RESULT_BUNDLE" \
+            > "$report_directory/summary.json" || export_status=1
+          xcrun xccov view --report --json "$HARNESS_RESULT_BUNDLE" \
+            > "$report_directory/coverage.json" || export_status=1
+          exit "$export_status"
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-test-report-${{ matrix.target }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/test-reports/
+          retention-days: 14
+          if-no-files-found: warn
+
+  report:
+    name: Report iOS test results
+    needs: tests
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+      pull-requests: read
+    steps:
+      # No PR checkout or execution in the job with comment permission.
+      - name: Download reports from this attempt
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: ios-test-report-*-${{ github.run_attempt }}
+          path: reports
+          merge-multiple: true
+
+      - name: Summarize and update PR comment
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          REPORT_DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const marker = '<!-- seasoning-ios-test-report -->';
+            const { owner, repo } = context.repo;
+            const runId = Number(process.env.GITHUB_RUN_ID);
+            const attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+            const pr = context.payload.pull_request;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${runId}/attempts/${attempt}`;
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
+              owner, repo, run_id: runId, attempt_number: attempt, per_page: 100
+            });
+
+            function readReport(target, name) {
+              try {
+                const path = `reports/${target}/${name}.json`;
+                if (fs.statSync(path).size > 2_000_000) {
+                  return null;
+                }
+                return JSON.parse(fs.readFileSync(path, 'utf8'));
+              } catch {
+                return null;
+              }
+            }
+
+            function count(value) {
+              if (!Number.isSafeInteger(value) || value < 0) {
+                return '未取得';
+              }
+              return String(value);
+            }
+
+            function duration(item) {
+              if (item?.conclusion === 'skipped') {
+                return '未実施';
+              }
+              if (!item?.started_at || !item?.completed_at) {
+                return '未取得';
+              }
+              const seconds = (Date.parse(item.completed_at) - Date.parse(item.started_at)) / 1000;
+              if (!Number.isFinite(seconds) || seconds < 0) {
+                return '未取得';
+              }
+              const rounded = Math.round(seconds);
+              return `${Math.floor(rounded / 60)}分${rounded % 60}秒`;
+            }
+
+            function coverage(report) {
+              const targets = report?.targets;
+              if (!Array.isArray(targets)) {
+                return '未取得';
+              }
+              const app = targets.find(target => target?.name === 'SeasoningManager.app');
+              const covered = app?.coveredLines;
+              const executable = app?.executableLines;
+              if (count(covered) === '未取得' || count(executable) === '未取得') {
+                return '未取得';
+              }
+              if (executable === 0 || covered > executable) {
+                return '未取得';
+              }
+              return `${(100 * covered / executable).toFixed(2)}% (${covered}/${executable}行)`;
+            }
+
+            const statuses = {
+              success: '成功', failure: '失敗', cancelled: '取消', skipped: 'スキップ',
+              timed_out: 'タイムアウト', action_required: '対応待ち', neutral: '中立'
+            };
+            const lines = [
+              marker,
+              `<!-- ios-test-run:${runId}:${attempt} -->`,
+              '### iOS CI 検証結果', '',
+              `対象コミット: \`${pr.head.sha}\` / 検証コミット: \`${context.sha}\``,
+              `[CIログ・レポート](${runUrl})`, '',
+              '| 検証 | CI結果 | 成功 | 失敗 | スキップ | アプリ行カバレッジ | テスト工程 | ジョブ全体 |',
+              '| --- | --- | ---: | ---: | ---: | --- | --- | --- |'
+            ];
+            for (const [name, target] of [
+              ['Unit tests', 'SeasoningManagerTests'], ['UI tests', 'SeasoningManagerUITests']
+            ]) {
+              const job = jobs.find(job => job.name === name);
+              const summary = readReport(target, 'summary');
+              const appCoverage = coverage(readReport(target, 'coverage'));
+              const testStep = job?.steps?.find(step => step.name === 'Run tests');
+              const status = statuses[job?.conclusion] ?? '未完了・未取得';
+              lines.push(`| ${name} | ${status} | ${count(summary?.passedTests)} | ${count(summary?.failedTests)} | ${count(summary?.skippedTests)} | ${appCoverage} | ${duration(testStep)} | ${duration(job)} |`);
+            }
+            lines.push('',
+              'カバレッジは単体・UIそれぞれの実行で測ったアプリの行カバレッジです。両者を合算していません。',
+              'テスト工程の時間はビルドとテストを含み、ジョブ全体は環境準備と結果収集も含みます。待ち時間・アプリの動作速度は測っていません。',
+              '再実行時は今回の attempt の結果を表示します。今回再実行しなかった検証は未取得となる場合があります。',
+              '未取得の値は0や成功として扱いません。その他のCI・ローカル検証は完了報告で確認してください。'
+            );
+            if (process.env.REPORT_DOWNLOAD_OUTCOME !== 'success') {
+              lines.push('', 'レポートのダウンロードに失敗しました。詳細はCIログを確認してください。');
+            }
+            const body = lines.join('\n');
+            await core.summary.addRaw(body).write();
+
+            if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
+              core.info('Fork PR: read-only token; report is available in the step summary.');
+              return;
+            }
+            const { data: current } = await github.rest.pulls.get({ owner, repo, pull_number: pr.number });
+            if (current.state !== 'open' || current.head.sha !== pr.head.sha) {
+              core.info('PR is closed or its head changed; skipping outdated comment.');
+              return;
+            }
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100
+            });
+            const existing = comments.find(comment =>
+              comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(marker)
+            );
+            if (existing) {
+              const previous = existing.body.match(/<!-- ios-test-run:(\d+):(\d+) -->/);
+              if (previous && (Number(previous[1]) > runId ||
+                  (Number(previous[1]) === runId && Number(previous[2]) > attempt))) {
+                core.info('A newer run already reported; skipping outdated comment.');
+                return;
+              }
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              return;
+            }
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
