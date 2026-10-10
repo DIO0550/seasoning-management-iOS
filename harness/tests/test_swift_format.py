@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GIT = shutil.which("git")
+BASH = shutil.which("bash")
 
 
 class SwiftFormatFixture(unittest.TestCase):
@@ -20,14 +21,31 @@ class SwiftFormatFixture(unittest.TestCase):
         self.addCleanup(self.workspace.cleanup)
         self.directory = Path(self.workspace.name).resolve()
         self.root = (self.directory / "repo").resolve()
-        (self.root / "harness").mkdir(parents=True)
+        self.root.mkdir()
         (self.root / "src").mkdir()
         self.caller = self.directory / "caller"
         self.caller.mkdir()
-        shutil.copyfile(ROOT / "harness/swift-format.py", self.root / "harness/swift-format.py")
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            shutil.copyfile(ROOT / name, self.root / name)
+        for name in ("rules", "docs", ".claude", "harness"):
+            shutil.copytree(ROOT / name, self.root / name, ignore=shutil.ignore_patterns("tests", "__pycache__"))
+        # A small independent fixture test prevents pre-push from recursively running this suite.
+        fixture_tests = self.root / "harness/tests"
+        fixture_tests.mkdir()
+        (fixture_tests / "test_fixture.py").write_text(
+            "import json, pathlib, unittest\n"
+            "class FixtureTests(unittest.TestCase):\n"
+            "    def test_configuration_is_available(self):\n"
+            "        config = pathlib.Path(__file__).resolve().parents[2] / '.swift-format'\n"
+            "        self.assertEqual(json.loads(config.read_text())['version'], 1)\n",
+            encoding="utf-8",
+        )
         shutil.copyfile(ROOT / ".swift-format", self.root / ".swift-format")
         self.env = dict(os.environ)
-        for key in ("HARNESS_FORMAT_BASE", "HARNESS_FORMAT_HEAD", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        for key in (
+            "HARNESS_FORMAT_BASE", "HARNESS_FORMAT_HEAD", "HARNESS_DIFF_BASE", "HARNESS_DIFF_HEAD",
+            "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+        ):
             self.env.pop(key, None)
         self.env["GIT_CONFIG_GLOBAL"] = os.devnull
         self.env["GIT_CONFIG_NOSYSTEM"] = "1"
@@ -58,6 +76,12 @@ class SwiftFormatFixture(unittest.TestCase):
             cwd=self.caller, env=self.env, text=True, capture_output=True,
         )
 
+    def run_pre_push(self, *args, git_input=""):
+        return subprocess.run(
+            [BASH, str(self.root / "harness/githooks/pre-push"), *args],
+            cwd=self.root, env=self.env, input=git_input, text=True, capture_output=True,
+        )
+
 
 class SwiftFormatCommandTests(SwiftFormatFixture):
     def setUp(self):
@@ -65,13 +89,16 @@ class SwiftFormatCommandTests(SwiftFormatFixture):
         self.bin_dir = self.directory / "bin"
         self.bin_dir.mkdir()
         (self.bin_dir / "git").symlink_to(GIT)
+        (self.bin_dir / "python3").symlink_to(sys.executable)
+        (self.bin_dir / "dirname").symlink_to(shutil.which("dirname"))
         self.swift = self.bin_dir / "swift"
         self.invocation = self.directory / "invocation.json"
         self.swift.write_text(
             "#!" + sys.executable + "\n"
             "import json, os, pathlib, sys\n"
             "pathlib.Path(os.environ['HARNESS_TEST_INVOCATION']).write_text("
-            "json.dumps({'args': sys.argv[1:], 'cwd': os.getcwd()}))\n"
+            "json.dumps({'args': sys.argv[1:], 'cwd': os.getcwd(), 'stdin': "
+            "sys.stdin.read() if os.environ.get('HARNESS_TEST_READ_STDIN') else ''}))\n"
             "sys.exit(int(os.environ.get('HARNESS_TEST_SWIFT_EXIT', '0')))\n",
             encoding="utf-8",
         )
@@ -244,9 +271,47 @@ class SwiftFormatCommandTests(SwiftFormatFixture):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.selected_files(), ["src/Initial.swift"])
 
+    def test_edit_hook_only_checks_configuration(self):
+        source = self.write("src/Example.swift", "struct Example{\nlet value=1\n}\n")
+        before = source.read_bytes()
+        self.env["HARNESS_TEST_SWIFT_EXIT"] = "65"
+        payload = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(source)}})
+        result = subprocess.run(
+            [BASH, str(self.root / ".claude/hooks/post-edit-check.sh")],
+            cwd=self.caller, env=self.env, input=payload, text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.invocation.exists())
+        self.assertEqual(source.read_bytes(), before)
+
+    def test_pre_push_accepts_remote_arguments_and_discards_git_input(self):
+        self.write("src/Example.swift")
+        self.env["HARNESS_TEST_READ_STDIN"] = "1"
+        result = self.run_pre_push("origin", "git@example.invalid:repo.git", git_input="refs/heads/master old new\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.selected_files(), ["src/Example.swift"])
+        self.assertEqual(json.loads(self.invocation.read_text())["stdin"], "")
+
+    def test_pre_push_requires_lint_and_explicit_configuration_only_mode(self):
+        self.write("src/Example.swift")
+        self.env["HARNESS_TEST_SWIFT_EXIT"] = "65"
+        result = self.run_pre_push()
+        self.assertEqual(result.returncode, 65, result.stdout + result.stderr)
+        self.invocation.unlink()
+        self.swift.unlink()
+        result = self.run_pre_push()
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        result = self.run_pre_push("--configuration-only")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("configuration only; Swift lint not run", result.stdout)
+        self.assertFalse(self.invocation.exists())
+        for args in (("--skip-lint",), ("origin",), ("--unknown", "url")):
+            with self.subTest(arguments=args):
+                self.assertEqual(self.run_pre_push(*args).returncode, 2)
+
 
 class RealSwiftFormatTests(SwiftFormatFixture):
-    def test_real_lint_failure_and_format_recovery(self):
+    def require_real_swift(self):
         swift = shutil.which("swift")
         required = os.environ.get("HARNESS_REQUIRE_SWIFT_FORMAT") == "1"
         if swift is None:
@@ -260,6 +325,8 @@ class RealSwiftFormatTests(SwiftFormatFixture):
                 self.fail("CI requires swift format: " + version.stderr)
             self.skipTest("Real swift format not run: toolchain has no usable swift format")
 
+    def test_real_lint_failure_and_format_recovery(self):
+        self.require_real_swift()
         name = "src/Example.swift"
         source = self.write(name, "struct Example {\n    let value = 1\n}\n")
         result = self.run_script("lint", name)
@@ -271,6 +338,20 @@ class RealSwiftFormatTests(SwiftFormatFixture):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         result = self.run_script("lint", name)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_real_pre_push_enforces_lint_without_editing(self):
+        self.require_real_swift()
+        source = self.write("src/Example.swift", "struct Example {\n    let value = 1\n}\n")
+        before = source.read_bytes()
+        result = self.run_pre_push("origin", "git@example.invalid:repo.git")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(source.read_bytes(), before)
+
+        source.write_text("struct Example{\nlet value=1\n}\n", encoding="utf-8")
+        before = source.read_bytes()
+        result = self.run_pre_push()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(source.read_bytes(), before)
 
 
 if __name__ == "__main__":

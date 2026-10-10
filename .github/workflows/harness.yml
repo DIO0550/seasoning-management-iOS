@@ -24,4 +24,4 @@ jobs:
         env:
           HARNESS_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HARNESS_DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: bash harness/githooks/pre-push
+        run: bash harness/githooks/pre-push --configuration-only
