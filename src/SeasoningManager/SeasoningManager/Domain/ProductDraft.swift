@@ -13,12 +13,12 @@ struct ProductDraft {
     var nutrientBasisAmount: String = ""
     var nutrientBasisUnit: String = ""
 
-    enum Field: Equatable, Sendable {
+    nonisolated enum Field: Equatable, Sendable {
         case name, type, priceYen, calories, protein, fat, sugar, carbohydrates
         case nutrientBasisAmount, nutrientBasisUnit
     }
 
-    enum FailureReason: Equatable, Sendable {
+    nonisolated enum FailureReason: Equatable, Sendable {
         case required, invalidFormat, outOfRange, mustBePositive
     }
 
