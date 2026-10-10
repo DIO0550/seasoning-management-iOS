@@ -76,22 +76,11 @@ class SwiftFormatFixture(unittest.TestCase):
             cwd=self.caller, env=self.env, text=True, capture_output=True,
         )
 
-    def run_post_edit(self, payload):
-        if not isinstance(payload, str):
-            payload = json.dumps(payload)
-        return subprocess.run(
-            [BASH, str(self.root / ".claude/hooks/post-edit-check.sh")],
-            cwd=self.caller, env=self.env, input=payload, text=True, capture_output=True,
-        )
-
     def run_pre_push(self, *args, git_input=""):
         return subprocess.run(
             [BASH, str(self.root / "harness/githooks/pre-push"), *args],
             cwd=self.root, env=self.env, input=git_input, text=True, capture_output=True,
         )
-
-    def edit_payload(self, path, tool_name="Edit"):
-        return {"tool_name": tool_name, "tool_input": {"file_path": str(path)}}
 
 
 class SwiftFormatCommandTests(SwiftFormatFixture):
@@ -110,8 +99,6 @@ class SwiftFormatCommandTests(SwiftFormatFixture):
             "pathlib.Path(os.environ['HARNESS_TEST_INVOCATION']).write_text("
             "json.dumps({'args': sys.argv[1:], 'cwd': os.getcwd(), 'stdin': "
             "sys.stdin.read() if os.environ.get('HARNESS_TEST_READ_STDIN') else ''}))\n"
-            "sys.stdout.write(os.environ.get('HARNESS_TEST_SWIFT_STDOUT', ''))\n"
-            "sys.stderr.write(os.environ.get('HARNESS_TEST_SWIFT_STDERR', ''))\n"
             "sys.exit(int(os.environ.get('HARNESS_TEST_SWIFT_EXIT', '0')))\n",
             encoding="utf-8",
         )
@@ -284,75 +271,18 @@ class SwiftFormatCommandTests(SwiftFormatFixture):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.selected_files(), ["src/Initial.swift"])
 
-    def test_post_edit_checks_only_named_file_without_git_refs(self):
-        name = "src/日本語 file\nname.swift"
-        path = self.write(name)
-        self.write("src/Unrelated.swift")
-        self.git("update-ref", "-d", "refs/remotes/origin/master")
-        self.env["HARNESS_FORMAT_BASE"] = "invalid-ref"
-        for tool_name in ("Edit", "Write"):
-            with self.subTest(tool=tool_name):
-                result = self.run_post_edit(self.edit_payload(path, tool_name))
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertEqual(self.selected_files(), [name])
-
-    def test_post_edit_skips_valid_paths_outside_scope_without_swift(self):
-        old = self.write("old/Legacy.swift")
-        text = self.write("src/notes.txt")
-        source = self.write("src/Folder/Source.swift")
-        linked = self.root / "src/Linked.swift"
-        linked.symlink_to(source)
-        folder = self.root / "src/LinkedFolder"
-        folder.symlink_to(source.parent, target_is_directory=True)
-        root_link = self.root / "src/RootLink"
-        root_link.symlink_to(self.root, target_is_directory=True)
-        external = self.directory / "External.swift"
-        external.write_text("let value = 1\n")
-        self.swift.unlink()
-        for path in (old, text, linked, folder / "Source.swift", root_link / "src/Folder/Source.swift", external):
-            with self.subTest(path=path):
-                result = self.run_post_edit(self.edit_payload(path))
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("tool not run", result.stdout)
-                self.assertFalse(self.invocation.exists())
-
-    def test_post_edit_rejects_invalid_json_payloads_and_argument_combinations(self):
-        for payload in (
-            "{", [], {}, {"tool_name": "Edit"},
-            {"tool_name": "Bash", "tool_input": {"file_path": "/tmp/Example.swift"}},
-            {"tool_name": "Edit", "tool_input": []},
-            {"tool_name": "Edit", "tool_input": {}},
-            {"tool_name": "Edit", "tool_input": {"file_path": 1}},
-            self.edit_payload(""), self.edit_payload("src/Relative.swift"), self.edit_payload("/tmp/NUL\0.swift"),
-        ):
-            with self.subTest(payload=payload):
-                result = self.run_post_edit(payload)
-                self.assertEqual(result.returncode, 2, result.stderr)
-                self.assertTrue(result.stderr.strip())
-                self.assertFalse(self.invocation.exists())
-        for args in (("format", "--post-edit"), ("lint", "--post-edit", "src/Explicit.swift")):
-            with self.subTest(arguments=args):
-                self.assertEqual(self.run_script(*args).returncode, 2)
-                self.assertFalse(self.invocation.exists())
-
-    def test_post_edit_reports_all_diagnostics_as_exit_two_without_editing(self):
-        source = self.write("src/Example.swift")
+    def test_edit_hook_only_checks_configuration(self):
+        source = self.write("src/Example.swift", "struct Example{\nlet value=1\n}\n")
         before = source.read_bytes()
         self.env["HARNESS_TEST_SWIFT_EXIT"] = "65"
-        self.env["HARNESS_TEST_SWIFT_STDOUT"] = "formatter stdout diagnostic\n"
-        self.env["HARNESS_TEST_SWIFT_STDERR"] = "formatter stderr diagnostic\n"
-        result = self.run_post_edit(self.edit_payload(source))
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("formatter stdout diagnostic", result.stderr)
-        self.assertIn("formatter stderr diagnostic", result.stderr)
+        payload = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(source)}})
+        result = subprocess.run(
+            [BASH, str(self.root / ".claude/hooks/post-edit-check.sh")],
+            cwd=self.caller, env=self.env, input=payload, text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.invocation.exists())
         self.assertEqual(source.read_bytes(), before)
-
-    def test_post_edit_fails_when_target_requires_missing_formatter(self):
-        source = self.write("src/Example.swift")
-        self.swift.unlink()
-        result = self.run_post_edit(self.edit_payload(source))
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("Swift format not run", result.stderr)
 
     def test_pre_push_accepts_remote_arguments_and_discards_git_input(self):
         self.write("src/Example.swift")
@@ -409,20 +339,16 @@ class RealSwiftFormatTests(SwiftFormatFixture):
         result = self.run_script("lint", name)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_real_post_edit_and_pre_push_enforce_lint_without_editing(self):
+    def test_real_pre_push_enforces_lint_without_editing(self):
         self.require_real_swift()
         source = self.write("src/Example.swift", "struct Example {\n    let value = 1\n}\n")
-        result = self.run_post_edit(self.edit_payload(source))
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        before = source.read_bytes()
         result = self.run_pre_push("origin", "git@example.invalid:repo.git")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(source.read_bytes(), before)
 
         source.write_text("struct Example{\nlet value=1\n}\n", encoding="utf-8")
         before = source.read_bytes()
-        result = self.run_post_edit(self.edit_payload(source))
-        self.assertEqual(result.returncode, 2)
-        self.assertTrue(result.stderr.strip())
-        self.assertEqual(source.read_bytes(), before)
         result = self.run_pre_push()
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(source.read_bytes(), before)

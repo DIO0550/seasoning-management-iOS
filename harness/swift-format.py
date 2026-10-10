@@ -2,7 +2,6 @@
 """Run the toolchain's swift-format on changed, existing Swift files in src/."""
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
@@ -106,57 +105,16 @@ def targets(names):
     return sorted(selected)
 
 
-def post_edit_targets():
-    try:
-        payload = json.load(sys.stdin)
-    except json.JSONDecodeError as error:
-        raise ValueError(f"Invalid PostToolUse JSON: {error}") from error
-
-    if not isinstance(payload, dict):
-        raise ValueError("PostToolUse input must be an object")
-    if payload.get("tool_name") not in ("Edit", "Write"):
-        raise ValueError("PostToolUse requires tool_name Edit or Write")
-
-    tool_input = payload.get("tool_input")
-    if not isinstance(tool_input, dict):
-        raise ValueError("PostToolUse requires a tool_input object")
-
-    name = tool_input.get("file_path")
-    if not isinstance(name, str):
-        raise ValueError("PostToolUse requires a string file_path")
-    if not name:
-        raise ValueError("PostToolUse file_path must not be empty")
-    if "\0" in name:
-        raise ValueError("PostToolUse file_path must not contain NUL")
-    if not Path(name).is_absolute():
-        raise ValueError("PostToolUse file_path must be absolute")
-
-    path = source_path(name)
-    if path is None:
-        return []
-
-    return [path]
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("lint", "format"))
     parser.add_argument("files", nargs="*", help="Paths relative to the repository root (or absolute paths)")
-    parser.add_argument("--post-edit", action="store_true", help="Lint the edited file from PostToolUse JSON on stdin")
     args = parser.parse_args()
 
     try:
-        if args.post_edit:
-            if args.mode != "lint":
-                raise ValueError("--post-edit requires lint")
-            if args.files:
-                raise ValueError("--post-edit cannot be combined with explicit files")
-            files = post_edit_targets()
-        else:
-            files = targets(args.files)
-
+        files = targets(args.files)
         if not files:
-            print("Swift format: no eligible src/**/*.swift files; tool not run")
+            print("Swift format: no changed src/**/*.swift files; tool not run")
             return 0
 
         if not CONFIG.is_file():
