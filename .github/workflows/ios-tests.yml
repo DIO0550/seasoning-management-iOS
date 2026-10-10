@@ -104,8 +104,9 @@ jobs:
     timeout-minutes: 5
     permissions:
       actions: read
+      # The issue-comment endpoint checks both scopes for PR timeline comments.
       issues: write
-      pull-requests: read
+      pull-requests: write
     steps:
       # No PR checkout or execution in the job with comment permission.
       - name: Download reports from this attempt
