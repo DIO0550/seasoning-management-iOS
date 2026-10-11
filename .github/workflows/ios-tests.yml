@@ -16,6 +16,10 @@ concurrency:
 jobs:
   tests:
     name: ${{ matrix.name }}
+    # Distinct keys combine both matrix results regardless of completion order.
+    outputs:
+      unit_report: ${{ steps.collect.outputs.unit_report }}
+      ui_report: ${{ steps.collect.outputs.ui_report }}
     strategy:
       fail-fast: false
       matrix:
@@ -66,35 +70,13 @@ jobs:
         run: |
           bash harness/test-ios.sh "$TEST_TARGET" "platform=iOS Simulator,id=$SIMULATOR_ID"
 
-      - name: Collect test counts and app coverage
+      - name: Collect results for PR comment
+        id: collect
         if: always()
         env:
           HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.target }}.xcresult
         run: |
-          report_directory="$RUNNER_TEMP/test-reports/$TEST_TARGET"
-          mkdir -p "$report_directory"
-          if [[ ! -d "$HARNESS_RESULT_BUNDLE" ]]; then
-            echo "::warning::No result bundle; test counts and coverage are unavailable."
-            echo 'Result bundle unavailable' > "$report_directory/unavailable.txt"
-            exit 0
-          fi
-
-          # Run both readers even if one fails. An export failure stays a CI failure.
-          export_status=0
-          xcrun xcresulttool get test-results summary --path "$HARNESS_RESULT_BUNDLE" \
-            > "$report_directory/summary.json" || export_status=1
-          xcrun xccov view --report --json "$HARNESS_RESULT_BUNDLE" \
-            > "$report_directory/coverage.json" || export_status=1
-          exit "$export_status"
-
-      - name: Upload test report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ios-test-report-${{ matrix.target }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/test-reports/
-          retention-days: 14
-          if-no-files-found: warn
+          python3 harness/ci-report.py
 
   report:
     name: Report iOS test results
@@ -109,22 +91,13 @@ jobs:
       pull-requests: write
     steps:
       # No PR checkout or execution in the job with comment permission.
-      - name: Download reports from this attempt
-        id: download
-        continue-on-error: true
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
-        with:
-          pattern: ios-test-report-*-${{ github.run_attempt }}
-          path: reports
-          merge-multiple: true
-
       - name: Summarize and update PR comment
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          REPORT_DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+          UNIT_REPORT: ${{ needs.tests.outputs.unit_report }}
+          UI_REPORT: ${{ needs.tests.outputs.ui_report }}
         with:
           script: |
-            const fs = require('node:fs');
             const marker = '<!-- seasoning-ios-test-report -->';
             const { owner, repo } = context.repo;
             const runId = Number(process.env.GITHUB_RUN_ID);
@@ -135,13 +108,17 @@ jobs:
               owner, repo, run_id: runId, attempt_number: attempt, per_page: 100
             });
 
-            function readReport(target, name) {
+            function readReport(variable) {
               try {
-                const path = `reports/${target}/${name}.json`;
-                if (fs.statSync(path).size > 2_000_000) {
+                const raw = process.env[variable];
+                if (!raw || raw.length > 60_000) {
                   return null;
                 }
-                return JSON.parse(fs.readFileSync(path, 'utf8'));
+                const report = JSON.parse(raw);
+                if (report?.runId !== String(runId) || report?.attempt !== String(attempt)) {
+                  return null;
+                }
+                return report;
               } catch {
                 return null;
               }
@@ -170,13 +147,8 @@ jobs:
             }
 
             function coverage(report) {
-              const targets = report?.targets;
-              if (!Array.isArray(targets)) {
-                return '未取得';
-              }
-              const app = targets.find(target => target?.name === 'SeasoningManager.app');
-              const covered = app?.coveredLines;
-              const executable = app?.executableLines;
+              const covered = report?.coveredLines;
+              const executable = report?.executableLines;
               if (count(covered) === '未取得' || count(executable) === '未取得') {
                 return '未取得';
               }
@@ -186,6 +158,73 @@ jobs:
               return `${(100 * covered / executable).toFixed(2)}% (${covered}/${executable}行)`;
             }
 
+            function label(value) {
+              if (typeof value !== 'string' || !value.trim()) {
+                return '未取得';
+              }
+              const text = value.replace(/\s+/g, ' ').slice(0, 240);
+              const suffix = value.replace(/\s+/g, ' ').length > 240 ? '…' : '';
+              return text.replace(/[&<>|`\\\[\]*_]/g, char => `&#${char.codePointAt(0)};`) + suffix;
+            }
+
+            function fileName(path) {
+              if (typeof path !== 'string') {
+                return '未取得';
+              }
+              const relative = path.replace(/^.*\/(?=src\/SeasoningManager\/)/, '');
+              if (relative.startsWith('src/')) {
+                return label(relative);
+              }
+              return label(relative.split('/').pop());
+            }
+
+            function testSeconds(test) {
+              if (test?.result === 'Skipped') {
+                return null;
+              }
+              if (typeof test?.seconds !== 'number' || !Number.isFinite(test.seconds) || test.seconds < 0) {
+                return null;
+              }
+              return test.seconds;
+            }
+
+            const testStatuses = { Passed: '成功', Failed: '失敗', Skipped: 'スキップ', 'Expected Failure': '想定内の失敗' };
+            function testRow(test) {
+              const seconds = testSeconds(test);
+              let time = '未取得';
+              if (test?.result === 'Skipped') {
+                time = '未実施';
+              } else if (seconds !== null) {
+                time = `${seconds.toFixed(3)}秒`;
+              }
+              return `| ${label(test?.name)} | ${testStatuses[test?.result] ?? '未取得'} | ${time} |`;
+            }
+
+            function fileRow(file) {
+              return `| ${fileName(file?.path)} | ${coverage(file)} |`;
+            }
+
+            // Bound each table so the whole comment fits GitHub's text limit.
+            function table(headers, rows, budget) {
+              const output = [...headers];
+              let size = output.join('\n').length;
+              let shown = 0;
+              for (const row of rows) {
+                if (size + row.length + 1 > budget) {
+                  break;
+                }
+                output.push(row);
+                size += row.length + 1;
+                shown++;
+              }
+              if (shown < rows.length) {
+                output.push('', `コメントの文字数上限のため、詳細を${rows.length - shown}件省略しました。`);
+              }
+              return output;
+            }
+
+            const fileHeaders = ['| ファイル | 行カバレッジ |', '| --- | --- |'];
+            const testHeaders = ['| テスト | 結果 | 実行時間 |', '| --- | --- | ---: |'];
             const statuses = {
               success: '成功', failure: '失敗', cancelled: '取消', skipped: 'スキップ',
               timed_out: 'タイムアウト', action_required: '対応待ち', neutral: '中立'
@@ -195,29 +234,97 @@ jobs:
               `<!-- ios-test-run:${runId}:${attempt} -->`,
               '### iOS CI 検証結果', '',
               `対象コミット: \`${pr.head.sha}\` / 検証コミット: \`${context.sha}\``,
-              `[CIログ・レポート](${runUrl})`, '',
+              `[CIログ](${runUrl})`, '',
               '| 検証 | CI結果 | 成功 | 失敗 | スキップ | アプリ行カバレッジ | テスト工程 | ジョブ全体 |',
               '| --- | --- | ---: | ---: | ---: | --- | --- | --- |'
             ];
-            for (const [name, target] of [
-              ['Unit tests', 'SeasoningManagerTests'], ['UI tests', 'SeasoningManagerUITests']
-            ]) {
+            const reports = [
+              ['Unit tests', 'UNIT_REPORT'], ['UI tests', 'UI_REPORT']
+            ].map(([name, variable]) => {
               const job = jobs.find(job => job.name === name);
-              const summary = readReport(target, 'summary');
-              const appCoverage = coverage(readReport(target, 'coverage'));
+              // Partial reruns can retain older outputs; never display those as this attempt.
+              const report = job ? readReport(variable) : null;
+              return { name, job, report };
+            });
+            for (const { name, job, report } of reports) {
+              const summary = report?.summary;
+              const appCoverage = coverage(report?.coverage);
               const testStep = job?.steps?.find(step => step.name === 'Run tests');
               const status = statuses[job?.conclusion] ?? '未完了・未取得';
               lines.push(`| ${name} | ${status} | ${count(summary?.passedTests)} | ${count(summary?.failedTests)} | ${count(summary?.skippedTests)} | ${appCoverage} | ${duration(testStep)} | ${duration(job)} |`);
             }
+
+            lines.push('', '#### 低カバレッジのファイル（80%未満・各検証の下位10件）', '');
+            for (const { name, report } of reports) {
+              lines.push(`**${name}**`, '');
+              const files = report?.coverage?.files;
+              if (!Array.isArray(files)) {
+                lines.push('ファイル別カバレッジは未取得です。', '');
+                continue;
+              }
+              const low = files.filter(file => coverage(file) !== '未取得')
+                .filter(file => file.coveredLines / file.executableLines < 0.8)
+                .sort((a, b) => a.coveredLines / a.executableLines - b.coveredLines / b.executableLines);
+              if (!low.length) {
+                lines.push('取得できたファイルに80%未満はありません。', '');
+                continue;
+              }
+              lines.push(...table(fileHeaders, low.slice(0, 10).map(fileRow), 3500), '',
+                `取得できた対象: ${low.length}件。全ファイルは下の詳細を参照してください。`, '');
+            }
+
+            lines.push('#### 遅いテスト（各検証の実行時間上位10件）', '');
+            for (const { name, report } of reports) {
+              lines.push(`**${name}**`, '');
+              const tests = report?.tests;
+              if (!Array.isArray(tests)) {
+                lines.push('テスト別実行時間は未取得です。', '');
+                continue;
+              }
+              const slow = tests.filter(test => testSeconds(test) !== null)
+                .sort((a, b) => b.seconds - a.seconds).slice(0, 10);
+              if (!slow.length) {
+                lines.push('実行時間を取得できたテストはありません。', '');
+                continue;
+              }
+              lines.push(...table(testHeaders, slow.map(testRow), 3500), '');
+            }
+
+            for (const { name, report } of reports) {
+              lines.push('<details>', `<summary>${name} — ファイル別カバレッジ</summary>`, '');
+              const files = report?.coverage?.files;
+              if (Array.isArray(files) && files.length) {
+                const sorted = [...files].sort((a, b) => String(a?.path).localeCompare(String(b?.path)));
+                lines.push(...table(fileHeaders, sorted.map(fileRow), 10_000));
+              } else {
+                lines.push(Array.isArray(files) ? '取得できたファイルは0件です。' : '未取得です。');
+              }
+              lines.push('', '</details>', '', '<details>', `<summary>${name} — テスト別結果・実行時間</summary>`, '');
+              const tests = report?.tests;
+              if (Array.isArray(tests) && tests.length) {
+                const sorted = [...tests].sort((a, b) => String(a?.name).localeCompare(String(b?.name)));
+                lines.push(...table(testHeaders, sorted.map(testRow), 10_000));
+              } else {
+                lines.push(Array.isArray(tests) ? '取得できたテストは0件です。' : '未取得です。');
+              }
+              lines.push('', '</details>', '');
+              if (Array.isArray(report?.errors) && report.errors.length) {
+                lines.push(`${name}: 結果収集の一部に失敗しました。取得できた結果のみ表示しています。`, '');
+              }
+              for (const [key, description] of [['files', 'ファイル'], ['tests', 'テスト']]) {
+                const omitted = report?.omitted?.[key];
+                if (Number.isSafeInteger(omitted) && omitted > 0) {
+                  lines.push(`${name}: ジョブ間の転送上限により${description}詳細を${omitted}件省略しました。`, '');
+                }
+              }
+            }
             lines.push('',
               'カバレッジは単体・UIそれぞれの実行で測ったアプリの行カバレッジです。両者を合算していません。',
               'テスト工程の時間はビルドとテストを含み、ジョブ全体は環境準備と結果収集も含みます。待ち時間・アプリの動作速度は測っていません。',
+              'テスト別時間はxcresultの値です。テスト名・ファイル名は長い場合に省略表示します。結果ファイルの添付はありません。',
               '再実行時は今回の attempt の結果を表示します。今回再実行しなかった検証は未取得となる場合があります。',
               '未取得の値は0や成功として扱いません。その他のCI・ローカル検証は完了報告で確認してください。'
             );
-            if (process.env.REPORT_DOWNLOAD_OUTCOME !== 'success') {
-              lines.push('', 'レポートのダウンロードに失敗しました。詳細はCIログを確認してください。');
-            }
             const body = lines.join('\n');
             await core.summary.addRaw(body).write();
 

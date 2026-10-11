@@ -117,7 +117,12 @@ Linux や Xcode のない環境では終了コード 2 で未実施を知らせ�
 `SeasoningManager.app` の行カバレッジ（実行された行 / 実行可能な行）、テスト工程とジョブ全体の時間を
 1件のコメントへ集約する。テスト用コードのカバレッジは含めず、単体・UIの値を合算しない。
 テスト工程はビルド込み、ジョブ全体は準備・結果収集込みで、キュー待ち時間やアプリ性能ではない。
-集計用の JSON レポートを14日間保存する。コメントには検証済みの数値を使い、失敗・結果なし・ダウンロード失敗も明示する。
+結果をジョブ出力で受け渡し、Actions へのファイル添付は行わない。コメントの上部に80%未満のファイルを
+低い順に各検証10件、遅いテストを時間の長い順に各検証10件表示する。全ファイルの行カバレッジと
+全テストの結果・実行時間は `<details>` に折りたたむ。テスト別時間は xcresult の値で、スキップは未実施とする。
+コメントには検証済みの数値を使い、失敗・結果なし・収集失敗も明示する。
+ジョブ出力は60,000 ASCII文字以内、詳細表はコメント全体が60,000文字未満に収まる量に制限する。
+上限時は低カバレッジ・遅いテストを優先し、省略件数を明示する。長いファイル名・テスト名は省略表示する。
 再実行時は bot 自身の専用コメントを更新し、古いコミットや古い実行結果で上書きしない。
 今回の attempt の結果だけを集計するため、失敗ジョブだけの再実行では、今回再実行しないターゲットの値が未取得となる場合がある。
 
@@ -133,6 +138,7 @@ workflow 全体の取消やランナー待ちでは集約ジョブが実行さ�
 HARNESS_RESULT_BUNDLE=/tmp/SeasoningManagerTests.xcresult \
   bash harness/test-ios.sh SeasoningManagerTests 'platform=iOS Simulator,id=<利用可能なUDID>'
 xcrun xcresulttool get test-results summary --path /tmp/SeasoningManagerTests.xcresult
+xcrun xcresulttool get test-results tests --path /tmp/SeasoningManagerTests.xcresult
 xcrun xccov view --report --json /tmp/SeasoningManagerTests.xcresult
 ```
 
