@@ -75,23 +75,25 @@ struct ItemRulesTests {
         #expect(item.updatedAt == now)
     }
 
-    @Test(arguments: [
-        (ItemStatus.unopened, ItemStatus.consumed, 2, 3, ValidationError.invalidTransition),
-        (.inUse, .unopened, nil, nil, .invalidTransition),
-        (.consumed, .unopened, nil, nil, .invalidTransition),
-        (.consumed, .inUse, 2, nil, .invalidTransition),
-        (.unopened, .unopened, 2, nil, .unexpectedOpeningDate),
-        (.unopened, .unopened, nil, 3, .unexpectedConsumedDate),
-        (.unopened, .inUse, nil, nil, .openingDateRequired),
-        (.unopened, .inUse, 2, 3, .unexpectedConsumedDate),
-        (.unopened, .inUse, 11, nil, .futureOpeningDate),
-        (.inUse, .inUse, nil, nil, .openingDateRequired),
-        (.inUse, .inUse, 11, nil, .futureOpeningDate),
-        (.inUse, .consumed, nil, 3, .openingDateRequired),
-        (.inUse, .consumed, 2, nil, .consumedDateRequired),
-        (.inUse, .consumed, 2, 1, .consumedDateBeforeOpeningDate),
-        (.consumed, .consumed, 4, 3, .consumedDateBeforeOpeningDate)
-    ] as [(ItemStatus, ItemStatus, Int?, Int?, ValidationError)])
+    @Test(
+        arguments: [
+            (ItemStatus.unopened, ItemStatus.consumed, 2, 3, ValidationError.invalidTransition),
+            (.inUse, .unopened, nil, nil, .invalidTransition),
+            (.consumed, .unopened, nil, nil, .invalidTransition),
+            (.consumed, .inUse, 2, nil, .invalidTransition),
+            (.unopened, .unopened, 2, nil, .unexpectedOpeningDate),
+            (.unopened, .unopened, nil, 3, .unexpectedConsumedDate),
+            (.unopened, .inUse, nil, nil, .openingDateRequired),
+            (.unopened, .inUse, 2, 3, .unexpectedConsumedDate),
+            (.unopened, .inUse, 11, nil, .futureOpeningDate),
+            (.inUse, .inUse, nil, nil, .openingDateRequired),
+            (.inUse, .inUse, 11, nil, .futureOpeningDate),
+            (.inUse, .consumed, nil, 3, .openingDateRequired),
+            (.inUse, .consumed, 2, nil, .consumedDateRequired),
+            (.inUse, .consumed, 2, 1, .consumedDateBeforeOpeningDate),
+            (.consumed, .consumed, 4, 3, .consumedDateBeforeOpeningDate),
+        ] as [(ItemStatus, ItemStatus, Int?, Int?, ValidationError)]
+    )
     func rejectedChangesLeaveModelAndSavedFieldsUntouched(
         _ input: (source: ItemStatus, target: ItemStatus, openingDay: Int?, consumedDay: Int?, error: ValidationError)
     ) throws {
