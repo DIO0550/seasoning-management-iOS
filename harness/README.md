@@ -17,7 +17,8 @@ Claude 固有の hook が動かない環境でも、下記の検査を直接実�
 
 ## 共通の検査
 
-Python 3 と Bash を使う。追加のパッケージは不要。
+Python 3 と Bash を使う。CI のコメント集計テストには Node.js も使う（GitHub のランナーに同梱）。
+追加のパッケージは不要。Node.js がない環境では集計の JavaScript テストを未実施として skip する。
 
 ```bash
 bash harness/githooks/pre-push
@@ -104,6 +105,44 @@ bash harness/test-ios.sh SeasoningManagerUITests 'platform=iOS Simulator,id=<利
 既存の iOS CI もこのスクリプトを呼ぶ。`all` で両ターゲットを実行できる。
 Linux や Xcode のない環境では終了コード 2 で未実施を知らせる。対応 OS を下げて検証を通さない。
 ハーネスだけの変更でも、iOS CI が環境待ちなら、その状態を Swift の成功と書かない。
+
+## PR の検証結果コメント
+
+完了時は PR 本文に加えて、エージェントが PR へ検証結果のコメントを残す。対象の head SHA、
+実行コマンドと環境、成功・失敗・スキップ件数、各 CI の状態と実行リンク、カバレッジと所要時間を記す。
+この直接依頼による完了報告は投稿してよい。実行・計測していない項目は未実施・未取得と理由を書く。
+キュー待ちの CI がある場合も現状をコメントし、完了済みとは書かない。レビュー修正後は最新コミットに更新する。
+
+`iOS tests` CI は両ターゲットの終了後、単体・UIそれぞれの成功・失敗・スキップ件数、
+`SeasoningManager.app` の行カバレッジ（実行された行 / 実行可能な行）、テスト工程とジョブ全体の時間を
+1件のコメントを「🧪 テスト結果」「📊 カバレッジ」「⏱️ 実行時間」に分けて表示する。
+状態は絵文字、カバレッジは🟢80%以上・🟠80%未満・⚪未取得で示す。末尾の定型説明は付けず、
+欠測・収集失敗・省略だけを短く表示する。テスト用コードのカバレッジは含めず、単体・UIの値を合算しない。
+テスト工程はビルド込み、ジョブ全体は準備・結果収集込みで、キュー待ち時間やアプリ性能ではない。
+結果をジョブ出力で受け渡し、Actions へのファイル添付は行わない。コメントの上部に80%未満のファイルを
+低い順に各検証10件、遅いテストを時間の長い順に各検証10件表示する。全ファイルの行カバレッジと
+全テストの結果・実行時間は `<details>` に折りたたむ。テスト別時間は xcresult の値で、スキップは未実施とする。
+コメントには検証済みの数値を使い、失敗・結果なし・収集失敗も明示する。
+ジョブ出力は60,000 ASCII文字以内、詳細表はコメント全体が60,000文字未満に収まる量に制限する。
+上限時は低カバレッジ・遅いテストを優先し、省略件数を明示する。長いファイル名・テスト名は省略表示する。
+再実行時は bot 自身の専用コメントを更新し、古いコミットや古い実行結果で上書きしない。
+今回の attempt の結果だけを集計するため、失敗ジョブだけの再実行では、今回再実行しないターゲットの値が未取得となる場合がある。
+
+コメント権限は集約ジョブだけに付け、PR のコードを checkout / 実行しない。
+fork の PR は読み取り専用トークンのため Actions の Summary に表示する。
+workflow 全体の取消やランナー待ちでは集約ジョブが実行されないことがあり、その状態はエージェントが完了報告に記す。
+自動コメントの対象は iOS CI だけ。`Agent harness` / `Swift format` とローカル検証はエージェントが別途報告する。
+自動コメントと完了報告が揃っているか確認し、取得できていない数値を推測で埋めない。
+
+ローカルでも結果を保存してカバレッジを有効にする場合は、新規の出力先を指定する。
+
+```bash
+HARNESS_RESULT_BUNDLE=/tmp/SeasoningManagerTests.xcresult \
+  bash harness/test-ios.sh SeasoningManagerTests 'platform=iOS Simulator,id=<利用可能なUDID>'
+xcrun xcresulttool get test-results summary --path /tmp/SeasoningManagerTests.xcresult
+xcrun xcresulttool get test-results tests --path /tmp/SeasoningManagerTests.xcresult
+xcrun xccov view --report --json /tmp/SeasoningManagerTests.xcresult
+```
 
 ## 記録からの改善
 

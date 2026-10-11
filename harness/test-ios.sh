@@ -54,4 +54,9 @@ if [[ "$target" != "all" ]]; then
   test_command+=("-only-testing:$target")
 fi
 
+# CI supplies a unique path per matrix job; local calls keep their existing behavior.
+if [[ -n "${HARNESS_RESULT_BUNDLE:-}" ]]; then
+  test_command+=(-resultBundlePath "$HARNESS_RESULT_BUNDLE" -enableCodeCoverage YES)
+fi
+
 exec "${test_command[@]}"

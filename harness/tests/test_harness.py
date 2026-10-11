@@ -125,6 +125,17 @@ class IOSTestCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         args = json.loads(self.args_file.read_text())["args"]
         self.assertFalse(any(arg.startswith("-only-testing:") for arg in args))
+        self.assertNotIn("-resultBundlePath", args)
+        self.assertNotIn("-enableCodeCoverage", args)
+
+    def test_result_bundle_enables_coverage_and_keeps_path_as_one_argument(self):
+        path = str(self.bin_dir / "results with spaces.xcresult")
+        self.env["HARNESS_RESULT_BUNDLE"] = path
+        result = self.run_script("SeasoningManagerTests", "platform=iOS Simulator,id=test")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads(self.args_file.read_text())["args"]
+        self.assertEqual(args[args.index("-resultBundlePath") + 1], path)
+        self.assertEqual(args[args.index("-enableCodeCoverage") + 1], "YES")
 
     def test_xcode_failure_is_propagated(self):
         self.env["HARNESS_TEST_EXIT"] = "65"
