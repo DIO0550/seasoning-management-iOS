@@ -293,8 +293,15 @@ class CIReportTests(unittest.TestCase):
     def test_report_posts_counts_app_coverage_and_separate_durations(self):
         result = self.run_report()
         body = self.mutations(result)[0]["body"]
-        self.assertIn("| Unit tests | 成功 | 5 | 1 | 2 | 25.00% (25/100行) | 2分30秒 | 6分0秒 |", body)
-        self.assertIn("| UI tests | 成功 | 5 | 1 | 2 | 25.00% (25/100行)", body)
+        self.assertIn("| Unit | ✅ 成功 | 5 | 1 | 2 |", body)
+        self.assertIn("| UI | ✅ 成功 | 5 | 1 | 2 |", body)
+        self.assertIn("| Unit | 🟠 25.00% (25/100行) |", body)
+        self.assertIn("| Unit | 2分30秒 | 6分0秒 |", body)
+        self.assertLess(body.index("#### 🧪 テスト結果"), body.index("#### 📊 カバレッジ"))
+        self.assertLess(body.index("#### 📊 カバレッジ"), body.index("#### ⏱️ 実行時間"))
+        self.assertIn("ビルド＋テスト", body)
+        self.assertTrue(body.rstrip().endswith("</details>"))
+        self.assertNotIn("両者を合算", body)
         self.assertNotIn("99.00%", body)
         self.assertIn(self.head, body)
         self.assertIn("/actions/runs/1234/attempts/2", body)
@@ -304,21 +311,24 @@ class CIReportTests(unittest.TestCase):
 
     def test_highlights_low_coverage_and_slowest_tests_before_collapsed_details(self):
         body = self.run_report()["summary"]
-        highlights, details = body.split("<details>", 1)
-        low = highlights.split("#### 低カバレッジ", 1)[1].split("#### 遅いテスト", 1)[0]
-        self.assertIn("Low.swift | 79.00%", low)
-        self.assertIn("Zero.swift | 0.00%", low)
+        coverage, times = body.split("#### ⏱️ 実行時間", 1)
+        low, coverage_details = coverage.split("<details>", 1)
+        low = low.split("##### 🟠 80%未満", 1)[1]
+        slow, test_details = times.split("<details>", 1)
+        slow = slow.split("##### 🐢 遅いテスト", 1)[1]
+        details = coverage_details + test_details
+        self.assertIn("Low.swift | 🟠 79.00%", low)
+        self.assertIn("Zero.swift | 🟠 0.00%", low)
         self.assertLess(low.index("Zero.swift"), low.index("Low.swift"))
         self.assertNotIn("High.swift", low)  # Exactly 80% is excluded.
         self.assertNotIn("Empty.swift", low)
-        slow = highlights.split("#### 遅いテスト", 1)[1]
         self.assertLess(slow.index("Suite/slow()"), slow.index("Suite/fast()"))
         self.assertNotIn("Suite/skipped()", slow)
         self.assertNotIn("Suite/unknown()", slow)
-        self.assertIn("High.swift | 80.00%", details)
-        self.assertIn("Empty.swift | 未取得", details)
-        self.assertIn("Suite/skipped() | スキップ | 未実施", details)
-        self.assertIn("Suite/unknown() | 成功 | 未取得", details)
+        self.assertIn("High.swift | 🟢 80.00%", details)
+        self.assertIn("Empty.swift | ⚪ 未取得", details)
+        self.assertIn("Suite/skipped() | ⏭️ スキップ | 未実施", details)
+        self.assertIn("Suite/unknown() | ✅ 成功 | 未取得", details)
         self.assertNotIn("/Users/runner", body)
         self.assertEqual(body.count("<details>"), 4)
         self.assertEqual(body.count("</details>"), 4)
@@ -330,13 +340,24 @@ class CIReportTests(unittest.TestCase):
             for index in range(12)
         ])
         body = self.run_report()["summary"]
-        highlights, details = body.split("<details>", 1)
-        slow = highlights.split("#### 遅いテスト", 1)[1].split("**UI tests**", 1)[0]
+        times = body.split("#### ⏱️ 実行時間", 1)[1]
+        highlights, details = times.split("<details>", 1)
+        slow = highlights.split("##### 🐢 遅いテスト", 1)[1].split("**UI**", 1)[0]
         self.assertEqual(slow.count("Suite/test"), 10)
         self.assertLess(slow.index("test11"), slow.index("test10"))
         self.assertNotIn("test01", slow)
         self.assertIn("test01", details)
-        self.assertIn("test00() | 成功 | 0.000秒", details)
+        self.assertIn("test00() | ✅ 成功 | 0.000秒", details)
+
+    def test_unmeasured_files_are_not_marked_as_no_low_coverage(self):
+        self.write_report("SeasoningManagerTests", "coverage", {
+            "coveredLines": 0, "executableLines": 0,
+            "files": [{"path": "Empty.swift", "coveredLines": 0, "executableLines": 0},
+                      {"path": "Unknown.swift"}],
+        })
+        coverage = self.run_report()["summary"].split("#### 📊 カバレッジ", 1)[1].split("<details>", 1)[0]
+        self.assertIn("**Unit** · ⚪ 計測なし", coverage)
+        self.assertNotIn("**Unit** · ✅ 該当なし", coverage)
 
     def test_names_cannot_inject_html_tables_or_markdown(self):
         name = "evil|`[link](url)\n</details><script>&*bold*"
@@ -367,9 +388,9 @@ class CIReportTests(unittest.TestCase):
         self.reports["SeasoningManagerTests"]["omitted"] = {"files": 20, "tests": 30}
         body = self.run_report()["summary"]
         self.assertLess(len(body), 60000)
-        self.assertIn("コメントの文字数上限", body)
-        self.assertIn("ファイル詳細を20件省略", body)
-        self.assertIn("テスト詳細を30件省略", body)
+        self.assertIn("文字数上限", body)
+        self.assertIn("ファイル詳細 20件省略", body)
+        self.assertIn("テスト詳細 30件省略", body)
         self.assertEqual(body.count("<details>"), body.count("</details>"))
 
     def test_wrong_run_or_attempt_outputs_are_unavailable_even_if_job_exists(self):
@@ -378,7 +399,7 @@ class CIReportTests(unittest.TestCase):
                 report = self.reports["SeasoningManagerTests"]
                 previous = report[field]
                 report[field] = value
-                self.assertIn("| Unit tests | 成功 | 未取得 |", self.run_report()["summary"])
+                self.assertIn("| Unit | ✅ 成功 | 未取得 |", self.run_report()["summary"])
                 report[field] = previous
 
     def test_missing_bundle_and_failed_setup_are_not_zero_tests_or_success(self):
@@ -386,7 +407,7 @@ class CIReportTests(unittest.TestCase):
         self.jobs[0]["conclusion"] = "failure"
         self.jobs[0]["steps"] = []
         result = self.run_report()
-        self.assertIn("| Unit tests | 失敗 | 未取得 | 未取得 | 未取得 | 未取得 | 未取得 |", result["summary"])
+        self.assertIn("| Unit | ❌ 失敗 | 未取得 | 未取得 | 未取得 |", result["summary"])
 
     def test_malformed_data_and_zero_denominator_are_unavailable(self):
         self.write_report("SeasoningManagerTests", "summary", {
@@ -396,24 +417,24 @@ class CIReportTests(unittest.TestCase):
             "coveredLines": 0, "executableLines": 0,
         })
         result = self.run_report()
-        self.assertIn("| Unit tests | 成功 | 未取得 | 未取得 | 未取得 | 未取得 |", result["summary"])
+        self.assertIn("| Unit | ✅ 成功 | 未取得 | 未取得 | 未取得 |", result["summary"])
         self.assertNotIn("<script>", result["summary"])
 
     def test_invalid_json_does_not_prevent_failure_report(self):
         self.raw_reports["SeasoningManagerTests"] = "{"
-        self.assertIn("| Unit tests | 成功 | 未取得 |", self.run_report()["summary"])
+        self.assertIn("| Unit | ✅ 成功 | 未取得 |", self.run_report()["summary"])
 
     def test_null_coverage_does_not_abort_comment(self):
         self.write_report("SeasoningManagerTests", "coverage", None)
         result = self.run_report()
-        self.assertIn("| Unit tests | 成功 | 5 | 1 | 2 | 未取得 |", result["summary"])
+        self.assertIn("| Unit | ⚪ 未取得 |", result["summary"])
         self.assertEqual(len(self.mutations(result)), 1)
 
     def test_partial_rerun_does_not_reuse_previous_attempt_data(self):
         self.jobs.pop()
         body = self.run_report()["summary"]
-        self.assertIn("| UI tests | 未完了・未取得 | 未取得 | 未取得 | 未取得 | 未取得 | 未取得 | 未取得 |", body)
-        self.assertIn("今回の attempt", body)
+        self.assertIn("| UI | ⚪ 未完了・未取得 | 未取得 | 未取得 | 未取得 |", body)
+        self.assertIn("| UI | 未取得 | 未取得 |", body)
 
     def test_zero_percent_is_measured_when_executable_lines_exist(self):
         self.write_report("SeasoningManagerTests", "coverage", {
@@ -445,7 +466,7 @@ class CIReportTests(unittest.TestCase):
                 self.current = current
                 result = self.run_report()
                 self.assertEqual(self.mutations(result), [])
-                self.assertIn("iOS CI 検証結果", result["summary"])
+                self.assertIn("iOS CI", result["summary"])
 
     def test_fork_only_writes_step_summary(self):
         self.context["payload"]["pull_request"]["head"]["repo"]["full_name"] = "fork/seasoning-management-iOS"
@@ -457,8 +478,8 @@ class CIReportTests(unittest.TestCase):
         self.reports["SeasoningManagerTests"]["errors"] = ["tests"]
         self.write_report("SeasoningManagerTests", "tests", None)
         body = self.run_report()["summary"]
-        self.assertIn("結果収集の一部に失敗", body)
-        self.assertIn("テスト別実行時間は未取得", body)
+        self.assertIn("一部収集失敗", body)
+        self.assertIn("**Unit** · ⚪ 未取得", body)
         self.assertIn("25.00% (25/100行)", body)
 
     def test_skipped_step_and_unknown_job_are_not_measured_zero_seconds(self):
@@ -466,7 +487,7 @@ class CIReportTests(unittest.TestCase):
         self.jobs.pop()
         body = self.run_report()["summary"]
         self.assertIn("| 未実施 | 6分0秒 |", body)
-        self.assertIn("| UI tests | 未完了・未取得 |", body)
+        self.assertIn("| UI | ⚪ 未完了・未取得 |", body)
 
     def test_invalid_or_negative_timestamps_are_unavailable(self):
         self.jobs[0]["completed_at"] = "invalid"

@@ -158,6 +158,15 @@ jobs:
               return `${(100 * covered / executable).toFixed(2)}% (${covered}/${executable}行)`;
             }
 
+            function coverageBadge(report) {
+              const value = coverage(report);
+              if (value === '未取得') {
+                return '⚪ 未取得';
+              }
+              const badge = report.coveredLines / report.executableLines >= 0.8 ? '🟢' : '🟠';
+              return `${badge} ${value}`;
+            }
+
             function label(value) {
               if (typeof value !== 'string' || !value.trim()) {
                 return '未取得';
@@ -173,7 +182,7 @@ jobs:
               }
               const relative = path.replace(/^.*\/(?=src\/SeasoningManager\/)/, '');
               if (relative.startsWith('src/')) {
-                return label(relative);
+                return label(relative.replace(/^src\/SeasoningManager\/(?:SeasoningManager\/)?/, ''));
               }
               return label(relative.split('/').pop());
             }
@@ -188,7 +197,7 @@ jobs:
               return test.seconds;
             }
 
-            const testStatuses = { Passed: '成功', Failed: '失敗', Skipped: 'スキップ', 'Expected Failure': '想定内の失敗' };
+            const testStatuses = { Passed: '✅ 成功', Failed: '❌ 失敗', Skipped: '⏭️ スキップ', 'Expected Failure': '🟡 想定内の失敗' };
             function testRow(test) {
               const seconds = testSeconds(test);
               let time = '未取得';
@@ -201,7 +210,7 @@ jobs:
             }
 
             function fileRow(file) {
-              return `| ${fileName(file?.path)} | ${coverage(file)} |`;
+              return `| ${fileName(file?.path)} | ${coverageBadge(file)} |`;
             }
 
             // Bound each table so the whole comment fits GitHub's text limit.
@@ -218,113 +227,129 @@ jobs:
                 shown++;
               }
               if (shown < rows.length) {
-                output.push('', `コメントの文字数上限のため、詳細を${rows.length - shown}件省略しました。`);
+                output.push('', `⚠️ ${rows.length - shown}件省略（文字数上限）`);
               }
               return output;
             }
 
             const fileHeaders = ['| ファイル | 行カバレッジ |', '| --- | --- |'];
-            const testHeaders = ['| テスト | 結果 | 実行時間 |', '| --- | --- | ---: |'];
+            const testHeaders = ['| テスト | 結果 | 時間 |', '| --- | --- | ---: |'];
             const statuses = {
-              success: '成功', failure: '失敗', cancelled: '取消', skipped: 'スキップ',
-              timed_out: 'タイムアウト', action_required: '対応待ち', neutral: '中立'
+              success: '✅ 成功', failure: '❌ 失敗', cancelled: '🚫 取消', skipped: '⏭️ スキップ',
+              timed_out: '⏰ タイムアウト', action_required: '🟡 対応待ち', neutral: '⚪ 中立'
             };
             const lines = [
               marker,
               `<!-- ios-test-run:${runId}:${attempt} -->`,
-              '### iOS CI 検証結果', '',
-              `対象コミット: \`${pr.head.sha}\` / 検証コミット: \`${context.sha}\``,
-              `[CIログ](${runUrl})`, '',
-              '| 検証 | CI結果 | 成功 | 失敗 | スキップ | アプリ行カバレッジ | テスト工程 | ジョブ全体 |',
-              '| --- | --- | ---: | ---: | ---: | --- | --- | --- |'
+              `<!-- ios-test-commit:${context.sha} -->`,
+              '### iOS CI', '',
+              `[${pr.head.sha.slice(0, 7)}](${context.serverUrl}/${owner}/${repo}/commit/${pr.head.sha}) · [実行ログ #${runId} / ${attempt}](${runUrl})`, '',
+              '#### 🧪 テスト結果', '',
+              '| 検証 | CI | ✅ 成功 | ❌ 失敗 | ⏭️ スキップ |',
+              '| --- | --- | ---: | ---: | ---: |'
             ];
             const reports = [
-              ['Unit tests', 'UNIT_REPORT'], ['UI tests', 'UI_REPORT']
-            ].map(([name, variable]) => {
-              const job = jobs.find(job => job.name === name);
+              ['Unit tests', 'Unit', 'UNIT_REPORT'], ['UI tests', 'UI', 'UI_REPORT']
+            ].map(([jobName, name, variable]) => {
+              const job = jobs.find(job => job.name === jobName);
               // Partial reruns can retain older outputs; never display those as this attempt.
               const report = job ? readReport(variable) : null;
               return { name, job, report };
             });
             for (const { name, job, report } of reports) {
               const summary = report?.summary;
-              const appCoverage = coverage(report?.coverage);
-              const testStep = job?.steps?.find(step => step.name === 'Run tests');
-              const status = statuses[job?.conclusion] ?? '未完了・未取得';
-              lines.push(`| ${name} | ${status} | ${count(summary?.passedTests)} | ${count(summary?.failedTests)} | ${count(summary?.skippedTests)} | ${appCoverage} | ${duration(testStep)} | ${duration(job)} |`);
+              const status = statuses[job?.conclusion] ?? '⚪ 未完了・未取得';
+              lines.push(`| ${name} | ${status} | ${count(summary?.passedTests)} | ${count(summary?.failedTests)} | ${count(summary?.skippedTests)} |`);
+            }
+            for (const { name, report } of reports) {
+              if (Array.isArray(report?.errors) && report.errors.length) {
+                lines.push('', `⚠️ ${name}：一部収集失敗`);
+              }
             }
 
-            lines.push('', '#### 低カバレッジのファイル（80%未満・各検証の下位10件）', '');
+            lines.push('', '---', '', '#### 📊 カバレッジ', '',
+              '| 検証 | アプリ行カバレッジ |', '| --- | --- |');
             for (const { name, report } of reports) {
-              lines.push(`**${name}**`, '');
+              lines.push(`| ${name} | ${coverageBadge(report?.coverage)} |`);
+            }
+            lines.push('', '##### 🟠 80%未満 · 下位10件', '');
+            for (const { name, report } of reports) {
               const files = report?.coverage?.files;
               if (!Array.isArray(files)) {
-                lines.push('ファイル別カバレッジは未取得です。', '');
+                lines.push(`**${name}** · ⚪ 未取得`, '');
                 continue;
               }
-              const low = files.filter(file => coverage(file) !== '未取得')
+              const measured = files.filter(file => coverage(file) !== '未取得');
+              if (!measured.length) {
+                lines.push(`**${name}** · ⚪ 計測なし`, '');
+                continue;
+              }
+              const low = measured
                 .filter(file => file.coveredLines / file.executableLines < 0.8)
                 .sort((a, b) => a.coveredLines / a.executableLines - b.coveredLines / b.executableLines);
+              const missing = files.length - measured.length;
+              if (missing > 0) {
+                lines.push(`⚪ ${name}：未取得 ${missing}件`, '');
+              }
               if (!low.length) {
-                lines.push('取得できたファイルに80%未満はありません。', '');
+                lines.push(`**${name}** · ✅ 該当なし`, '');
                 continue;
               }
-              lines.push(...table(fileHeaders, low.slice(0, 10).map(fileRow), 3500), '',
-                `取得できた対象: ${low.length}件。全ファイルは下の詳細を参照してください。`, '');
+              lines.push(`**${name}** · ${low.length}件`, '',
+                ...table(fileHeaders, low.slice(0, 10).map(fileRow), 3500), '');
             }
-
-            lines.push('#### 遅いテスト（各検証の実行時間上位10件）', '');
             for (const { name, report } of reports) {
-              lines.push(`**${name}**`, '');
-              const tests = report?.tests;
-              if (!Array.isArray(tests)) {
-                lines.push('テスト別実行時間は未取得です。', '');
-                continue;
-              }
-              const slow = tests.filter(test => testSeconds(test) !== null)
-                .sort((a, b) => b.seconds - a.seconds).slice(0, 10);
-              if (!slow.length) {
-                lines.push('実行時間を取得できたテストはありません。', '');
-                continue;
-              }
-              lines.push(...table(testHeaders, slow.map(testRow), 3500), '');
-            }
-
-            for (const { name, report } of reports) {
-              lines.push('<details>', `<summary>${name} — ファイル別カバレッジ</summary>`, '');
+              lines.push('<details>', `<summary>📂 ${name} · ファイル別</summary>`, '');
               const files = report?.coverage?.files;
               if (Array.isArray(files) && files.length) {
                 const sorted = [...files].sort((a, b) => String(a?.path).localeCompare(String(b?.path)));
                 lines.push(...table(fileHeaders, sorted.map(fileRow), 10_000));
               } else {
-                lines.push(Array.isArray(files) ? '取得できたファイルは0件です。' : '未取得です。');
+                lines.push(Array.isArray(files) ? '0件' : '⚪ 未取得');
               }
-              lines.push('', '</details>', '', '<details>', `<summary>${name} — テスト別結果・実行時間</summary>`, '');
+              const omitted = report?.omitted?.files;
+              if (Number.isSafeInteger(omitted) && omitted > 0) {
+                lines.push('', `⚠️ ファイル詳細 ${omitted}件省略（転送上限）`);
+              }
+              lines.push('', '</details>', '');
+            }
+
+            lines.push('---', '', '#### ⏱️ 実行時間', '',
+              '| 検証 | ビルド＋テスト | ジョブ全体 |', '| --- | ---: | ---: |');
+            for (const { name, job } of reports) {
+              const testStep = job?.steps?.find(step => step.name === 'Run tests');
+              lines.push(`| ${name} | ${duration(testStep)} | ${duration(job)} |`);
+            }
+            lines.push('', '##### 🐢 遅いテスト · 上位10件', '');
+            for (const { name, report } of reports) {
+              const tests = report?.tests;
+              if (!Array.isArray(tests)) {
+                lines.push(`**${name}** · ⚪ 未取得`, '');
+                continue;
+              }
+              const slow = tests.filter(test => testSeconds(test) !== null)
+                .sort((a, b) => b.seconds - a.seconds).slice(0, 10);
+              if (!slow.length) {
+                lines.push(`**${name}** · ⚪ 計測なし`, '');
+                continue;
+              }
+              lines.push(`**${name}**`, '', ...table(testHeaders, slow.map(testRow), 3500), '');
+            }
+            for (const { name, report } of reports) {
+              lines.push('<details>', `<summary>🔎 ${name} · 全テスト</summary>`, '');
               const tests = report?.tests;
               if (Array.isArray(tests) && tests.length) {
                 const sorted = [...tests].sort((a, b) => String(a?.name).localeCompare(String(b?.name)));
                 lines.push(...table(testHeaders, sorted.map(testRow), 10_000));
               } else {
-                lines.push(Array.isArray(tests) ? '取得できたテストは0件です。' : '未取得です。');
+                lines.push(Array.isArray(tests) ? '0件' : '⚪ 未取得');
+              }
+              const omitted = report?.omitted?.tests;
+              if (Number.isSafeInteger(omitted) && omitted > 0) {
+                lines.push('', `⚠️ テスト詳細 ${omitted}件省略（転送上限）`);
               }
               lines.push('', '</details>', '');
-              if (Array.isArray(report?.errors) && report.errors.length) {
-                lines.push(`${name}: 結果収集の一部に失敗しました。取得できた結果のみ表示しています。`, '');
-              }
-              for (const [key, description] of [['files', 'ファイル'], ['tests', 'テスト']]) {
-                const omitted = report?.omitted?.[key];
-                if (Number.isSafeInteger(omitted) && omitted > 0) {
-                  lines.push(`${name}: ジョブ間の転送上限により${description}詳細を${omitted}件省略しました。`, '');
-                }
-              }
             }
-            lines.push('',
-              'カバレッジは単体・UIそれぞれの実行で測ったアプリの行カバレッジです。両者を合算していません。',
-              'テスト工程の時間はビルドとテストを含み、ジョブ全体は環境準備と結果収集も含みます。待ち時間・アプリの動作速度は測っていません。',
-              'テスト別時間はxcresultの値です。テスト名・ファイル名は長い場合に省略表示します。結果ファイルの添付はありません。',
-              '再実行時は今回の attempt の結果を表示します。今回再実行しなかった検証は未取得となる場合があります。',
-              '未取得の値は0や成功として扱いません。その他のCI・ローカル検証は完了報告で確認してください。'
-            );
             const body = lines.join('\n');
             await core.summary.addRaw(body).write();
 
