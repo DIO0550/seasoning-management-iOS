@@ -7,6 +7,8 @@ nonisolated enum ExpirationState: Equatable, Sendable {
     case normal
     case unset
 
+    private static let expiringSoonThresholdDays = 7
+
     enum CalculationError: Error, Equatable, Sendable {
         case dayCalculationFailed
     }
@@ -26,7 +28,7 @@ nonisolated enum ExpirationState: Equatable, Sendable {
             return
         }
 
-        guard let lastSoonDay = calendar.date(byAdding: .day, value: 7, to: today) else {
+        guard let lastSoonDay = calendar.date(byAdding: .day, value: Self.expiringSoonThresholdDays, to: today) else {
             throw CalculationError.dayCalculationFailed
         }
 
