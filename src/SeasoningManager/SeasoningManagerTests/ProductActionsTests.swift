@@ -247,6 +247,244 @@ struct ProductActionsTests {
         expectUnsetValues(retried)
     }
 
+    @Test(arguments: ItemStatus.allCases)
+    func deletionRejectsProductsWithItemsInEveryStatus(_ status: ItemStatus) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try ProductActions(context: context).create(
+            from: populatedDraft(), image: originalImage, now: originalDate
+        )
+        let productID = product.id
+        let item = makeItem(product: product, status: status)
+        let itemID = item.id
+        let openingDate = item.openingDate
+        let consumedDate = item.consumedDate
+        context.insert(item)
+        try context.save()
+        var saveCalls = 0
+        let actions = ProductActions(context: context, save: { context in
+            saveCalls += 1
+            try context.save()
+        })
+
+        #expect(throws: ProductActions.SaveError.productHasItems(count: 1)) {
+            try actions.delete(product, confirmed: true)
+        }
+
+        #expect(saveCalls == 0)
+        expectOriginalValues(product)
+        #expect(product.id == productID)
+        #expect(item.id == itemID)
+        #expect(item.product === product)
+        #expect(product.items?.map(\.id) == [itemID])
+        #expect(item.status == status)
+        #expect(item.expirationDate == editedDate)
+        #expect(item.openingDate == openingDate)
+        #expect(item.consumedDate == consumedDate)
+        #expect(item.updatedAt == originalDate)
+        #expect(!context.hasChanges)
+
+        let reader = ModelContext(container)
+        let savedProduct = try #require(reader.fetch(FetchDescriptor<Product>()).first)
+        let savedItem = try #require(reader.fetch(FetchDescriptor<Item>()).first)
+        expectOriginalValues(savedProduct)
+        #expect(savedProduct.id == productID)
+        #expect(savedItem.id == itemID)
+        #expect(savedItem.product?.id == productID)
+        #expect(savedItem.status == status)
+        #expect(savedItem.expirationDate == editedDate)
+        #expect(savedItem.openingDate == openingDate)
+        #expect(savedItem.consumedDate == consumedDate)
+        #expect(savedItem.updatedAt == originalDate)
+    }
+
+    @Test func deletionReportsAllAssociatedItemsBeforeRequiringConfirmation() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let actions = ProductActions(context: context)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let items = ItemStatus.allCases.map { makeItem(product: product, status: $0) }
+        for item in items {
+            context.insert(item)
+        }
+        try context.save()
+
+        // 使い切り履歴を含む全件数で拒否し、確認がなくても削除可能扱いにしない。
+        #expect(throws: ProductActions.SaveError.productHasItems(count: items.count)) {
+            try actions.delete(product, confirmed: false)
+        }
+
+        expectOriginalValues(product)
+        #expect(!context.hasChanges)
+        #expect(Set((product.items ?? []).map(\.id)) == Set(items.map(\.id)))
+        #expect(items.allSatisfy { $0.product === product })
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Item>()) == items.count)
+    }
+
+    @Test(arguments: ["", "futureStatus"])
+    func deletionRejectsProductsWhoseOnlyItemHasUnknownStatus(_ rawValue: String) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let actions = ProductActions(context: context)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let item = Item(product: product, updatedAt: originalDate)
+        item.statusRawValue = rawValue
+        context.insert(item)
+        try context.save()
+
+        #expect(throws: ProductActions.SaveError.productHasItems(count: 1)) {
+            try actions.delete(product, confirmed: true)
+        }
+
+        expectOriginalValues(product)
+        #expect(item.status == nil)
+        #expect(item.statusRawValue == rawValue)
+        #expect(item.product === product)
+        #expect(!context.hasChanges)
+        let reader = ModelContext(container)
+        let saved = try #require(reader.fetch(FetchDescriptor<Item>()).first)
+        #expect(saved.id == item.id)
+        #expect(saved.statusRawValue == rawValue)
+        #expect(saved.product?.id == product.id)
+    }
+
+    @Test func deletionRequiresConfirmationWithoutSaving() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try ProductActions(context: context).create(
+            from: populatedDraft(), image: originalImage, now: originalDate
+        )
+        var saveCalls = 0
+        let actions = ProductActions(context: context, save: { context in
+            saveCalls += 1
+            try context.save()
+        })
+
+        #expect(throws: ProductActions.SaveError.deletionNotConfirmed) {
+            try actions.delete(product, confirmed: false)
+        }
+
+        #expect(saveCalls == 0)
+        expectOriginalValues(product)
+        #expect(product.modelContext === context)
+        #expect(!context.hasChanges)
+        let reader = ModelContext(container)
+        let saved = try #require(reader.fetch(FetchDescriptor<Product>()).first)
+        #expect(saved.id == product.id)
+        expectOriginalValues(saved)
+    }
+
+    @Test func confirmedDeletionSurvivesReopeningStoreAndPreservesOtherProducts() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("products.store")
+        var deletedID: UUID?
+        var retainedID: UUID?
+        var itemID: UUID?
+
+        do {
+            let container = try makeContainer(at: url)
+            let context = ModelContext(container)
+            let actions = ProductActions(context: context)
+            let deleted = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+            let retained = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+            let item = makeItem(product: retained, status: .consumed)
+            context.insert(item)
+            try context.save()
+            deletedID = deleted.id
+            retainedID = retained.id
+            itemID = item.id
+
+            // 同名の別商品に個体と画像があっても、対象商品だけを削除する。
+            try actions.delete(deleted, confirmed: true)
+
+            #expect(!context.hasChanges)
+            expectOriginalValues(retained)
+            #expect(item.product === retained)
+            #expect(retained.items?.map(\.id) == [item.id])
+        }
+
+        let reopened = try makeContainer(at: url)
+        let reader = ModelContext(reopened)
+        let products = try reader.fetch(FetchDescriptor<Product>())
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        #expect(products.count == 1)
+        #expect(!products.contains { $0.id == deletedID })
+        let retained = try #require(products.first)
+        #expect(retained.id == retainedID)
+        expectOriginalValues(retained)
+        #expect(items.count == 1)
+        let item = try #require(items.first)
+        #expect(item.id == itemID)
+        #expect(item.product?.id == retainedID)
+        #expect(retained.items?.map(\.id) == [item.id])
+        #expect(item.status == .consumed)
+        #expect(item.expirationDate == editedDate)
+        #expect(item.openingDate == originalDate)
+        #expect(item.consumedDate == editedDate)
+        #expect(item.updatedAt == originalDate)
+    }
+
+    @Test func failedDeletionRestoresProductAndImageBeforeRetry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let actions = ProductActions(context: context)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let productID = product.id
+        let failing = ProductActions(context: context, save: { _ in throw StoreError.unavailable })
+
+        #expect(throws: StoreError.unavailable) {
+            try failing.delete(product, confirmed: true)
+        }
+
+        expectOriginalValues(product)
+        #expect(product.id == productID)
+        #expect(product.modelContext === context)
+        #expect(!context.hasChanges)
+        #expect(try context.fetchCount(FetchDescriptor<Product>()) == 1)
+        do {
+            let reader = ModelContext(container)
+            let saved = try #require(reader.fetch(FetchDescriptor<Product>()).first)
+            #expect(saved.id == productID)
+            expectOriginalValues(saved)
+        }
+
+        try actions.delete(product, confirmed: true)
+
+        #expect(!context.hasChanges)
+        #expect(try context.fetchCount(FetchDescriptor<Product>()) == 0)
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)
+    }
+
+    @Test func deletionRechecksItemsSavedByAnotherContext() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let actions = ProductActions(context: context)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        #expect((product.items ?? []).isEmpty)
+
+        let writer = ModelContext(container)
+        let savedProduct = try #require(writer.fetch(FetchDescriptor<Product>()).first)
+        let item = makeItem(product: savedProduct, status: .unopened)
+        writer.insert(item)
+        try writer.save()
+
+        // 手元のリレーションが空だった商品も、削除時点のストアを再照会する。
+        #expect(throws: ProductActions.SaveError.productHasItems(count: 1)) {
+            try actions.delete(product, confirmed: true)
+        }
+
+        expectOriginalValues(product)
+        #expect(!context.hasChanges)
+        let reader = ModelContext(container)
+        let savedItem = try #require(reader.fetch(FetchDescriptor<Item>()).first)
+        #expect(savedItem.id == item.id)
+        #expect(savedItem.product?.id == product.id)
+        #expect(try reader.fetchCount(FetchDescriptor<Product>()) == 1)
+    }
+
     @Test func pendingChangesAreNeitherSavedNorRolledBack() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
@@ -262,6 +500,9 @@ struct ProductActionsTests {
         #expect(throws: ProductActions.SaveError.pendingChanges) {
             try actions.update(product, from: draft, image: nil, now: editedDate)
         }
+        #expect(throws: ProductActions.SaveError.pendingChanges) {
+            try actions.delete(product, confirmed: true)
+        }
 
         expectOriginalValues(product)
         #expect(context.hasChanges)
@@ -271,7 +512,7 @@ struct ProductActionsTests {
         #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 1)
     }
 
-    @Test func editingRejectsUnmanagedAndOtherContextProducts() throws {
+    @Test func editingAndDeletionRejectUnmanagedAndOtherContextProducts() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
         let owner = ModelContext(container)
@@ -288,12 +529,34 @@ struct ProductActionsTests {
         #expect(throws: ProductActions.SaveError.productNotInContext) {
             try actions.update(saved, from: draft, image: nil, now: editedDate)
         }
+        #expect(throws: ProductActions.SaveError.productNotInContext) {
+            try actions.delete(unmanaged, confirmed: true)
+        }
+        #expect(throws: ProductActions.SaveError.productNotInContext) {
+            try actions.delete(saved, confirmed: true)
+        }
 
         #expect(unmanaged.name == "未登録")
         #expect(unmanaged.updatedAt == originalDate)
         expectOriginalValues(saved)
         #expect(!context.hasChanges)
         #expect(!owner.hasChanges)
+    }
+
+    private func makeItem(product: Product, status: ItemStatus) -> Item {
+        let item = Item(product: product, expirationDate: editedDate, status: status, updatedAt: originalDate)
+
+        switch status {
+        case .unopened:
+            break
+        case .inUse:
+            item.openingDate = originalDate
+        case .consumed:
+            item.openingDate = originalDate
+            item.consumedDate = editedDate
+        }
+
+        return item
     }
 
     private func makeContainer(at url: URL? = nil) throws -> ModelContainer {

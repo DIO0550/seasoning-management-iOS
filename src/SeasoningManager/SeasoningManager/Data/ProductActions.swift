@@ -1,12 +1,14 @@
 import Foundation
 import SwiftData
 
-/// 入力はdraftで保持し、未保存の変更がないcontextで商品を登録・編集する。
+/// 入力はdraftで保持し、未保存の変更がないcontextで商品を登録・編集・削除する。
 @MainActor
 struct ProductActions {
     nonisolated enum SaveError: Error, Equatable, Sendable {
         case pendingChanges
         case productNotInContext
+        case productHasItems(count: Int)
+        case deletionNotConfirmed
     }
 
     private let context: ModelContext
@@ -43,6 +45,30 @@ struct ProductActions {
         }
 
         apply(values, image: image, now: now, to: product)
+        try saveOrRollback()
+    }
+
+    /// 同じcontextの保存済み商品を、紐づく個体が0件で確認済みの場合だけ削除する。
+    func delete(_ product: Product, confirmed: Bool) throws {
+        try requireCleanContext()
+
+        guard product.modelContext === context else {
+            throw SaveError.productNotInContext
+        }
+
+        let productID = product.id
+        let items = FetchDescriptor<Item>(predicate: #Predicate<Item> { $0.product?.id == productID })
+        let count = try context.fetchCount(items)
+
+        guard count == 0 else {
+            throw SaveError.productHasItems(count: count)
+        }
+
+        guard confirmed else {
+            throw SaveError.deletionNotConfirmed
+        }
+
+        context.delete(product)
         try saveOrRollback()
     }
 
