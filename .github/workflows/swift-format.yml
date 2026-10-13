@@ -1,0 +1,42 @@
+name: Swift format
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: macos-15
+    timeout-minutes: 10
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      HARNESS_REQUIRE_SWIFT_FORMAT: "1"
+    steps:
+      - name: Check out the head commit with history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the selected Swift format toolchain
+        run: |
+          swift --version
+          swift format --version
+
+      - name: Verify selection and the real formatter
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s harness/tests -p 'test_swift_format.py' -v
+
+      - name: Lint changed Swift files
+        env:
+          HARNESS_FORMAT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HARNESS_FORMAT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 harness/swift-format.py lint

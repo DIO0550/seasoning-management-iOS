@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+configuration_only=false
+if [[ "$#" -eq 1 && "$1" == "--configuration-only" ]]; then
+  configuration_only=true
+  shift
+fi
+
+# Git invokes this hook with the remote name and URL. Manual calls may omit both.
+if [[ "$#" -ne 0 && "$#" -ne 2 ]]; then
+  echo "Usage: pre-push [--configuration-only] | pre-push <remote> <url>" >&2
+  exit 2
+fi
+
+for argument in "$@"; do
+  if [[ -z "$argument" || "$argument" == -* ]]; then
+    echo "Invalid pre-push argument: $argument" >&2
+    exit 2
+  fi
+done
+
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
@@ -15,5 +34,13 @@ if [[ -n "${HARNESS_DIFF_BASE:-}" ]]; then
 elif git show-ref --verify --quiet refs/remotes/origin/master; then
   git diff --check origin/master...HEAD
 fi
+
+if [[ "$configuration_only" == true ]]; then
+  echo "Agent harness pre-push: passed (configuration only; Swift lint not run)"
+  exit 0
+fi
+
+# Git's stdin describes pushed refs; it is not PostToolUse JSON or Swift source.
+python3 harness/swift-format.py lint </dev/null
 
 echo "Agent harness pre-push: passed (iOS tests are a separate check)"
