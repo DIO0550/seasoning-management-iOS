@@ -262,10 +262,10 @@ struct ProductActionsTests {
         context.insert(item)
         try context.save()
         var saveCalls = 0
-        let actions = ProductActions(context: context, save: { context in
+        let actions = ProductActions(context: context) { context in
             saveCalls += 1
             try context.save()
-        })
+        }
 
         #expect(throws: ProductActions.SaveError.productHasItems(count: 1)) {
             try actions.delete(product, confirmed: true)
@@ -355,10 +355,10 @@ struct ProductActionsTests {
             from: populatedDraft(), image: originalImage, now: originalDate
         )
         var saveCalls = 0
-        let actions = ProductActions(context: context, save: { context in
+        let actions = ProductActions(context: context) { context in
             saveCalls += 1
             try context.save()
-        })
+        }
 
         #expect(throws: ProductActions.SaveError.deletionNotConfirmed) {
             try actions.delete(product, confirmed: false)
