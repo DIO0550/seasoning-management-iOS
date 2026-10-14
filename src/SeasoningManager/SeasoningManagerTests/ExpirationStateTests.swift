@@ -23,16 +23,16 @@ struct ExpirationStateTests {
         let now = try date(day: 10, hour: hours.now, calendar: calendar)
         let expiration = try date(day: input.expirationDay, hour: hours.expiration, calendar: calendar)
 
-        #expect(
-            try ExpirationState(expirationDate: expiration, now: now, calendar: calendar) == input.expected
-        )
+        let state = ExpirationState.calculate(expirationDate: expiration, now: now, calendar: calendar)
+
+        #expect(state == .success(input.expected))
     }
 
     @Test func missingExpirationIsUnset() throws {
         let calendar = try makeCalendar()
         let now = try date(day: 10, calendar: calendar)
 
-        #expect(try ExpirationState(expirationDate: nil, now: now, calendar: calendar) == .unset)
+        #expect(ExpirationState.calculate(expirationDate: nil, now: now, calendar: calendar) == .success(.unset))
     }
 
     @Test(
@@ -47,12 +47,11 @@ struct ExpirationStateTests {
         let beforeMidnight = try date(day: 10, hour: 23, minute: 59, second: 59, calendar: calendar)
         let afterMidnight = try date(day: 11, calendar: calendar)
 
-        #expect(
-            try ExpirationState(expirationDate: expiration, now: beforeMidnight, calendar: calendar) == input.before
-        )
-        #expect(
-            try ExpirationState(expirationDate: expiration, now: afterMidnight, calendar: calendar) == input.after
-        )
+        let before = ExpirationState.calculate(expirationDate: expiration, now: beforeMidnight, calendar: calendar)
+        let after = ExpirationState.calculate(expirationDate: expiration, now: afterMidnight, calendar: calendar)
+
+        #expect(before == .success(input.before))
+        #expect(after == .success(input.after))
     }
 
     @Test(
@@ -69,8 +68,11 @@ struct ExpirationStateTests {
         let now = try date(day: 10, hour: 16, calendar: utc)
         let expiration = try date(day: input.expirationDay, hour: input.expirationHour, calendar: utc)
 
-        #expect(try ExpirationState(expirationDate: expiration, now: now, calendar: utc) == input.utc)
-        #expect(try ExpirationState(expirationDate: expiration, now: now, calendar: tokyo) == input.tokyo)
+        let utcState = ExpirationState.calculate(expirationDate: expiration, now: now, calendar: utc)
+        let tokyoState = ExpirationState.calculate(expirationDate: expiration, now: now, calendar: tokyo)
+
+        #expect(utcState == .success(input.utc))
+        #expect(tokyoState == .success(input.tokyo))
     }
 
     @Test(
@@ -96,9 +98,9 @@ struct ExpirationStateTests {
             hour: 23, minute: 59, second: 59, calendar: calendar
         )
 
-        #expect(
-            try ExpirationState(expirationDate: expiration, now: now, calendar: calendar) == input.expected
-        )
+        let state = ExpirationState.calculate(expirationDate: expiration, now: now, calendar: calendar)
+
+        #expect(state == .success(input.expected))
     }
 
     @Test(
@@ -120,9 +122,9 @@ struct ExpirationStateTests {
             month: input.expirationMonth, day: input.expirationDay, hour: expirationHour, calendar: calendar
         )
 
-        #expect(
-            try ExpirationState(expirationDate: expiration, now: now, calendar: calendar) == input.expected
-        )
+        let state = ExpirationState.calculate(expirationDate: expiration, now: now, calendar: calendar)
+
+        #expect(state == .success(input.expected))
     }
 
     private func makeCalendar(timeZone identifier: String = "Asia/Tokyo") throws -> Calendar {

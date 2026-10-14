@@ -14,29 +14,28 @@ nonisolated enum ExpirationState: Equatable, Sendable {
     }
 
     /// 今日から7日後までを「期限が近い」とする。期限日の時刻は判定に含めない。
-    init(expirationDate: Date?, now: Date, calendar: Calendar) throws {
+    static func calculate(
+        expirationDate: Date?, now: Date, calendar: Calendar
+    ) -> Result<ExpirationState, CalculationError> {
         guard let expirationDate else {
-            self = .unset
-            return
+            return .success(.unset)
         }
 
         let today = calendar.startOfDay(for: now)
         let expirationDay = calendar.startOfDay(for: expirationDate)
 
         guard expirationDay >= today else {
-            self = .expired
-            return
+            return .success(.expired)
         }
 
         guard let lastSoonDay = calendar.date(byAdding: .day, value: Self.expiringSoonThresholdDays, to: today) else {
-            throw CalculationError.dayCalculationFailed
+            return .failure(.dayCalculationFailed)
         }
 
         if expirationDay <= lastSoonDay {
-            self = .expiringSoon
-            return
+            return .success(.expiringSoon)
         }
 
-        self = .normal
+        return .success(.normal)
     }
 }

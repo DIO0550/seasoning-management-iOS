@@ -26,7 +26,7 @@ struct ProductActionsTests {
             let context = ModelContext(container)
             let product = try ProductActions(context: context).create(
                 from: populatedDraft(), image: originalImage, now: originalDate
-            )
+            ).get()
             productID = product.id
             expectOriginalValues(product)
             #expect(!context.hasChanges)
@@ -41,7 +41,7 @@ struct ProductActionsTests {
 
             try ProductActions(context: context).update(
                 product, from: ProductDraft(name: "新しい名前", type: "調味料"), image: nil, now: editedDate
-            )
+            ).get()
         }
 
         do {
@@ -62,13 +62,13 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let actions = ProductActions(context: context)
-        let unset = try actions.create(from: ProductDraft(name: "しょうゆ", type: "調味料"), now: originalDate)
+        let unset = try actions.create(from: ProductDraft(name: "しょうゆ", type: "調味料"), now: originalDate).get()
         let zero = try actions.create(
             from: ProductDraft(
                 name: "しょうゆ", type: "調味料", priceYen: "0", fat: "0",
                 nutrientBasisAmount: "100", nutrientBasisUnit: "g"
             ), now: originalDate
-        )
+        ).get()
 
         #expect(unset.id != zero.id)
         let reader = ModelContext(container)
@@ -91,7 +91,7 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
         let productID = product.id
         let item = Item(product: product, updatedAt: originalDate)
         context.insert(item)
@@ -103,7 +103,7 @@ struct ProductActionsTests {
         draft.nutrientBasisAmount = "100"
         draft.nutrientBasisUnit = "g"
 
-        try actions.update(product, from: draft, image: replacementImage, now: editedDate)
+        try actions.update(product, from: draft, image: replacementImage, now: editedDate).get()
 
         #expect(product.id == productID)
         #expect(product.name == "編集済み")
@@ -130,20 +130,35 @@ struct ProductActionsTests {
     @Test func invalidInputDoesNotInsertOrPartiallyEdit() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let product = try ProductActions(context: context).create(
+            from: populatedDraft(), image: originalImage, now: originalDate
+        ).get()
+        var saveCalls = 0
+        let actions = ProductActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
         var draft = populatedDraft()
         draft.name = "変更してはいけない"
         draft.carbohydrates = "NaN"
         let expectedError = ProductDraft.ValidationError(field: .carbohydrates, reason: .invalidFormat)
 
-        #expect(throws: expectedError) {
-            _ = try actions.create(from: draft, image: nil, now: editedDate)
+        guard case .failure(.validation(let creationError)) = actions.create(
+            from: draft, image: nil, now: editedDate
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
-        #expect(throws: expectedError) {
-            try actions.update(product, from: draft, image: nil, now: editedDate)
+        #expect(creationError == expectedError)
+        guard case .failure(.validation(let editingError)) = actions.update(
+            product, from: draft, image: nil, now: editedDate
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
+        #expect(editingError == expectedError)
 
+        #expect(saveCalls == 0)
         expectOriginalValues(product)
         #expect(!context.hasChanges)
         #expect(try context.fetchCount(FetchDescriptor<Product>()) == 1)
@@ -155,7 +170,7 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), now: originalDate)
+        let product = try actions.create(from: populatedDraft(), now: originalDate).get()
         let productID = product.id
         let draft = ProductDraft(
             name: "だし", type: "調味料", priceYen: "0", calories: "0", protein: "9.87",
@@ -163,7 +178,7 @@ struct ProductActionsTests {
             nutrientBasisAmount: "1", nutrientBasisUnit: "食"
         )
 
-        try actions.update(product, from: draft, image: nil, now: editedDate)
+        try actions.update(product, from: draft, image: nil, now: editedDate).get()
 
         let reader = ModelContext(container)
         let saved = try #require(reader.fetch(FetchDescriptor<Product>()).first)
@@ -186,11 +201,15 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let draft = populatedDraft()
-        let failing = ProductActions(context: context, save: { _ in throw StoreError.unavailable })
+        let failing = ProductActions(context: context, save: { _ in .failure(StoreError.unavailable) })
 
-        #expect(throws: StoreError.unavailable) {
-            _ = try failing.create(from: draft, image: originalImage, now: originalDate)
+        guard case .failure(.persistence(let error)) = failing.create(
+            from: draft, image: originalImage, now: originalDate
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
+        #expect(error as? StoreError == .unavailable)
 
         #expect(!context.hasChanges)
         #expect(try context.fetchCount(FetchDescriptor<Product>()) == 0)
@@ -200,7 +219,7 @@ struct ProductActionsTests {
 
         let product = try ProductActions(context: context).create(
             from: draft, image: originalImage, now: originalDate
-        )
+        ).get()
         expectOriginalValues(product)
         #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 1)
     }
@@ -209,17 +228,21 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
         let productID = product.id
         let item = Item(product: product, updatedAt: originalDate)
         context.insert(item)
         try context.save()
         let draft = ProductDraft(name: "編集後", type: "編集後の種類")
-        let failing = ProductActions(context: context, save: { _ in throw StoreError.unavailable })
+        let failing = ProductActions(context: context, save: { _ in .failure(StoreError.unavailable) })
 
-        #expect(throws: StoreError.unavailable) {
-            try failing.update(product, from: draft, image: nil, now: editedDate)
+        guard case .failure(.persistence(let error)) = failing.update(
+            product, from: draft, image: nil, now: editedDate
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
+        #expect(error as? StoreError == .unavailable)
 
         expectOriginalValues(product)
         #expect(product.id == productID)
@@ -234,7 +257,7 @@ struct ProductActionsTests {
         #expect(draft.name == "編集後")
         #expect(draft.type == "編集後の種類")
 
-        try actions.update(product, from: draft, image: nil, now: editedDate)
+        try actions.update(product, from: draft, image: nil, now: editedDate).get()
         #expect(product.id == productID)
         #expect(product.name == "編集後")
         #expect(product.updatedAt == editedDate)
@@ -253,7 +276,7 @@ struct ProductActionsTests {
         let context = ModelContext(container)
         let product = try ProductActions(context: context).create(
             from: populatedDraft(), image: originalImage, now: originalDate
-        )
+        ).get()
         let productID = product.id
         let item = makeItem(product: product, status: status)
         let itemID = item.id
@@ -264,11 +287,12 @@ struct ProductActionsTests {
         var saveCalls = 0
         let actions = ProductActions(context: context) { context in
             saveCalls += 1
-            try context.save()
+            return Result { try context.save() }
         }
 
-        #expect(throws: ProductActions.SaveError.productHasItems(count: 1)) {
-            try actions.delete(product, confirmed: true)
+        guard case .failure(.productHasItems(count: 1)) = actions.delete(product, confirmed: true) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
 
         #expect(saveCalls == 0)
@@ -302,7 +326,7 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
         let items = ItemStatus.allCases.map { makeItem(product: product, status: $0) }
         for item in items {
             context.insert(item)
@@ -310,8 +334,9 @@ struct ProductActionsTests {
         try context.save()
 
         // 使い切り履歴を含む全件数で拒否し、確認がなくても削除可能扱いにしない。
-        #expect(throws: ProductActions.SaveError.productHasItems(count: items.count)) {
-            try actions.delete(product, confirmed: false)
+        guard case .failure(.productHasItems(count: items.count)) = actions.delete(product, confirmed: false) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
 
         expectOriginalValues(product)
@@ -326,14 +351,15 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
         let item = Item(product: product, updatedAt: originalDate)
         item.statusRawValue = rawValue
         context.insert(item)
         try context.save()
 
-        #expect(throws: ProductActions.SaveError.productHasItems(count: 1)) {
-            try actions.delete(product, confirmed: true)
+        guard case .failure(.productHasItems(count: 1)) = actions.delete(product, confirmed: true) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
 
         expectOriginalValues(product)
@@ -353,15 +379,16 @@ struct ProductActionsTests {
         let context = ModelContext(container)
         let product = try ProductActions(context: context).create(
             from: populatedDraft(), image: originalImage, now: originalDate
-        )
+        ).get()
         var saveCalls = 0
         let actions = ProductActions(context: context) { context in
             saveCalls += 1
-            try context.save()
+            return Result { try context.save() }
         }
 
-        #expect(throws: ProductActions.SaveError.deletionNotConfirmed) {
-            try actions.delete(product, confirmed: false)
+        guard case .failure(.deletionNotConfirmed) = actions.delete(product, confirmed: false) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
 
         #expect(saveCalls == 0)
@@ -388,8 +415,8 @@ struct ProductActionsTests {
             let container = try makeContainer(at: url)
             let context = ModelContext(container)
             let actions = ProductActions(context: context)
-            let deleted = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
-            let retained = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+            let deleted = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
+            let retained = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
             let item = makeItem(product: retained, status: .consumed)
             context.insert(item)
             try context.save()
@@ -398,7 +425,7 @@ struct ProductActionsTests {
             itemID = item.id
 
             // 同名の別商品に個体と画像があっても、対象商品だけを削除する。
-            try actions.delete(deleted, confirmed: true)
+            try actions.delete(deleted, confirmed: true).get()
 
             #expect(!context.hasChanges)
             expectOriginalValues(retained)
@@ -431,13 +458,15 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
         let productID = product.id
-        let failing = ProductActions(context: context, save: { _ in throw StoreError.unavailable })
+        let failing = ProductActions(context: context, save: { _ in .failure(StoreError.unavailable) })
 
-        #expect(throws: StoreError.unavailable) {
-            try failing.delete(product, confirmed: true)
+        guard case .failure(.persistence(let error)) = failing.delete(product, confirmed: true) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
+        #expect(error as? StoreError == .unavailable)
 
         expectOriginalValues(product)
         #expect(product.id == productID)
@@ -451,7 +480,7 @@ struct ProductActionsTests {
             expectOriginalValues(saved)
         }
 
-        try actions.delete(product, confirmed: true)
+        try actions.delete(product, confirmed: true).get()
 
         #expect(!context.hasChanges)
         #expect(try context.fetchCount(FetchDescriptor<Product>()) == 0)
@@ -462,7 +491,7 @@ struct ProductActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
         #expect((product.items ?? []).isEmpty)
 
         let writer = ModelContext(container)
@@ -472,8 +501,9 @@ struct ProductActionsTests {
         try writer.save()
 
         // 手元のリレーションが空だった商品も、削除時点のストアを再照会する。
-        #expect(throws: ProductActions.SaveError.productHasItems(count: 1)) {
-            try actions.delete(product, confirmed: true)
+        guard case .failure(.productHasItems(count: 1)) = actions.delete(product, confirmed: true) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
 
         expectOriginalValues(product)
@@ -488,22 +518,33 @@ struct ProductActionsTests {
     @Test func pendingChangesAreNeitherSavedNorRolledBack() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let actions = ProductActions(context: context)
-        let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate)
+        context.autosaveEnabled = false
+        let product = try ProductActions(context: context).create(
+            from: populatedDraft(), image: originalImage, now: originalDate
+        ).get()
+        var saveCalls = 0
+        let actions = ProductActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
         let pending = Product(name: "未保存", type: "調味料")
         context.insert(pending)
         let draft = ProductDraft(name: "別の商品", type: "調味料")
 
-        #expect(throws: ProductActions.SaveError.pendingChanges) {
-            _ = try actions.create(from: draft)
+        guard case .failure(.pendingChanges) = actions.create(from: draft) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
-        #expect(throws: ProductActions.SaveError.pendingChanges) {
-            try actions.update(product, from: draft, image: nil, now: editedDate)
+        guard case .failure(.pendingChanges) = actions.update(product, from: draft, image: nil, now: editedDate) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
-        #expect(throws: ProductActions.SaveError.pendingChanges) {
-            try actions.delete(product, confirmed: true)
+        guard case .failure(.pendingChanges) = actions.delete(product, confirmed: true) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
 
+        #expect(saveCalls == 0)
         expectOriginalValues(product)
         #expect(context.hasChanges)
         #expect(pending.modelContext === context)
@@ -512,28 +553,77 @@ struct ProductActionsTests {
         #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 1)
     }
 
+    @Test func validationPrecedesPendingChangesAndPreservesTheDirtyContext() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let product = try ProductActions(context: context).create(
+            from: populatedDraft(), image: originalImage, now: originalDate
+        ).get()
+        let pending = Product(name: "未保存", type: "調味料")
+        context.insert(pending)
+        var saveCalls = 0
+        let actions = ProductActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+        let draft = ProductDraft(name: "", type: "調味料", calories: "NaN")
+        let expectedError = ProductDraft.ValidationError(field: .name, reason: .required)
+
+        guard case .failure(.validation(let creationError)) = actions.create(from: draft) else {
+            Issue.record("未保存の変更より先に入力エラーが返されなかった")
+            return
+        }
+        #expect(creationError == expectedError)
+        guard case .failure(.validation(let editingError)) = actions.update(
+            product, from: draft, image: nil, now: editedDate
+        ) else {
+            Issue.record("未保存の変更より先に入力エラーが返されなかった")
+            return
+        }
+        #expect(editingError == expectedError)
+
+        #expect(saveCalls == 0)
+        expectOriginalValues(product)
+        #expect(context.hasChanges)
+        #expect(pending.modelContext === context)
+        #expect(pending.name == "未保存")
+        #expect(try context.fetchCount(FetchDescriptor<Product>()) == 2)
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 1)
+        #expect(draft.name.isEmpty)
+        #expect(draft.calories == "NaN")
+    }
+
     @Test func editingAndDeletionRejectUnmanagedAndOtherContextProducts() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
         let owner = ModelContext(container)
         let saved = try ProductActions(context: owner).create(
             from: populatedDraft(), image: originalImage, now: originalDate
-        )
+        ).get()
         let unmanaged = Product(name: "未登録", type: "調味料", updatedAt: originalDate)
         let actions = ProductActions(context: context)
         let draft = ProductDraft(name: "編集後", type: "調味料")
 
-        #expect(throws: ProductActions.SaveError.productNotInContext) {
-            try actions.update(unmanaged, from: draft, image: nil, now: editedDate)
+        guard case .failure(.productNotInContext) = actions.update(
+            unmanaged, from: draft, image: nil, now: editedDate
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
-        #expect(throws: ProductActions.SaveError.productNotInContext) {
-            try actions.update(saved, from: draft, image: nil, now: editedDate)
+        guard case .failure(.productNotInContext) = actions.update(
+            saved, from: draft, image: nil, now: editedDate
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
-        #expect(throws: ProductActions.SaveError.productNotInContext) {
-            try actions.delete(unmanaged, confirmed: true)
+        guard case .failure(.productNotInContext) = actions.delete(unmanaged, confirmed: true) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
-        #expect(throws: ProductActions.SaveError.productNotInContext) {
-            try actions.delete(saved, confirmed: true)
+        guard case .failure(.productNotInContext) = actions.delete(saved, confirmed: true) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
 
         #expect(unmanaged.name == "未登録")

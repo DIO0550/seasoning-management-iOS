@@ -20,7 +20,7 @@ struct ItemRulesTests {
         try item.updateState(
             using: ItemRules(status: .inUse, openingDate: opening),
             now: openingUpdate, calendar: calendar()
-        )
+        ).get()
         try context.save()
 
         let openedReader = ModelContext(container)
@@ -35,7 +35,7 @@ struct ItemRulesTests {
         try item.updateState(
             using: ItemRules(status: .consumed, openingDate: opening, consumedDate: consumed),
             now: consumedUpdate, calendar: calendar()
-        )
+        ).get()
         try context.save()
 
         let consumedReader = ModelContext(container)
@@ -67,7 +67,7 @@ struct ItemRulesTests {
 
         let rules = ItemRules(status: status, openingDate: opening, consumedDate: consumed)
         let now = date(day: 10, hour: 12)
-        try item.updateState(using: rules, now: now, calendar: calendar())
+        try item.updateState(using: rules, now: now, calendar: calendar()).get()
 
         #expect(item.status == status)
         #expect(item.openingDate == opening)
@@ -110,9 +110,13 @@ struct ItemRulesTests {
             consumedDate: input.consumedDay.map { date(day: $0) }
         )
 
-        #expect(throws: input.error) {
-            try item.updateState(using: rules, now: date(day: 10, hour: 12), calendar: calendar())
+        guard case .failure(let error) = item.updateState(
+            using: rules, now: date(day: 10, hour: 12), calendar: calendar()
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
+        #expect(error == input.error)
 
         #expect(Snapshot(item) == original)
         #expect(!context.hasChanges)
@@ -124,17 +128,19 @@ struct ItemRulesTests {
     }
 
     @Test(arguments: ["", "futureStatus"])
-    func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) throws {
+    func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) {
         let item = makeItem(status: .unopened)
         item.statusRawValue = rawValue
         let original = Snapshot(item)
 
-        #expect(throws: ValidationError.unknownCurrentStatus) {
-            try item.updateState(
-                using: ItemRules(status: .inUse, openingDate: date(day: 2)),
-                now: date(day: 10), calendar: calendar()
-            )
+        guard case .failure(let error) = item.updateState(
+            using: ItemRules(status: .inUse, openingDate: date(day: 2)),
+            now: date(day: 10), calendar: calendar()
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
+        #expect(error == ValidationError.unknownCurrentStatus)
 
         #expect(Snapshot(item) == original)
         #expect(item.status == nil)
@@ -147,12 +153,12 @@ struct ItemRulesTests {
         try item.updateState(
             using: ItemRules(status: .inUse, openingDate: opening),
             now: now, calendar: calendar()
-        )
+        ).get()
         let consumed = date(day: 10)
         try item.updateState(
             using: ItemRules(status: .consumed, openingDate: opening, consumedDate: consumed),
             now: now, calendar: calendar()
-        )
+        ).get()
 
         #expect(item.openingDate == opening)
         #expect(item.consumedDate == consumed)
@@ -164,11 +170,13 @@ struct ItemRulesTests {
         let now = date(day: 10, hour: 16)
         let rules = ItemRules(status: .inUse, openingDate: date(day: 11, hour: 1))
 
-        #expect(throws: ValidationError.futureOpeningDate) {
-            try item.updateState(using: rules, now: now, calendar: calendar())
+        guard case .failure(let error) = item.updateState(using: rules, now: now, calendar: calendar()) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
+        #expect(error == ValidationError.futureOpeningDate)
 
-        try item.updateState(using: rules, now: now, calendar: calendar(offset: 9 * 3_600))
+        try item.updateState(using: rules, now: now, calendar: calendar(offset: 9 * 3_600)).get()
         #expect(item.status == .inUse)
         #expect(item.openingDate == rules.openingDate)
     }
@@ -182,12 +190,16 @@ struct ItemRulesTests {
             consumedDate: date(day: 2, hour: 14)
         )
 
-        #expect(throws: ValidationError.consumedDateBeforeOpeningDate) {
-            try item.updateState(using: rules, now: date(day: 10), calendar: calendar(offset: 9 * 3_600))
+        guard case .failure(let error) = item.updateState(
+            using: rules, now: date(day: 10), calendar: calendar(offset: 9 * 3_600)
+        ) else {
+            Issue.record("期待した失敗結果が返されなかった")
+            return
         }
+        #expect(error == ValidationError.consumedDateBeforeOpeningDate)
         #expect(Snapshot(item) == original)
 
-        try item.updateState(using: rules, now: date(day: 10), calendar: calendar())
+        try item.updateState(using: rules, now: date(day: 10), calendar: calendar()).get()
         #expect(item.status == .consumed)
     }
 
@@ -197,10 +209,37 @@ struct ItemRulesTests {
         try item.updateState(
             using: ItemRules(status: .consumed, openingDate: item.openingDate, consumedDate: future),
             now: date(day: 10), calendar: calendar()
-        )
+        ).get()
 
         #expect(item.status == .consumed)
         #expect(item.consumedDate == future)
+    }
+
+    @Test(
+        arguments: [
+            (nil, ItemStatus.consumed, 11, 1, ValidationError.unknownCurrentStatus),
+            (.unopened, .consumed, nil, nil, .invalidTransition),
+            (.unopened, .unopened, 2, 3, .unexpectedOpeningDate),
+            (.inUse, .consumed, nil, nil, .consumedDateRequired),
+            (.inUse, .consumed, nil, 1, .openingDateRequired),
+            (.inUse, .consumed, 11, 1, .futureOpeningDate),
+        ] as [(ItemStatus?, ItemStatus, Int?, Int?, ValidationError)]
+    )
+    func validationReportsTheFirstErrorWhenMultipleRulesFail(
+        _ input: (source: ItemStatus?, target: ItemStatus, openingDay: Int?, consumedDay: Int?, error: ValidationError)
+    ) {
+        let rules = ItemRules(
+            status: input.target,
+            openingDate: input.openingDay.map { date(day: $0) },
+            consumedDate: input.consumedDay.map { date(day: $0) }
+        )
+        let result = rules.validate(from: input.source, now: date(day: 10), calendar: calendar())
+
+        guard case .failure(let error) = result else {
+            Issue.record("競合する不正入力に失敗結果が返されなかった")
+            return
+        }
+        #expect(error == input.error)
     }
 
     private func date(day: Int, hour: Int = 0) -> Date {
