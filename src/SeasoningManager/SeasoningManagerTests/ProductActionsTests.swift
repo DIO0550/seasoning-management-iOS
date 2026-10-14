@@ -143,16 +143,20 @@ struct ProductActionsTests {
         draft.carbohydrates = "NaN"
         let expectedError = ProductDraft.ValidationError(field: .carbohydrates, reason: .invalidFormat)
 
-        guard case .failure(.validation(let creationError)) = actions.create(
+        let creationResult = actions.create(
             from: draft, image: nil, now: editedDate
-        ) else {
+        )
+
+        guard case .failure(.validation(let creationError)) = creationResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
         #expect(creationError == expectedError)
-        guard case .failure(.validation(let editingError)) = actions.update(
+        let editingResult = actions.update(
             product, from: draft, image: nil, now: editedDate
-        ) else {
+        )
+
+        guard case .failure(.validation(let editingError)) = editingResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
@@ -203,9 +207,11 @@ struct ProductActionsTests {
         let draft = populatedDraft()
         let failing = ProductActions(context: context, save: { _ in .failure(StoreError.unavailable) })
 
-        guard case .failure(.persistence(let error)) = failing.create(
+        let creationResult = failing.create(
             from: draft, image: originalImage, now: originalDate
-        ) else {
+        )
+
+        guard case .failure(.persistence(let error)) = creationResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
@@ -236,9 +242,11 @@ struct ProductActionsTests {
         let draft = ProductDraft(name: "編集後", type: "編集後の種類")
         let failing = ProductActions(context: context, save: { _ in .failure(StoreError.unavailable) })
 
-        guard case .failure(.persistence(let error)) = failing.update(
+        let editingResult = failing.update(
             product, from: draft, image: nil, now: editedDate
-        ) else {
+        )
+
+        guard case .failure(.persistence(let error)) = editingResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
@@ -575,9 +583,11 @@ struct ProductActionsTests {
             return
         }
         #expect(creationError == expectedError)
-        guard case .failure(.validation(let editingError)) = actions.update(
+        let editingResult = actions.update(
             product, from: draft, image: nil, now: editedDate
-        ) else {
+        )
+
+        guard case .failure(.validation(let editingError)) = editingResult else {
             Issue.record("未保存の変更より先に入力エラーが返されなかった")
             return
         }
@@ -605,15 +615,19 @@ struct ProductActionsTests {
         let actions = ProductActions(context: context)
         let draft = ProductDraft(name: "編集後", type: "調味料")
 
-        guard case .failure(.productNotInContext) = actions.update(
+        let unmanagedUpdateResult = actions.update(
             unmanaged, from: draft, image: nil, now: editedDate
-        ) else {
+        )
+
+        guard case .failure(.productNotInContext) = unmanagedUpdateResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
-        guard case .failure(.productNotInContext) = actions.update(
+        let savedUpdateResult = actions.update(
             saved, from: draft, image: nil, now: editedDate
-        ) else {
+        )
+
+        guard case .failure(.productNotInContext) = savedUpdateResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }

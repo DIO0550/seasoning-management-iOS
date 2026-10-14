@@ -110,9 +110,11 @@ struct ItemRulesTests {
             consumedDate: input.consumedDay.map { date(day: $0) }
         )
 
-        guard case .failure(let error) = item.updateState(
+        let updateResult = item.updateState(
             using: rules, now: date(day: 10, hour: 12), calendar: calendar()
-        ) else {
+        )
+
+        guard case .failure(let error) = updateResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
@@ -133,10 +135,12 @@ struct ItemRulesTests {
         item.statusRawValue = rawValue
         let original = Snapshot(item)
 
-        guard case .failure(let error) = item.updateState(
+        let updateResult = item.updateState(
             using: ItemRules(status: .inUse, openingDate: date(day: 2)),
             now: date(day: 10), calendar: calendar()
-        ) else {
+        )
+
+        guard case .failure(let error) = updateResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
@@ -190,9 +194,11 @@ struct ItemRulesTests {
             consumedDate: date(day: 2, hour: 14)
         )
 
-        guard case .failure(let error) = item.updateState(
+        let updateResult = item.updateState(
             using: rules, now: date(day: 10), calendar: calendar(offset: 9 * 3_600)
-        ) else {
+        )
+
+        guard case .failure(let error) = updateResult else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
