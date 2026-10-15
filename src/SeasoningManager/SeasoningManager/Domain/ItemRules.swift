@@ -18,64 +18,70 @@ struct ItemRules {
     }
 
     /// 同状態の編集と、未開封→使用中→使い切りの一段階の遷移だけを許可する。
-    func validate(from currentStatus: ItemStatus?, now: Date, calendar: Calendar = .current) throws {
+    func validate(
+        from currentStatus: ItemStatus?, now: Date, calendar: Calendar = .current
+    ) -> Result<Void, ValidationError> {
         guard let currentStatus else {
-            throw ValidationError.unknownCurrentStatus
+            return .failure(.unknownCurrentStatus)
         }
 
         switch (currentStatus, status) {
         case (.unopened, .unopened), (.unopened, .inUse), (.inUse, .inUse), (.inUse, .consumed), (.consumed, .consumed):
             break
         default:
-            throw ValidationError.invalidTransition
+            return .failure(.invalidTransition)
         }
 
         switch status {
         case .unopened:
             guard openingDate == nil else {
-                throw ValidationError.unexpectedOpeningDate
+                return .failure(.unexpectedOpeningDate)
             }
 
             guard consumedDate == nil else {
-                throw ValidationError.unexpectedConsumedDate
+                return .failure(.unexpectedConsumedDate)
             }
 
-            return
+            return .success(())
         case .inUse:
             guard consumedDate == nil else {
-                throw ValidationError.unexpectedConsumedDate
+                return .failure(.unexpectedConsumedDate)
             }
         case .consumed:
             guard consumedDate != nil else {
-                throw ValidationError.consumedDateRequired
+                return .failure(.consumedDateRequired)
             }
         }
 
         guard let openingDate else {
-            throw ValidationError.openingDateRequired
+            return .failure(.openingDateRequired)
         }
 
         let openingDay = calendar.startOfDay(for: openingDate)
         guard openingDay <= calendar.startOfDay(for: now) else {
-            throw ValidationError.futureOpeningDate
+            return .failure(.futureOpeningDate)
         }
 
         if let consumedDate {
             guard calendar.startOfDay(for: consumedDate) >= openingDay else {
-                throw ValidationError.consumedDateBeforeOpeningDate
+                return .failure(.consumedDateBeforeOpeningDate)
             }
         }
+
+        return .success(())
     }
 }
 
 extension Item {
     /// 全検証が成功した場合だけ反映する。ModelContextの保存・保存失敗時の復旧は呼び出し側が行う。
-    func updateState(using rules: ItemRules, now: Date, calendar: Calendar = .current) throws {
-        try rules.validate(from: status, now: now, calendar: calendar)
-
-        statusRawValue = rules.status.rawValue
-        openingDate = rules.openingDate
-        consumedDate = rules.consumedDate
-        updatedAt = now
+    func updateState(
+        using rules: ItemRules, now: Date, calendar: Calendar = .current
+    ) -> Result<Void, ItemRules.ValidationError> {
+        rules.validate(from: status, now: now, calendar: calendar).map {
+            statusRawValue = rules.status.rawValue
+            openingDate = rules.openingDate
+            consumedDate = rules.consumedDate
+            updatedAt = now
+        }
     }
 }

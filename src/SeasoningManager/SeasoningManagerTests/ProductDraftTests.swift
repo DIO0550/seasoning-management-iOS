@@ -24,15 +24,11 @@ struct ProductDraftTests {
     @Test(arguments: ["", " \t\n　", "\u{00A0}\u{2003}\u{202F}\u{3000}\r\n"])
     func rejectsBlankRequiredText(input: String) {
         var draft = ProductDraft(name: input, type: "調味料")
-        #expect(throws: ValidationError(field: .name, reason: .required)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .name, reason: .required)))
 
         draft.name = "だし"
         draft.type = input
-        #expect(throws: ValidationError(field: .type, reason: .required)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .type, reason: .required)))
     }
 
     @Test func trimsSurroundingWhitespaceAndKeepsInternalText() throws {
@@ -44,7 +40,7 @@ struct ProductDraftTests {
             nutrientBasisAmount: "　1\t",
             nutrientBasisUnit: "\n 杯（ 大さじ ）\u{202F}"
         )
-        let values = try draft.validated()
+        let values = try draft.validated().get()
 
         #expect(values.name == "だし　しょうゆ")
         #expect(values.type == "和風  だし")
@@ -62,7 +58,7 @@ struct ProductDraftTests {
             calories: input, protein: input, fat: input, sugar: input, carbohydrates: input,
             nutrientBasisAmount: "100", nutrientBasisUnit: "g"
         )
-        let values = try draft.validated()
+        let values = try draft.validated().get()
 
         #expect(values.priceYen == nil)
         #expect(values.calories == nil)
@@ -80,7 +76,7 @@ struct ProductDraftTests {
             calories: "0", protein: "0.0", fat: "0.00", sugar: "00", carbohydrates: "000.00",
             nutrientBasisAmount: "0.01", nutrientBasisUnit: "食"
         )
-        let values = try draft.validated()
+        let values = try draft.validated().get()
 
         #expect(values.priceYen == 0)
         #expect(values.calories == 0)
@@ -96,7 +92,7 @@ struct ProductDraftTests {
             name: "だし", type: "調味料", calories: "12.34", protein: "0.01", fat: "1.2", sugar: "0.02",
             carbohydrates: "4.56", nutrientBasisAmount: "15", nutrientBasisUnit: "mL"
         )
-        let values = try draft.validated()
+        let values = try draft.validated().get()
 
         #expect(values.calories == 1234)
         #expect(values.protein == 1)
@@ -108,7 +104,7 @@ struct ProductDraftTests {
     }
 
     @Test func oneNutrientDoesNotPopulateOthers() throws {
-        let values = try draftWithNumericInput("4.56", field: .sugar).validated()
+        let values = try draftWithNumericInput("4.56", field: .sugar).validated().get()
 
         #expect(values.calories == nil)
         #expect(values.protein == nil)
@@ -123,7 +119,7 @@ struct ProductDraftTests {
         ("00000000000000000000000000000012.34", Int64(1234)),
     ])
     func scalesDecimalsExactly(input: String, expected: Int64) throws {
-        let values = try draftWithNumericInput(input, field: .calories).validated()
+        let values = try draftWithNumericInput(input, field: .calories).validated().get()
 
         #expect(values.calories == expected)
     }
@@ -132,9 +128,7 @@ struct ProductDraftTests {
     func rejectsScaledOverflow(input: String) {
         let draft = draftWithNumericInput(input, field: .calories)
 
-        #expect(throws: ValidationError(field: .calories, reason: .outOfRange)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .calories, reason: .outOfRange)))
     }
 
     @Test(arguments: [
@@ -144,9 +138,7 @@ struct ProductDraftTests {
     func rejectsInvalidDecimalFormat(input: String) {
         let draft = draftWithNumericInput(input, field: .calories)
 
-        #expect(throws: ValidationError(field: .calories, reason: .invalidFormat)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .calories, reason: .invalidFormat)))
         #expect(draft.calories == input)
     }
 
@@ -154,13 +146,11 @@ struct ProductDraftTests {
     func priceRejectsAnythingExceptUnsignedIntegers(input: String) {
         let draft = draftWithNumericInput(input, field: .priceYen)
 
-        #expect(throws: ValidationError(field: .priceYen, reason: .invalidFormat)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .priceYen, reason: .invalidFormat)))
     }
 
     @Test func priceAllowsInt64MaximumWithoutScaling() throws {
-        let values = try draftWithNumericInput("9223372036854775807", field: .priceYen).validated()
+        let values = try draftWithNumericInput("9223372036854775807", field: .priceYen).validated().get()
 
         #expect(values.priceYen == Int64.max)
     }
@@ -169,9 +159,7 @@ struct ProductDraftTests {
     func rejectsPriceOverflow(input: String) {
         let draft = draftWithNumericInput(input, field: .priceYen)
 
-        #expect(throws: ValidationError(field: .priceYen, reason: .outOfRange)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .priceYen, reason: .outOfRange)))
     }
 
     @Test(arguments: [
@@ -180,9 +168,7 @@ struct ProductDraftTests {
     func identifiesEachInvalidNumericField(field: Field) {
         let draft = draftWithNumericInput("abc", field: field)
 
-        #expect(throws: ValidationError(field: field, reason: .invalidFormat)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: field, reason: .invalidFormat)))
     }
 
     @Test(arguments: [Field.calories, .protein, .fat, .sugar, .carbohydrates])
@@ -190,18 +176,14 @@ struct ProductDraftTests {
         var draft = draftWithNumericInput("0", field: field)
         draft.nutrientBasisAmount = ""
 
-        #expect(throws: ValidationError(field: .nutrientBasisAmount, reason: .required)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .nutrientBasisAmount, reason: .required)))
     }
 
     @Test(arguments: ["0", "0.0", "0.00"])
     func basisAmountMustBePositive(input: String) {
         let draft = draftWithNumericInput(input, field: .nutrientBasisAmount)
 
-        #expect(throws: ValidationError(field: .nutrientBasisAmount, reason: .mustBePositive)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .nutrientBasisAmount, reason: .mustBePositive)))
     }
 
     @Test(arguments: ["", " \t\n　", "\u{00A0}\u{2003}\u{202F}"])
@@ -209,29 +191,25 @@ struct ProductDraftTests {
         var draft = draftWithNumericInput("0", field: .calories)
         draft.nutrientBasisUnit = input
 
-        #expect(throws: ValidationError(field: .nutrientBasisUnit, reason: .required)) {
-            _ = try draft.validated()
-        }
+        #expect(draft.validated() == .failure(ValidationError(field: .nutrientBasisUnit, reason: .required)))
     }
 
     @Test func basisAcceptsExactUpperLimitAndRejectsOverflow() throws {
-        let values = try draftWithNumericInput("92233720368547758.07", field: .nutrientBasisAmount).validated()
+        let values = try draftWithNumericInput("92233720368547758.07", field: .nutrientBasisAmount).validated().get()
         #expect(values.nutrientBasisAmount == Int64.max)
 
         let overflow = draftWithNumericInput("92233720368547758.08", field: .nutrientBasisAmount)
-        #expect(throws: ValidationError(field: .nutrientBasisAmount, reason: .outOfRange)) {
-            _ = try overflow.validated()
-        }
+        #expect(overflow.validated() == .failure(ValidationError(field: .nutrientBasisAmount, reason: .outOfRange)))
     }
 
     @Test func clearingLastNutrientDiscardsBasisAndRetainsDraftInput() throws {
         var draft = draftWithNumericInput("1", field: .calories)
-        let original = try draft.validated()
+        let original = try draft.validated().get()
         draft.calories = ""
         // 基準だけの不正入力も、全栄養素空欄の場合は保存対象にしない。
         draft.nutrientBasisAmount = "abc"
         draft.nutrientBasisUnit = "mL"
-        let cleared = try draft.validated()
+        let cleared = try draft.validated().get()
 
         #expect(original.calories == 100)
         #expect(original.nutrientBasisAmount == 10000)
@@ -244,14 +222,43 @@ struct ProductDraftTests {
 
     @Test func changingBasisDoesNotConvertNutrientValues() throws {
         var draft = draftWithNumericInput("12.34", field: .calories)
-        let original = try draft.validated()
+        let original = try draft.validated().get()
         draft.nutrientBasisAmount = "15"
         draft.nutrientBasisUnit = "mL"
-        let changed = try draft.validated()
+        let changed = try draft.validated().get()
 
         #expect(changed.calories == original.calories)
         #expect(changed.nutrientBasisAmount == 1500)
         #expect(changed.nutrientBasisUnit == "mL")
+    }
+
+    @Test func returnsTheFirstInvalidFieldInValidationOrder() {
+        var draft = ProductDraft(
+            name: "", type: "", priceYen: "abc", calories: "abc", protein: "abc", fat: "abc",
+            sugar: "abc", carbohydrates: "abc", nutrientBasisAmount: "abc", nutrientBasisUnit: ""
+        )
+
+        #expect(draft.validated() == .failure(ValidationError(field: .name, reason: .required)))
+        draft.name = "だし"
+        #expect(draft.validated() == .failure(ValidationError(field: .type, reason: .required)))
+        draft.type = "調味料"
+        #expect(draft.validated() == .failure(ValidationError(field: .priceYen, reason: .invalidFormat)))
+        draft.priceYen = "0"
+        #expect(draft.validated() == .failure(ValidationError(field: .calories, reason: .invalidFormat)))
+        draft.calories = "0"
+        #expect(draft.validated() == .failure(ValidationError(field: .protein, reason: .invalidFormat)))
+        draft.protein = "0"
+        #expect(draft.validated() == .failure(ValidationError(field: .fat, reason: .invalidFormat)))
+        draft.fat = "0"
+        #expect(draft.validated() == .failure(ValidationError(field: .sugar, reason: .invalidFormat)))
+        draft.sugar = "0"
+        #expect(draft.validated() == .failure(ValidationError(field: .carbohydrates, reason: .invalidFormat)))
+        draft.carbohydrates = "0"
+        #expect(draft.validated() == .failure(ValidationError(field: .nutrientBasisAmount, reason: .invalidFormat)))
+        draft.nutrientBasisAmount = "0"
+        #expect(draft.validated() == .failure(ValidationError(field: .nutrientBasisAmount, reason: .mustBePositive)))
+        draft.nutrientBasisAmount = "1"
+        #expect(draft.validated() == .failure(ValidationError(field: .nutrientBasisUnit, reason: .required)))
     }
 
     private func draftWithNumericInput(_ input: String, field: Field) -> ProductDraft {

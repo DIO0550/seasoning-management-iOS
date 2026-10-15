@@ -22,7 +22,7 @@ struct ProductDraft {
         case required, invalidFormat, outOfRange, mustBePositive
     }
 
-    struct ValidationError: Error, Equatable {
+    nonisolated struct ValidationError: Error, Equatable, Sendable {
         let field: Field
         let reason: FailureReason
     }
@@ -42,15 +42,70 @@ struct ProductDraft {
     }
 
     /// 入力を変更せずに検証する。失敗時は保存可能な値を一部だけ返さない。
-    func validated() throws -> ValidatedValues {
-        let validatedName = try requiredText(name, field: .name)
-        let validatedType = try requiredText(type, field: .type)
-        let validatedPrice = try number(priceYen, field: .priceYen, decimalPlaces: 0)
-        let validatedCalories = try number(calories, field: .calories, decimalPlaces: 2)
-        let validatedProtein = try number(protein, field: .protein, decimalPlaces: 2)
-        let validatedFat = try number(fat, field: .fat, decimalPlaces: 2)
-        let validatedSugar = try number(sugar, field: .sugar, decimalPlaces: 2)
-        let validatedCarbohydrates = try number(carbohydrates, field: .carbohydrates, decimalPlaces: 2)
+    func validated() -> Result<ValidatedValues, ValidationError> {
+        let validatedName: String
+        switch requiredText(name, field: .name) {
+        case .success(let value):
+            validatedName = value
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        let validatedType: String
+        switch requiredText(type, field: .type) {
+        case .success(let value):
+            validatedType = value
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        let validatedPrice: Int64?
+        switch number(priceYen, field: .priceYen, decimalPlaces: 0) {
+        case .success(let value):
+            validatedPrice = value
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        let validatedCalories: Int64?
+        switch number(calories, field: .calories, decimalPlaces: 2) {
+        case .success(let value):
+            validatedCalories = value
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        let validatedProtein: Int64?
+        switch number(protein, field: .protein, decimalPlaces: 2) {
+        case .success(let value):
+            validatedProtein = value
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        let validatedFat: Int64?
+        switch number(fat, field: .fat, decimalPlaces: 2) {
+        case .success(let value):
+            validatedFat = value
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        let validatedSugar: Int64?
+        switch number(sugar, field: .sugar, decimalPlaces: 2) {
+        case .success(let value):
+            validatedSugar = value
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        let validatedCarbohydrates: Int64?
+        switch number(carbohydrates, field: .carbohydrates, decimalPlaces: 2) {
+        case .success(let value):
+            validatedCarbohydrates = value
+        case .failure(let error):
+            return .failure(error)
+        }
 
         // 変換の成否ではなく、元の入力で基準の必要性を判定する。0も入力済み。
         let hasNutrientInput = [calories, protein, fat, sugar, carbohydrates].contains {
@@ -60,29 +115,44 @@ struct ProductDraft {
         var validatedBasisUnit: String?
 
         if hasNutrientInput {
-            guard let amount = try number(nutrientBasisAmount, field: .nutrientBasisAmount, decimalPlaces: 2) else {
-                throw ValidationError(field: .nutrientBasisAmount, reason: .required)
+            let amount: Int64?
+            switch number(nutrientBasisAmount, field: .nutrientBasisAmount, decimalPlaces: 2) {
+            case .success(let value):
+                amount = value
+            case .failure(let error):
+                return .failure(error)
+            }
+
+            guard let amount else {
+                return .failure(ValidationError(field: .nutrientBasisAmount, reason: .required))
             }
 
             guard amount > 0 else {
-                throw ValidationError(field: .nutrientBasisAmount, reason: .mustBePositive)
+                return .failure(ValidationError(field: .nutrientBasisAmount, reason: .mustBePositive))
             }
 
             validatedBasisAmount = amount
-            validatedBasisUnit = try requiredText(nutrientBasisUnit, field: .nutrientBasisUnit)
+            switch requiredText(nutrientBasisUnit, field: .nutrientBasisUnit) {
+            case .success(let value):
+                validatedBasisUnit = value
+            case .failure(let error):
+                return .failure(error)
+            }
         }
 
-        return ValidatedValues(
-            name: validatedName,
-            type: validatedType,
-            priceYen: validatedPrice,
-            calories: validatedCalories,
-            protein: validatedProtein,
-            fat: validatedFat,
-            sugar: validatedSugar,
-            carbohydrates: validatedCarbohydrates,
-            nutrientBasisAmount: validatedBasisAmount,
-            nutrientBasisUnit: validatedBasisUnit
+        return .success(
+            ValidatedValues(
+                name: validatedName,
+                type: validatedType,
+                priceYen: validatedPrice,
+                calories: validatedCalories,
+                protein: validatedProtein,
+                fat: validatedFat,
+                sugar: validatedSugar,
+                carbohydrates: validatedCarbohydrates,
+                nutrientBasisAmount: validatedBasisAmount,
+                nutrientBasisUnit: validatedBasisUnit
+            )
         )
     }
 
@@ -90,31 +160,31 @@ struct ProductDraft {
         input.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func requiredText(_ input: String, field: Field) throws -> String {
+    private func requiredText(_ input: String, field: Field) -> Result<String, ValidationError> {
         let value = trimmed(input)
         guard !value.isEmpty else {
-            throw ValidationError(field: field, reason: .required)
+            return .failure(ValidationError(field: field, reason: .required))
         }
 
-        return value
+        return .success(value)
     }
 
-    private func number(_ input: String, field: Field, decimalPlaces: Int) throws -> Int64? {
+    private func number(_ input: String, field: Field, decimalPlaces: Int) -> Result<Int64?, ValidationError> {
         let value = trimmed(input)
         guard !value.isEmpty else {
-            return nil
+            return .success(nil)
         }
 
         let components = value.split(separator: ".", omittingEmptySubsequences: false)
         guard components.count <= 2,
             components.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy { (48...57).contains($0) } })
         else {
-            throw ValidationError(field: field, reason: .invalidFormat)
+            return .failure(ValidationError(field: field, reason: .invalidFormat))
         }
 
         let fraction = components.dropFirst().first ?? ""
         guard fraction.count <= decimalPlaces else {
-            throw ValidationError(field: field, reason: .invalidFormat)
+            return .failure(ValidationError(field: field, reason: .invalidFormat))
         }
 
         // 小数点を除き、不足する桁に0を補う。Doubleへの変換・丸めは行わない。
@@ -125,12 +195,12 @@ struct ProductDraft {
             let (multiplied, multiplicationOverflow) = result.multipliedReportingOverflow(by: 10)
             let (added, additionOverflow) = multiplied.addingReportingOverflow(Int64(digit - 48))
             guard !multiplicationOverflow, !additionOverflow else {
-                throw ValidationError(field: field, reason: .outOfRange)
+                return .failure(ValidationError(field: field, reason: .outOfRange))
             }
 
             result = added
         }
 
-        return result
+        return .success(result)
     }
 }
