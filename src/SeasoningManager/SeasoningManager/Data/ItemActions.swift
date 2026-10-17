@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// 未保存の変更がないcontextで、個体の登録と保存済み個体の日付編集を行う。
+/// 未保存の変更がないcontextで、個体の登録・日付編集・開封・使い切りを一回の保存として行う。
 @MainActor
 struct ItemActions {
     nonisolated enum ActionError: Error, Sendable {
@@ -76,6 +76,56 @@ struct ItemActions {
         }
 
         item.expirationDate = expirationDate
+
+        switch save(context) {
+        case .success:
+            return .success(())
+        case .failure(let error):
+            context.rollback()
+            return .failure(.persistence(error))
+        }
+    }
+
+    func open(
+        _ item: Item, openingDate: Date, now: Date = Date(), calendar: Calendar = .current
+    ) -> Result<Void, ActionError> {
+        let rules = ItemRules(status: .inUse, openingDate: openingDate, consumedDate: item.consumedDate)
+        return transition(item, from: .unopened, using: rules, now: now, calendar: calendar)
+    }
+
+    func consume(
+        _ item: Item, consumedDate: Date, now: Date = Date(), calendar: Calendar = .current
+    ) -> Result<Void, ActionError> {
+        let rules = ItemRules(status: .consumed, openingDate: item.openingDate, consumedDate: consumedDate)
+        return transition(item, from: .inUse, using: rules, now: now, calendar: calendar)
+    }
+
+    private func transition(
+        _ item: Item, from source: ItemStatus, using rules: ItemRules, now: Date, calendar: Calendar
+    ) -> Result<Void, ActionError> {
+        guard !context.hasChanges else {
+            return .failure(.pendingChanges)
+        }
+
+        guard item.modelContext === context else {
+            return .failure(.itemNotInContext)
+        }
+
+        guard let status = item.status else {
+            return .failure(.validation(.unknownCurrentStatus))
+        }
+
+        // 日付編集と異なり、同状態への再操作も許可しない。
+        guard status == source else {
+            return .failure(.validation(.invalidTransition))
+        }
+
+        switch item.updateState(using: rules, now: now, calendar: calendar) {
+        case .success:
+            break
+        case .failure(let error):
+            return .failure(.validation(error))
+        }
 
         switch save(context) {
         case .success:
