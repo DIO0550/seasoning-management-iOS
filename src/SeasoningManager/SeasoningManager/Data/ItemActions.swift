@@ -1,12 +1,14 @@
 import Foundation
 import SwiftData
 
-/// 未保存の変更がないcontextで、保存済み商品に未開封の個体を1本登録する。
+/// 未保存の変更がないcontextで、個体の登録と保存済み個体の日付編集を行う。
 @MainActor
 struct ItemActions {
     nonisolated enum ActionError: Error, Sendable {
         case pendingChanges
         case productNotInContext
+        case itemNotInContext
+        case validation(ItemRules.ValidationError)
         case persistence(any Error)
     }
 
@@ -42,6 +44,42 @@ struct ItemActions {
         switch save(context) {
         case .success:
             return .success(item)
+        case .failure(let error):
+            context.rollback()
+            return .failure(.persistence(error))
+        }
+    }
+
+    func updateDates(
+        _ item: Item, expirationDate: Date?, openingDate: Date?,
+        now: Date = Date(), calendar: Calendar = .current
+    ) -> Result<Void, ActionError> {
+        // rollbackで他の入力を失わないよう、モデルへ反映する前に保存境界を確認する。
+        guard !context.hasChanges else {
+            return .failure(.pendingChanges)
+        }
+
+        guard item.modelContext === context else {
+            return .failure(.itemNotInContext)
+        }
+
+        guard let status = item.status else {
+            return .failure(.validation(.unknownCurrentStatus))
+        }
+
+        let rules = ItemRules(status: status, openingDate: openingDate, consumedDate: item.consumedDate)
+        switch item.updateState(using: rules, now: now, calendar: calendar) {
+        case .success:
+            break
+        case .failure(let error):
+            return .failure(.validation(error))
+        }
+
+        item.expirationDate = expirationDate
+
+        switch save(context) {
+        case .success:
+            return .success(())
         case .failure(let error):
             context.rollback()
             return .failure(.persistence(error))
