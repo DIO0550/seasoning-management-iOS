@@ -23,7 +23,7 @@ class HarnessConfigurationTests(unittest.TestCase):
         self.root = Path(self.workspace.name)
         for name in ("AGENTS.md", "CLAUDE.md"):
             shutil.copyfile(ROOT / name, self.root / name)
-        for name in ("rules", "harness", ".claude", "docs"):
+        for name in ("rules", "harness", ".claude", ".github", "docs"):
             shutil.copytree(ROOT / name, self.root / name, ignore=shutil.ignore_patterns("__pycache__"))
 
     def test_current_configuration_is_valid(self):

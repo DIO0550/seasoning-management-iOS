@@ -1,0 +1,52 @@
+name: PR Explain Deploy
+
+on:
+  push:
+    branches: [gh-pages]
+  workflow_run:
+    workflows: [PR Explain]
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+# サイト全体で直列化する。ロックを取った後に最新 gh-pages を取得し、古い版への巻き戻りを防ぐ。
+concurrency:
+  group: github-pages-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # workflow_run の artifact や PR のコードを使わず、今の公開用ブランチを読む。
+      - name: Checkout latest site after lock
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: gh-pages
+          path: site
+          persist-credentials: false
+
+      - name: Configure Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: site
+
+      - name: Deploy site
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

@@ -170,3 +170,91 @@ xcrun xccov view --report --json /tmp/SeasoningManagerTests.xcresult
 記録はマージ後に `harness-record`、規約や装置の改善は別の依頼で `harness-growth` を使う。
 記録の中で推測した失敗や他リポジトリの判例は作らない。規約を足す前に、再発の根拠と不要な規約を確認する。
 Swift 向けの初期判断と参照元は [references.md](references.md) に記載する。
+
+## PR の解説 HTML
+
+[pr-explain](../.claude/skills/pr-explain/SKILL.md) は、人が diff を読む前に変更の全体像をつかめるように、
+構造マップ・変更の経緯・テスト・振る舞い・技術の手引きの 5 画面を生成する。
+[implementation-flow](../.claude/skills/implementation-flow/SKILL.md) の手順 7 から、PR 作成直後、
+振る舞いが変わる push の後、reopen 後に実行する。差分から作る `change-map.json` と、
+セッションがソースで主張を確かめて書く `explain.json` を固定 HTML に組み合わせる。
+解説は PR ブランチや master にコミットせず、リポジトリの外で作って検査する。
+
+### ローカル生成と表示
+
+Python 3 と Git で生成できる。解説をまだ書いていなくても地図とコミットを表示でき、
+未記入の解説を推測で補わない。出力先はリポジトリの外にする。
+
+```bash
+python3 .github/scripts/build-pr-explain-local.py \
+  --base origin/master --head HEAD --pr 123 \
+  --head-branch feature/example --base-branch master \
+  --out /tmp/seasoning-pr-123
+# 自分で書いた解説を検査して含める場合は --explain /tmp/explain.json を追加
+python3 -m http.server 8000 --directory /tmp/seasoning-pr-123
+```
+
+`http://localhost:8000/#map` を開き、`#story`・`#test`・`#impact`・`#primer` を切り替える。
+`file://` では JSON を読めない。解説を省いた再生成は、出力先に以前の `explain.json` があれば消す。
+検査に落ちた解説では既存の出力を更新しない。
+
+### GitHub Pages への公開
+
+初回にリポジトリの **Settings → Pages → Build and deployment → Source: GitHub Actions** を選ぶ。
+`github-pages` environment のブランチ制限を設定している場合は、master と gh-pages からのデプロイを許可する。
+未設定では生成と gh-pages への配置が成功しても公開は完了しない。成功を確認するのは `PR Explain Deploy` の実行結果と URL。
+この機構を初めて入れる PR は、信頼する base に workflow とスクリプトが無いため自動公開されない。
+導入後の PR 作成・push・reopen から自動生成する。
+
+`PR Explain` は同じリポジトリの PR だけを対象とし、fork / Dependabot を除く。
+`pull_request_target` で **base SHA のコードだけ**を checkout し、PR の head は Git object として fetch して読む。
+head のスクリプト・hook・アプリ・テストを実行せず、型検査や iOS 実行も行わない。
+古い PR イベントは現在の状態と head を照合して除く。変更ごとに `index.html` と `change-map.json` を
+`gh-pages/pr-explain/pr-N/` へ配置し、専用の固定 PR コメントへ URL を載せる。
+PR を閉じるとそのフォルダを削除し、reopen では地図の再生成後に解説を置き直す。
+
+セッションが書いた解説は次のコマンドで検査して公開する。sha は push 済みのものを使う。
+
+```bash
+bash .github/scripts/pr-explain-pages.sh put-explain 123 /tmp/explain.json
+```
+
+`put-explain` は解説の形・参照・抜粋を検査し、追跡ブランチに無い sha や地図の無い公開先には置かない。
+終了コード 3 は地図未配置または削除済み。開いた PR の `PR Explain` が成功しているか確かめて再試行する。
+公開器は対象 PR の 3 ファイルだけを更新し、他の PR・他の公開コンテンツを保持する。push の競合は取り直して再試行する。
+
+`PR Explain Deploy` は gh-pages の push、`PR Explain` 成功後の `workflow_run`、手動実行でサイト全体を公開する。
+`GITHUB_TOKEN` での push は別の push workflow を起動しないため、`workflow_run` も必要。
+デプロイはサイト共通の concurrency で直列化し、ロック取得後に最新 gh-pages を checkout する。
+セッションによる gh-pages への push で workflow が起動しない認証を使う場合は、手動で deploy を実行する。
+workflow で使う Actions は GitHub 公式だけを 40 桁 SHA で固定している。
+
+### 検査するものと限界
+
+地図は Models・Domain・Data・画面と起動・単体テスト・UI テスト・Xcode 設定・仕様・ハーネス・旧コードを分ける。
+Swift Testing の `@Test` 表示名(無ければ関数名、複数行の arguments に対応)、XCTest の test 関数、
+harness の Python unittest 宣言を前後で比較する。rename だけで宣言の追加・削除にせず、コメント・
+文字列内の偽宣言は除く。宣言名の一覧はテストの実行件数や合格結果ではない。
+マクロ展開、条件コンパイル、動的な表示名、型解決、Swift の呼び出し関係を網羅するものでもない。
+
+Swift の `import` は同一モジュール内のファイル依存へ変換しない。テストの対象はファイル名から
+一意に対応するときだけ添える。不明な関係は `messages` と `tests.targets` に根拠を確かめて書く。
+自動依存は Python import と明示されたファイルパスに限り、文字列内のパスが説明か実行かまでは区別できない。
+Markdown・バイナリ・長いファイルは依存解析から除く。地図にしか無い参照の誤りは表示で印を出すものもあり、
+validator 成功だけで説明内容やリンク先の正しさを保証しない。
+
+HTML は JSON の文字列を `textContent` で描き、HTML へ変換する危険な API と CSP の逸脱を検査する。
+外部フォント・外部スクリプトは使わず、固定スクリプト 1 本をハッシュで許可する。
+CSP は説明内容の正確性や、公開すべきでないデータが入っていないことまでは判定しない。
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s harness/tests -p test_pr_explain.py -v
+```
+
+既存の pre-push と `Agent harness` CI の unittest discover からも実行する。
+Swift 宣言抽出と実 Git 差分、解説 validator、CSP の通る例・止める例、renderer core、
+ローカル bare remote での配置・更新・削除・競合時の再試行・他 PR 保持を検証する。
+Node.js が無い環境では renderer core だけを未実施として skip する。ブラウザ表示と iOS 実行は別の確認。
+
+この機構は `DIO0550/design-composer` のコミット `c959c1f7d0` の pr-explain を参考に移植した。
+元の MIT notice は [pr-explain-LICENSE](pr-explain-LICENSE) に保持する。
