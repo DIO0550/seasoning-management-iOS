@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Explain"
+  short_description: "PRの変更構造・経緯・検証・振る舞いをHTMLで読み解く"
+  default_prompt: "$pr-explain を使ってこのPRの変更をHTMLで解説してください。"
