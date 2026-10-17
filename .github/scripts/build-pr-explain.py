@@ -11,7 +11,7 @@
 - `pr-explain-ref` — 解説の中の参照が解説の中に無い(message の from / to・flow の steps など)・用語の印が terms に
   無い・どの印からも指されない用語
 - `pr-explain-code` — 解説時点の `sha` がこのリポジトリに無い・抜粋のパスがその sha に無い・範囲が
-  ファイルに収まらない
+  ファイルに収まらない・技術の各節に空白以外の本文を持つ抜粋が無い
 
 **地図を指す参照(commitStory の sha・Note のパスと行・Target の layer / file・LayerRole の layer・
 concept・primers の出てくる場所の `path`・`lineRange`・`shas` が地図にあるか)は見ない。** 地図は push のたびに
@@ -21,6 +21,10 @@ concept・primers の出てくる場所の `path`・`lineRange`・`shas` が地�
 `git cat-file blob <sha>:<path>` の行範囲をここで `text` として足す。行は改行で割って数える(末尾に改行の
 無い最終行も 1 行)。入力に `text` を書いた解説は落とす(手で写した中身が黙って上書きされるのを、書いた側に
 知らせるため)。強調の範囲(`emphasis`)は書いたまま残す。
+
+技術の各節(`language` / `codebase`)には、その sha から読んだ空白以外の `excerpt` が 1 件以上必要。
+宣言・出てくる場所・他の節やテストの抜粋は代わりにならない。これは本文の存在の検査であり、説明の質は保証しない。
+ページの読み取り用の形は変えず、過去の解説は読めるまま、新しく書き出すときの公開条件として検査する。
 
 埋め込み(script / style 要素・ヒアドキュメント)を読む拡張子の抜粋には、始まりの行の頭で効いている埋め込みを開いた行を
 `openingLine` として足す。ページが抜粋を途中の行から色分けするためで、拡張子と規則は `lib/embedded_regions.py`。`text` と
@@ -868,6 +872,19 @@ def with_read_excerpts(explain: dict, repo: str) -> tuple[dict, list[str]]:
     return reduce(read_route, routes_with(Shape("Excerpt")), (explain, []))
 
 
+def primer_code_problems(explain: dict) -> list[str]:
+    """読み出し済みの解説で、各技術の節に空白以外の実コードの抜粋があるかを見る。"""
+    problems = []
+    for index, primer in enumerate(explain.get("primers", [])):
+        has_code = any(
+            passage["kind"] == "excerpt" and passage["excerpt"]["text"].strip()
+            for passage in primer.get("passages", [])
+        )
+        if not has_code:
+            problems.append(f"primers[{index}] ({primer['id']}): 対象 sha の空白以外の本文を持つ excerpt が 1 件以上必要")
+    return problems
+
+
 def collect_violations(explain: object, pr: int, repo: str) -> tuple[dict | None, list[str]]:
     """解説を検査し、書き出す値と報告の行を返す。
 
@@ -882,6 +899,8 @@ def collect_violations(explain: object, pr: int, repo: str) -> tuple[dict | None
     meta = [] if explain["pr"] == pr else [f"[pr-explain-meta] pr が公開先の PR #{pr} と違う(今は {explain['pr']})"]
     refs = [f"[pr-explain-ref] {problem}" for problem in reference_problems(explain)]
     written, code = with_read_excerpts(explain, repo)
+    if not code:
+        code = primer_code_problems(written)
     violations = meta + refs + [f"[pr-explain-code] {problem}" for problem in code]
     return (None if violations else written), violations
 
