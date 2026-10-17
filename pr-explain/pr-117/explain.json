@@ -1,0 +1,330 @@
+{
+  "version": 1,
+  "pr": 117,
+  "sha": "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb",
+  "overview": {
+    "title": "技術の各解説に実コードを載せる",
+    "lead": "技術の節にコード本文がない解説を、公開前に止める。執筆手順・見本・検査・回帰テストを揃え、節ごとに実際のソースを示す。",
+    "before": [
+      {
+        "text": "PR #116では、`Result`・`Calendar` の節が文章だけでも公開検査を通った。"
+      },
+      {
+        "text": "別の節やテストに抜粋があっても、各技術の本文には表示されなかった。"
+      }
+    ],
+    "after": [
+      {
+        "text": "言語・フレームワークと実装の各節に、対象SHAから読んだ空白以外の `excerpt` を最低1件必要とする。"
+      },
+      {
+        "text": "抜粋の存在は検査し、説明の正確さとコード本文の表示は作者が確認する。"
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "publish",
+      "label": "解説の公開",
+      "role": "技術の本文に実コードを伴う解説を公開する"
+    }
+  ],
+  "concepts": [
+    {
+      "path": ".github/scripts/build-pr-explain.py",
+      "name": "公開前の検査",
+      "role": "入力の形・参照・実抜粋を検査する",
+      "feature": "publish",
+      "change": "各節に空白以外の実抜粋があるかを抽出後に調べる"
+    },
+    {
+      "path": ".github/scripts/build-pr-explain-cases.sh",
+      "name": "検査の回帰例",
+      "role": "正常と拒否の入力を一時Gitで確かめる",
+      "feature": "publish",
+      "change": "節ごとのコード欠落、代替参照、空白、出力保持を追加する"
+    },
+    {
+      "path": ".claude/skills/pr-explain/SKILL.md",
+      "name": "解説の執筆手順",
+      "role": "実コードと説明を揃えて公開する手順を示す",
+      "feature": "publish",
+      "change": "手書きコピーを避ける指示を明確にし、各節の表示確認を加える"
+    },
+    {
+      "path": ".claude/skills/pr-explain/templates/explain.json",
+      "name": "解説の見本",
+      "role": "執筆時の入力形式を例示する",
+      "feature": "publish",
+      "change": "両種類の技術の節に実抜粋の指定例を加える"
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb",
+      "phase": "core",
+      "role": "コードがない節を公開前に検出する",
+      "why": "ユーザーからPR #116の解説にコードがないと指摘された。元データを旧検査が受理することを再現し、見本が抜粋を除外し、検査が本文のない節を許可することを確認した。作者も検査成功を内容の十分さと取り違え、初回の表示確認を怠っていた。",
+      "review": [
+        "各節を独立して検査し、別の節やテストのコードで代用していないか",
+        "過去の解説の読み取り用schemaを変えていないか",
+        "検査成功を説明品質の保証として扱っていないか"
+      ],
+      "before": [
+        {
+          "text": "コードのない言語の節を正常として扱っていた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "実抜粋を各節で要求し、不足した節の位置とidを報告する。"
+        }
+      ],
+      "notes": [
+        {
+          "path": ".github/scripts/build-pr-explain.py",
+          "start": 875,
+          "end": 885,
+          "text": "抜粋の有無を解説全体ではなく節ごとに調べる。"
+        },
+        {
+          "path": ".claude/skills/pr-explain/SKILL.md",
+          "start": 92,
+          "end": 96,
+          "text": "元の事実確認に加え、本文のコードと説明が出ることを確認する。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "validator",
+      "label": "公開前の検査",
+      "file": ".github/scripts/build-pr-explain-cases.sh"
+    }
+  ],
+  "tests": [
+    {
+      "id": "text-only",
+      "suite": "validator",
+      "name": "言語の節に説明文だけある",
+      "techniques": [
+        "regression",
+        "boundary"
+      ],
+      "why": "文章や宣言だけの本文を公開しない。",
+      "given": "実抜粋を文章や手書きの宣言に置き換える。",
+      "when": "公開検査へ渡す。",
+      "then": "両種類の節を `pr-explain-code` で拒否する。",
+      "commit": "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb",
+      "excerpt": {
+        "path": ".github/scripts/build-pr-explain-cases.sh",
+        "start": 267,
+        "end": 274,
+        "text": "deny|code|language|言語の節の passages が省略されている|del d[\"primers\"][0][\"passages\"]\ndeny|code|codebase|実装の節の passages が省略されている|del d[\"primers\"][0][\"passages\"]\ndeny|code|language|言語の節の passages が空配列|d[\"primers\"][0][\"passages\"] = []\ndeny|code|codebase|実装の節の passages が空配列|d[\"primers\"][0][\"passages\"] = []\ndeny|code|language|言語の節に説明文だけある|d[\"primers\"][0][\"passages\"] = [{\"kind\": \"text\", \"text\": \"コードの説明\"}]\ndeny|code|codebase|実装の節に説明文だけある|d[\"primers\"][0][\"passages\"] = [{\"kind\": \"text\", \"text\": \"コードの説明\"}]\ndeny|code|language|言語の節に手書きの宣言だけある|d[\"primers\"][0][\"passages\"] = [{\"kind\": \"declaration\", \"code\": \"func f()\"}]\ndeny|code|codebase|実装の節に手書きの宣言だけある|d[\"primers\"][0][\"passages\"] = [{\"kind\": \"declaration\", \"code\": \"func f()\"}]"
+      },
+      "targets": [
+        ".github/scripts/build-pr-explain.py"
+      ]
+    },
+    {
+      "id": "other-topic",
+      "suite": "validator",
+      "name": "別の節だけの抜粋では言語の節を補えない",
+      "techniques": [
+        "regression",
+        "boundary"
+      ],
+      "why": "参照先や別の節・テストにコードがあっても、当該節の欠落を見逃さない。",
+      "given": "一方の節だけに有効な抜粋を残す。",
+      "when": "欠けた節と同じ解説を検査する。",
+      "then": "欠けた節を拒否する。",
+      "commit": "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb",
+      "excerpt": {
+        "path": ".github/scripts/build-pr-explain-cases.sh",
+        "start": 275,
+        "end": 280,
+        "text": "deny|code|language|言語の節の出てくる場所は本文の代わりにならない|d[\"primers\"][0][\"passages\"] = []; d[\"primers\"][0][\"occurrences\"][0].update(lineRange={\"start\": 2, \"end\": 3}, text=\"two\\nthree\")\ndeny|code|codebase|実装の節の出てくる場所は本文の代わりにならない|d[\"primers\"][0][\"passages\"] = []; d[\"primers\"][0][\"occurrences\"][0].update(lineRange={\"start\": 2, \"end\": 3}, text=\"two\\nthree\")\ndeny|code|language|別の節だけの抜粋では言語の節を補えない|d[\"primers\"].append({**d[\"primers\"][0], \"id\": \"other\"}); d[\"primers\"][0][\"passages\"] = []\ndeny|code|codebase|別の節だけの抜粋では実装の節を補えない|d[\"primers\"].append({**d[\"primers\"][0], \"id\": \"other\"}); d[\"primers\"][0][\"passages\"] = []\ndeny|code|language|テストだけの抜粋では言語の節を補えない|d[\"suites\"] = [{\"id\": \"s\", \"label\": \"確認\", \"file\": \"kept.txt\"}]; d[\"tests\"] = [{\"id\": \"t\", \"suite\": \"s\", \"name\": \"f\", \"techniques\": [\"boundary\"], \"why\": \"理由\", \"given\": \"前提\", \"when\": \"操作\", \"then\": \"結果\", \"excerpt\": d[\"primers\"][0][\"passages\"][0][\"excerpt\"]}]; d[\"primers\"][0][\"passages\"] = []\ndeny|code|codebase|テストだけの抜粋では実装の節を補えない|d[\"suites\"] = [{\"id\": \"s\", \"label\": \"確認\", \"file\": \"kept.txt\"}]; d[\"tests\"] = [{\"id\": \"t\", \"suite\": \"s\", \"name\": \"f\", \"techniques\": [\"boundary\"], \"why\": \"理由\", \"given\": \"前提\", \"when\": \"操作\", \"then\": \"結果\", \"excerpt\": d[\"primers\"][0][\"passages\"][0][\"excerpt\"]}]; d[\"primers\"][0][\"passages\"] = []"
+      },
+      "targets": [
+        ".github/scripts/build-pr-explain.py"
+      ]
+    },
+    {
+      "id": "blank",
+      "suite": "validator",
+      "name": "言語の節の抜粋が sha では空白だけ",
+      "techniques": [
+        "regression",
+        "boundary"
+      ],
+      "why": "作業ツリーを読んで空白抜粋を実コードと誤認しない。",
+      "given": "対象コミットの空白ファイルを、作業ツリーだけ非空白にする。",
+      "when": "対象SHAの抜粋を検査する。",
+      "then": "空白だけは拒否し、有効な抜粋と混在する場合は通す。",
+      "commit": "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb",
+      "excerpt": {
+        "path": ".github/scripts/build-pr-explain-cases.sh",
+        "start": 281,
+        "end": 285,
+        "text": "deny|code|language|言語の節の抜粋が sha では空白だけ|d[\"primers\"][0][\"passages\"][0][\"excerpt\"] = {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}\ndeny|code|codebase|実装の節の抜粋が sha では空白だけ|d[\"primers\"][0][\"passages\"][0][\"excerpt\"] = {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}\npass|-|language|言語の節に空白と実コードの両方の抜粋があれば通る|d[\"primers\"][0][\"passages\"].append({\"kind\": \"excerpt\", \"excerpt\": {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}})\npass|-|codebase|実装の節に空白と実コードの両方の抜粋があれば通る|d[\"primers\"][0][\"passages\"].append({\"kind\": \"excerpt\", \"excerpt\": {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}})\npass|-|sample|テストの抜粋が空白だけでも従来どおり通る|d[\"tests\"][0][\"excerpt\"] = {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}"
+      },
+      "targets": [
+        ".github/scripts/build-pr-explain.py"
+      ]
+    },
+    {
+      "id": "keep-output",
+      "suite": "validator",
+      "name": "本文の抜粋が無ければ節の位置と id を報告し、書き出し先を上書きしない",
+      "techniques": [
+        "regression",
+        "boundary"
+      ],
+      "why": "失敗した解説で既存の生成物を壊さない。",
+      "given": "既存の出力を置き、本文抜粋のない実装の節を渡す。",
+      "when": "検査して同じ出力先へ書き出そうとする。",
+      "then": "終了1、節の位置とidの報告、既存出力の保持を確かめる。",
+      "commit": "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb",
+      "excerpt": {
+        "path": ".github/scripts/build-pr-explain-cases.sh",
+        "start": 427,
+        "end": 432,
+        "text": "printf '{\"before\": true}\\n' > \"$work/out.json\"\nmake_case codebase 'd[\"primers\"][0][\"passages\"] = []'\ncode_report=\"$(python3 \"$builder\" \"$work/case.json\" --pr \"$pr\" --out \"$work/out.json\" --repo \"$repo\" 2>&1)\"; status=$?\nkept_out=deny\n[ \"$status\" -eq 1 ] && [ \"$(cat \"$work/out.json\")\" = '{\"before\": true}' ] && [[ \"$code_report\" == '[pr-explain-code] primers[0] (p): '* ]] && kept_out=pass\nreport pass \"$kept_out\" \"本文の抜粋が無ければ節の位置と id を報告し、書き出し先を上書きしない\""
+      },
+      "targets": [
+        ".github/scripts/build-pr-explain.py"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "コードを伴う技術解説を公開する",
+    "lead": "解説を書くセッションがコードを載せ忘れたとき、公開前に不足した節を確認できる。",
+    "changed": {
+      "before": [
+        {
+          "text": "参照リンクだけの技術解説でも公開できた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "技術の各節に実際のコード本文がなければ公開が止まる。"
+        }
+      ]
+    },
+    "kept": [
+      {
+        "text": "過去に公開した解説は引き続き読める。"
+      },
+      {
+        "text": "技術の手引き自体を省いたページは公開できる。"
+      }
+    ]
+  },
+  "primers": [
+    {
+      "kind": "language",
+      "id": "any-strip",
+      "category": "Python",
+      "label": "`any` と `strip` による存在の判定",
+      "gist": "各段の条件を順に評価し、空白以外の抜粋が1つでもあればその節を通す。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".github/scripts/build-pr-explain.py",
+            "start": 875,
+            "end": 885,
+            "text": "def primer_code_problems(explain: dict) -> list[str]:\n    \"\"\"読み出し済みの解説で、各技術の節に空白以外の実コードの抜粋があるかを見る。\"\"\"\n    problems = []\n    for index, primer in enumerate(explain.get(\"primers\", [])):\n        has_code = any(\n            passage[\"kind\"] == \"excerpt\" and passage[\"excerpt\"][\"text\"].strip()\n            for passage in primer.get(\"passages\", [])\n        )\n        if not has_code:\n            problems.append(f\"primers[{index}] ({primer['id']}): 対象 sha の空白以外の本文を持つ excerpt が 1 件以上必要\")\n    return problems"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`for index, primer in enumerate(...)` は節を1つずつ調べ、欠落時の位置を残す。内側の `any(...)` は条件が真になる段が1つでもあれば真となり、空配列では偽になる。"
+        },
+        {
+          "kind": "text",
+          "text": "`and` は左が偽なら右を評価しないため、抜粋以外の段では `excerpt` に触らない。`strip()` は前後の空白を除いた文字列を返し、空文字列は偽となるので、空白だけの抜粋は条件を満たさない。有効な抜粋が別に1つあれば通る。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".github/scripts/build-pr-explain.py",
+          "lineRange": {
+            "start": 875,
+            "end": 885
+          },
+          "text": "節単位の走査、抜粋判定、位置とidを持つ診断。",
+          "shas": [
+            "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "publish-check"
+      ]
+    },
+    {
+      "kind": "codebase",
+      "id": "publish-check",
+      "category": "公開前の検査",
+      "label": "実抽出の後で、節ごとにコードを確かめる",
+      "gist": "対象コミットから抜粋を読み終えてから、各節のコード本文を検査する。表示形式は変えず、新しい公開に条件を加える。",
+      "status": "added",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".github/scripts/build-pr-explain.py",
+            "start": 853,
+            "end": 872,
+            "text": "def with_read_excerpts(explain: dict, repo: str) -> tuple[dict, list[str]]:\n    \"\"\"抜粋(Excerpt を指すすべての道筋)に中身(`text`)と、埋め込みの中から始まるものには開いた行(`openingLine`)を足した\n    解説と、読めなかった抜粋の違反を返す。抜粋の無い解説は、キーの順まで同じまま返す。\n\n    @param explain 形と参照の検査を通った解説\n    @param repo 解説時点の sha を持つリポジトリ\n    \"\"\"\n    sha = explain[\"sha\"]\n    if git(repo, \"cat-file\", \"-e\", f\"{sha}^{{commit}}\").returncode != 0:\n        return explain, [f\"sha {sha} がこのリポジトリに無い(解説時点の head を push・fetch してから)\"]\n\n    def read(excerpt: dict, where: str) -> tuple[dict, list[str]]:\n        filled_excerpt, problem = read_excerpt(repo, sha, excerpt)\n        return (excerpt, [f\"{where}: {problem}\"]) if filled_excerpt is None else (filled_excerpt, [])\n\n    def read_route(sofar: tuple[dict, list[str]], route: str) -> tuple[dict, list[str]]:\n        written, problems = read_along(sofar[0], route, read)\n        return written, sofar[1] + problems\n\n    return reduce(read_route, routes_with(Shape(\"Excerpt\")), (explain, []))"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`with_read_excerpts` は対象SHAの存在を確かめ、`read_excerpt` で指定パスと行範囲の本文を読む。作業ツリーを引用せず、検査で足した `text` を次の判定に使う。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".github/scripts/build-pr-explain.py",
+            "start": 896,
+            "end": 905,
+            "text": "    shape = shape_problems(explain)\n    if shape:\n        return None, [f\"[pr-explain-shape] {problem}\" for problem in shape]\n    meta = [] if explain[\"pr\"] == pr else [f\"[pr-explain-meta] pr が公開先の PR #{pr} と違う(今は {explain['pr']})\"]\n    refs = [f\"[pr-explain-ref] {problem}\" for problem in reference_problems(explain)]\n    written, code = with_read_excerpts(explain, repo)\n    if not code:\n        code = primer_code_problems(written)\n    violations = meta + refs + [f\"[pr-explain-code] {problem}\" for problem in code]\n    return (None if violations else written), violations"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "形の検査を通した後、抜粋がすべて読めた場合にだけ `primer_code_problems(written)` を呼ぶ。読み取りに失敗した場合は、その原因を報告して本文検査へ進まない。節の抜粋が欠けていれば `pr-explain-code` にまとめて返し、書き出さない。"
+        },
+        {
+          "kind": "caution",
+          "text": "判定できるのは非空白の実抜粋が存在することまで。説明とコードの対応や必要な範囲は作者が確認する。過去ページを読むための `Shapes` / `Variants` は変えない。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".github/scripts/build-pr-explain.py",
+          "lineRange": {
+            "start": 896,
+            "end": 905
+          },
+          "text": "抽出後の公開条件。",
+          "shas": [
+            "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb"
+          ]
+        }
+      ],
+      "tests": [
+        "text-only",
+        "other-topic",
+        "blank",
+        "keep-output"
+      ],
+      "seeAlso": [
+        "any-strip"
+      ]
+    }
+  ]
+}
