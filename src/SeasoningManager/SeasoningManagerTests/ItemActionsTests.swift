@@ -420,15 +420,19 @@ struct ItemActionsTests {
             return Result { try context.save() }
         }
 
-        guard case .failure(.itemNotInContext) = actions.updateDates(
-            unmanaged, expirationDate: expirationDate, openingDate: originalDate, now: registrationDate
-        ) else {
+        guard
+            case .failure(.itemNotInContext) = actions.updateDates(
+                unmanaged, expirationDate: expirationDate, openingDate: originalDate, now: registrationDate
+            )
+        else {
             Issue.record("未管理の個体が拒否されなかった")
             return
         }
-        guard case .failure(.itemNotInContext) = actions.updateDates(
-            saved, expirationDate: expirationDate, openingDate: originalDate, now: registrationDate
-        ) else {
+        guard
+            case .failure(.itemNotInContext) = actions.updateDates(
+                saved, expirationDate: expirationDate, openingDate: originalDate, now: registrationDate
+            )
+        else {
             Issue.record("別contextの個体が拒否されなかった")
             return
         }
@@ -482,9 +486,11 @@ struct ItemActionsTests {
             return Result { try context.save() }
         }
 
-        guard case .failure(.pendingChanges) = actions.updateDates(
-            target, expirationDate: nil, openingDate: originalDate, now: registrationDate
-        ) else {
+        guard
+            case .failure(.pendingChanges) = actions.updateDates(
+                target, expirationDate: nil, openingDate: originalDate, now: registrationDate
+            )
+        else {
             Issue.record("未保存変更があるcontextで日付が編集された")
             return
         }
@@ -573,9 +579,11 @@ struct ItemActionsTests {
             return Result { try context.save() }
         }
 
-        guard case .failure(.validation(.futureOpeningDate)) = actions.updateDates(
-            item, expirationDate: nil, openingDate: opening, now: now, calendar: try calendar(secondsFromGMT: 0)
-        ) else {
+        guard
+            case .failure(.validation(.futureOpeningDate)) = actions.updateDates(
+                item, expirationDate: nil, openingDate: opening, now: now, calendar: try calendar(secondsFromGMT: 0)
+            )
+        else {
             Issue.record("UTCの翌日の開封日が拒否されなかった")
             return
         }
