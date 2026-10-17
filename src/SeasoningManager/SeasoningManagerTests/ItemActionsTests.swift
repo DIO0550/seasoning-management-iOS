@@ -302,6 +302,395 @@ struct ItemActionsTests {
         expectExistingValues(try #require(savedItems.first { $0.id == existingID }))
     }
 
+    @Test(
+        arguments: [ItemStatus.unopened, .inUse, .consumed],
+        [nil, Date(timeIntervalSince1970: 1_500_000_000), Date(timeIntervalSince1970: 1_800_000_321)] as [Date?]
+    )
+    func dateEditingSavesOnlyTheSelectedItemOnce(_ status: ItemStatus, _ expiration: Date?) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let otherProduct = try makeSavedProduct(in: context, name: "みそ")
+        let item = try makeSavedItem(in: context, product: product, status: status)
+        let sameProductItem = makeExistingItem(product: product)
+        let otherProductItem = makeExistingItem(product: otherProduct)
+        context.insert(sameProductItem)
+        context.insert(otherProductItem)
+        try context.save()
+        let original = ItemSnapshot(item)
+        let sameProductSnapshot = ItemSnapshot(sameProductItem)
+        let otherProductSnapshot = ItemSnapshot(otherProductItem)
+        let opening = item.openingDate.map { $0.addingTimeInterval(86_400) }
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        try actions.updateDates(
+            item, expirationDate: expiration, openingDate: opening, now: registrationDate
+        ).get()
+
+        #expect(saveCalls == 1)
+        #expect(!context.hasChanges)
+        #expect(item.id == original.id)
+        #expect(item.product === product)
+        #expect(item.statusRawValue == original.statusRawValue)
+        #expect(item.consumedDate == original.consumedDate)
+        expectEditedDates(item, expiration: expiration, opening: opening)
+        #expect(ItemSnapshot(sameProductItem) == sameProductSnapshot)
+        #expect(ItemSnapshot(otherProductItem) == otherProductSnapshot)
+        expectProductValues(product)
+        expectProductValues(otherProduct, name: "みそ")
+        #expect(Set((product.items ?? []).map(\.id)) == Set([item.id, sameProductItem.id]))
+        #expect(otherProduct.items?.map(\.id) == [otherProductItem.id])
+
+        let reader = ModelContext(container)
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        #expect(items.count == 3)
+        let saved = try #require(items.first { $0.id == item.id })
+        #expect(ItemSnapshot(saved) == ItemSnapshot(item))
+        #expect(ItemSnapshot(try #require(items.first { $0.id == sameProductItem.id })) == sameProductSnapshot)
+        #expect(ItemSnapshot(try #require(items.first { $0.id == otherProductItem.id })) == otherProductSnapshot)
+        let products = try reader.fetch(FetchDescriptor<Product>())
+        #expect(products.count == 2)
+        expectProductValues(try #require(products.first { $0.id == product.id }))
+        expectProductValues(try #require(products.first { $0.id == otherProduct.id }), name: "みそ")
+    }
+
+    @Test(
+        arguments: [
+            ("inUse", Date(timeIntervalSince1970: 1_750_100_123), ItemRules.ValidationError.futureOpeningDate),
+            ("inUse", nil, .openingDateRequired),
+            ("unopened", Date(timeIntervalSince1970: 1_600_000_000), .unexpectedOpeningDate),
+            ("consumed", Date(timeIntervalSince1970: 1_600_259_200), .consumedDateBeforeOpeningDate),
+            ("futureStatus", nil, .unknownCurrentStatus),
+        ] as [(String, Date?, ItemRules.ValidationError)]
+    )
+    func rejectedDateInputDoesNotSaveOrChangeFields(
+        _ input: (status: String, opening: Date?, error: ItemRules.ValidationError)
+    ) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(
+            in: context, product: product, status: ItemStatus(rawValue: input.status) ?? .unopened
+        )
+        item.statusRawValue = input.status
+        try context.save()
+        let original = ItemSnapshot(item)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        let result = actions.updateDates(
+            item, expirationDate: expirationDate, openingDate: input.opening,
+            now: registrationDate, calendar: try calendar(secondsFromGMT: 0)
+        )
+
+        guard case .failure(.validation(let error)) = result else {
+            Issue.record("日付入力の検証エラーが返されなかった")
+            return
+        }
+        #expect(error == input.error)
+        #expect(saveCalls == 0)
+        #expect(!context.hasChanges)
+        #expect(ItemSnapshot(item) == original)
+        expectProductValues(product)
+        let reader = ModelContext(container)
+        let saved = try #require(reader.fetch(FetchDescriptor<Item>()).first)
+        #expect(ItemSnapshot(saved) == original)
+    }
+
+    @Test func dateEditingRejectsUnmanagedAndOtherContextItemsWithoutChangingThem() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let owner = ModelContext(container)
+        let product = try makeSavedProduct(in: owner)
+        let saved = try makeSavedItem(in: owner, product: product)
+        let unmanaged = makeExistingItem(product: Product(name: "未登録", type: "調味料"))
+        let savedSnapshot = ItemSnapshot(saved)
+        let unmanagedSnapshot = ItemSnapshot(unmanaged)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        guard
+            case .failure(.itemNotInContext) = actions.updateDates(
+                unmanaged, expirationDate: expirationDate, openingDate: originalDate, now: registrationDate
+            )
+        else {
+            Issue.record("未管理の個体が拒否されなかった")
+            return
+        }
+        guard
+            case .failure(.itemNotInContext) = actions.updateDates(
+                saved, expirationDate: expirationDate, openingDate: originalDate, now: registrationDate
+            )
+        else {
+            Issue.record("別contextの個体が拒否されなかった")
+            return
+        }
+
+        #expect(saveCalls == 0)
+        #expect(ItemSnapshot(unmanaged) == unmanagedSnapshot)
+        #expect(ItemSnapshot(saved) == savedSnapshot)
+        #expect(unmanaged.modelContext == nil)
+        #expect(saved.modelContext === owner)
+        #expect(!context.hasChanges)
+        #expect(!owner.hasChanges)
+        expectProductValues(product)
+        let reader = ModelContext(container)
+        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 1)
+        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == savedSnapshot)
+    }
+
+    private enum PendingEdit: CaseIterable {
+        case item
+        case unrelatedProduct
+        case insertedItem
+    }
+
+    @Test(arguments: PendingEdit.allCases)
+    private func dateEditingPreservesPendingChangesWithoutSavingOrRollingBack(_ pendingEdit: PendingEdit) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let product = try makeSavedProduct(in: context)
+        let other = try makeSavedProduct(in: context, name: "みそ")
+        let savedItem = try makeSavedItem(in: context, product: product)
+        let savedSnapshot = ItemSnapshot(savedItem)
+        let target: Item
+        switch pendingEdit {
+        case .item:
+            target = savedItem
+            target.expirationDate = expirationDate
+        case .unrelatedProduct:
+            target = savedItem
+            other.name = "編集中のみそ"
+        case .insertedItem:
+            target = makeExistingItem(product: product)
+            context.insert(target)
+        }
+        let pendingSnapshot = ItemSnapshot(target)
+        let pendingName = other.name
+        let pendingIDs = Set((product.items ?? []).map(\.id))
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        guard
+            case .failure(.pendingChanges) = actions.updateDates(
+                target, expirationDate: nil, openingDate: originalDate, now: registrationDate
+            )
+        else {
+            Issue.record("未保存変更があるcontextで日付が編集された")
+            return
+        }
+
+        #expect(saveCalls == 0)
+        #expect(context.hasChanges)
+        #expect(ItemSnapshot(target) == pendingSnapshot)
+        #expect(target.modelContext === context)
+        #expect(Set((product.items ?? []).map(\.id)) == pendingIDs)
+        expectProductValues(other, name: pendingName)
+        let reader = ModelContext(container)
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        #expect(items.count == 1)
+        #expect(ItemSnapshot(try #require(items.first)) == savedSnapshot)
+        let products = try reader.fetch(FetchDescriptor<Product>())
+        expectProductValues(try #require(products.first { $0.id == other.id }), name: "みそ")
+    }
+
+    @Test func failedDateSaveRestoresAllFieldsAndRelationshipsBeforeRetry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(in: context, product: product, status: .consumed)
+        let sibling = makeExistingItem(product: product)
+        context.insert(sibling)
+        try context.save()
+        let original = ItemSnapshot(item)
+        let siblingSnapshot = ItemSnapshot(sibling)
+        let opening = originalDate.addingTimeInterval(86_400)
+        var saveCalls = 0
+        let failing = ItemActions(context: context) { _ in
+            saveCalls += 1
+            return .failure(StoreError.unavailable)
+        }
+
+        let result = failing.updateDates(
+            item, expirationDate: expirationDate, openingDate: opening, now: registrationDate
+        )
+
+        guard case .failure(.persistence(let error)) = result else {
+            Issue.record("元の日付保存エラーが返されなかった")
+            return
+        }
+        #expect(error as? StoreError == .unavailable)
+        #expect(saveCalls == 1)
+        #expect(!context.hasChanges)
+        #expect(ItemSnapshot(item) == original)
+        #expect(item.product === product)
+        #expect(ItemSnapshot(sibling) == siblingSnapshot)
+        #expect(Set((product.items ?? []).map(\.id)) == Set([item.id, sibling.id]))
+        expectProductValues(product)
+        let failedReader = ModelContext(container)
+        let failedItems = try failedReader.fetch(FetchDescriptor<Item>())
+        #expect(ItemSnapshot(try #require(failedItems.first { $0.id == item.id })) == original)
+
+        // draftの日付はモデルへ事前反映せず、同じ入力をそのまま再試行できる。
+        try ItemActions(context: context).updateDates(
+            item, expirationDate: expirationDate, openingDate: opening, now: registrationDate
+        ).get()
+
+        #expect(!context.hasChanges)
+        expectEditedDates(item, expiration: expirationDate, opening: opening)
+        #expect(item.id == original.id)
+        #expect(item.statusRawValue == original.statusRawValue)
+        #expect(item.consumedDate == original.consumedDate)
+        #expect(item.product === product)
+        #expect(ItemSnapshot(sibling) == siblingSnapshot)
+        let reader = ModelContext(container)
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        #expect(items.count == 2)
+        #expect(ItemSnapshot(try #require(items.first { $0.id == item.id })) == ItemSnapshot(item))
+        #expect(ItemSnapshot(try #require(items.first { $0.id == sibling.id })) == siblingSnapshot)
+    }
+
+    @Test func dateEditingUsesTheInjectedCalendarAtTheDayBoundary() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(in: context, product: product)
+        let original = ItemSnapshot(item)
+        let now = Date(timeIntervalSince1970: 1_736_006_400)  // 2025-01-04 16:00 UTC
+        let opening = now.addingTimeInterval(9 * 3600)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        guard
+            case .failure(.validation(.futureOpeningDate)) = actions.updateDates(
+                item, expirationDate: nil, openingDate: opening, now: now, calendar: try calendar(secondsFromGMT: 0)
+            )
+        else {
+            Issue.record("UTCの翌日の開封日が拒否されなかった")
+            return
+        }
+        #expect(saveCalls == 0)
+        #expect(ItemSnapshot(item) == original)
+        #expect(!context.hasChanges)
+
+        try actions.updateDates(
+            item, expirationDate: nil, openingDate: opening, now: now,
+            calendar: try calendar(secondsFromGMT: 9 * 3600)
+        ).get()
+
+        #expect(saveCalls == 1)
+        #expect(item.openingDate == opening)
+        #expect(item.expirationDate == nil)
+        #expect(item.updatedAt == now)
+        #expect(!context.hasChanges)
+        let reader = ModelContext(container)
+        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == ItemSnapshot(item))
+    }
+
+    @Test func editedDatesSurviveReopeningStore() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("edited-items.store")
+        let opening = originalDate.addingTimeInterval(86_400)
+        let expected: ItemSnapshot
+
+        do {
+            let container = try makeContainer(at: url)
+            let context = ModelContext(container)
+            let product = try makeSavedProduct(in: context)
+            let item = try makeSavedItem(in: context, product: product, status: .consumed)
+            try ItemActions(context: context).updateDates(
+                item, expirationDate: nil, openingDate: opening, now: registrationDate
+            ).get()
+            expected = ItemSnapshot(item)
+            #expect(!context.hasChanges)
+        }
+
+        let reopened = try makeContainer(at: url)
+        let reader = ModelContext(reopened)
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        let products = try reader.fetch(FetchDescriptor<Product>())
+        #expect(items.count == 1)
+        #expect(products.count == 1)
+        let item = try #require(items.first)
+        let product = try #require(products.first)
+        #expect(ItemSnapshot(item) == expected)
+        expectEditedDates(item, expiration: nil, opening: opening)
+        #expect(item.product === product)
+        #expect(product.items?.map(\.id) == [item.id])
+        expectProductValues(product)
+    }
+
+    private struct ItemSnapshot: Equatable {
+        let id: UUID
+        let productID: UUID?
+        let expirationDate: Date?
+        let statusRawValue: String
+        let openingDate: Date?
+        let consumedDate: Date?
+        let updatedAt: Date
+
+        init(_ item: Item) {
+            id = item.id
+            productID = item.product?.id
+            expirationDate = item.expirationDate
+            statusRawValue = item.statusRawValue
+            openingDate = item.openingDate
+            consumedDate = item.consumedDate
+            updatedAt = item.updatedAt
+        }
+    }
+
+    private func calendar(secondsFromGMT: Int) throws -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: secondsFromGMT))
+        return calendar
+    }
+
+    private func makeSavedItem(
+        in context: ModelContext, product: Product, status: ItemStatus = .inUse
+    ) throws -> Item {
+        let item = Item(product: product, expirationDate: originalDate, status: status, updatedAt: originalDate)
+        switch status {
+        case .unopened:
+            break
+        case .inUse:
+            item.openingDate = originalDate
+        case .consumed:
+            item.openingDate = originalDate
+            item.consumedDate = originalDate.addingTimeInterval(172_800)
+        }
+        context.insert(item)
+        try context.save()
+        return item
+    }
+
+    private func expectEditedDates(_ item: Item, expiration: Date?, opening: Date?) {
+        #expect(item.expirationDate == expiration)
+        #expect(item.openingDate == opening)
+        #expect(item.updatedAt == registrationDate)
+    }
+
     private func makeContainer(at url: URL? = nil) throws -> ModelContainer {
         let schema = Schema([Product.self, Item.self])
         if let url {
