@@ -663,6 +663,7 @@ struct ItemActionsTests {
             }
         }
 
+        @MainActor
         func apply(
             _ actions: ItemActions, to item: Item, date: Date, now: Date, calendar: Calendar = .current
         ) -> Result<Void, ItemActions.ActionError> {
