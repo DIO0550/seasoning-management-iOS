@@ -511,9 +511,9 @@
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
-            "start": 667,
+            "start": 666,
             "end": 676,
-            "text": "        func apply(\n            _ actions: ItemActions, to item: Item, date: Date, now: Date, calendar: Calendar = .current\n        ) -> Result<Void, ItemActions.ActionError> {\n            switch self {\n            case .open:\n                return actions.open(item, openingDate: date, now: now, calendar: calendar)\n            case .consume:\n                return actions.consume(item, consumedDate: date, now: now, calendar: calendar)\n            }\n        }"
+            "text": "        @MainActor\n        func apply(\n            _ actions: ItemActions, to item: Item, date: Date, now: Date, calendar: Calendar = .current\n        ) -> Result<Void, ItemActions.ActionError> {\n            switch self {\n            case .open:\n                return actions.open(item, openingDate: date, now: now, calendar: calendar)\n            case .consume:\n                return actions.consume(item, consumedDate: date, now: now, calendar: calendar)\n            }\n        }"
           }
         },
         {
@@ -529,7 +529,7 @@
         {
           "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
           "lineRange": {
-            "start": 667,
+            "start": 666,
             "end": 676
           },
           "text": "この PR の実装で使う箇所。",
