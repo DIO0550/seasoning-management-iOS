@@ -1,0 +1,268 @@
+{
+  "version": 2,
+  "pr": 117,
+  "headBranch": "fix/pr-explain-code-evidence",
+  "baseBranch": "master",
+  "mergeBase": "89b35820d79036691478fe5ce34ff9dca8172b7d",
+  "head": "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb",
+  "groups": [
+    {
+      "label": "Data",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "label": "画面・起動",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "label": "単体テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "label": "ハーネス",
+      "files": [
+        {
+          "path": ".claude/skills/pr-explain/SKILL.md",
+          "status": "M",
+          "oldPath": null,
+          "additions": 15,
+          "deletions": 6,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": ".claude/skills/pr-explain/templates/explain.json",
+          "status": "M",
+          "oldPath": null,
+          "additions": 16,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/build-pr-explain-cases.sh",
+          "status": "M",
+          "oldPath": null,
+          "additions": 57,
+          "deletions": 8,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": ".github/scripts/build-pr-explain-local.py",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/build-pr-explain.py",
+          "status": "M",
+          "oldPath": null,
+          "additions": 20,
+          "deletions": 1,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": ".github/scripts/lib/cases-report.sh",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/lib/embedded_regions.py",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/pr-explain-core-cases.sh",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/pr-explain-pages-cases.sh",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/pr-explain-pages.sh",
+          "changed": false
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [],
+    "removed": [],
+    "files": []
+  },
+  "commits": [
+    {
+      "sha": "c4d6fbccf5a754d7dd59ee0c98a782a3ba8973fb",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-10-17T15:48:55+09:00",
+      "subject": "fix: 技術解説の各節に実コード抜粋を必須化",
+      "body": "",
+      "files": [
+        {
+          "path": ".claude/skills/pr-explain/SKILL.md",
+          "status": "M",
+          "oldPath": null,
+          "additions": 15,
+          "deletions": 6,
+          "patch": "@@ -83,12 +83,14 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123\n    - 検証エージェントの指摘: とくに `test-reviewer` の「壊して落ちた / 落ちなかった判断」はテストの材料\n    - このセッションの記憶: Issue に書くほどではなかった判断・試して捨てた形\n 2. **見本 [`templates/explain.json`](templates/explain.json) をリポジトリの外の作業用ファイルへ写して\n-   書く**(`mktemp -d` など)。見本は `excerpt` 以外のすべてのキーと、Target の 5 つの kind・primers の\n-   2 つの kind・Passage の excerpt 以外の 8 つの kind を使っている。要らない任意のキーは消す\n+   書く**(`mktemp -d` など)。見本は Target の 5 つの kind・primers の 2 つの kind・Passage の 9 つの kind を\n+   使っている。パス・sha・行は実際の PR に置き換え、要らない任意のキーは消す\n 3. **下の「explain.json の形」と「書き方」で書く**\n 4. **事実の主張を確かめる。** 解説は「この関数は◯◯を返す」「この操作で□□になる」の集まりなので、\n    対象 sha のソース・テスト・差分を実際に読み、各主張と対応する根拠を確認する。\n-   テストの宣言とテスト成功は別に記す。Note の行番号は、そのコミット時点のファイルを開いて合わせる\n+   テストの宣言とテスト成功は別に記す。Note の行番号は、そのコミット時点のファイルを開いて合わせる。\n+   公開前に上のローカル生成を行い、画面または DOM で技術の各節にコード本文と対応する説明が出ていることを確認する。\n+   検査成功は本文の存在などの確認であり、説明の質の保証として扱わない\n 5. **置く**\n \n    ```bash\n@@ -98,6 +100,7 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123\n    - push の前に `build-pr-explain.py` が検査し、テストの抜粋と、primers の段の抜粋(`excerpt`)に中身(`text`)と、埋め込み\n      (script / style 要素・ヒアドキュメント)の中から始まるものには開いた行(`openingLine`)を足す(拡張子と規則は\n      `.github/scripts/lib/embedded_regions.py`)。落ちたら報告を読んで直す(報告の分類は `build-pr-explain.py` の冒頭)\n+   - `language` / `codebase` の各節に、その sha の空白以外のコード本文を持つ `excerpt` が 1 件以上なければ公開しない\n    - 解説の `sha` は push してから置く。リモートの追跡ブランチに無い sha の解説は置かない\n    - 終了コードの意味は `pr-explain-pages.sh` の冒頭。**3** なら `PR Explain` の run の完了を待って\n      からやり直す。閉じた PR には置かない\n@@ -107,6 +110,7 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123\n      他のフォルダ・他のブランチは触らない\n 6. **`PR Explain Deploy` の公開成功と固定 PR コメントを確認して、URL をユーザーに伝える**。\n    コメントには閲覧リンク・対象 SHA・公開 CI のリンクが出る。公開失敗や古い head の場合は新しいリンクを投稿しない。\n+   公開ページでも技術の各節を開き、コード本文が表示されることを確認する。\n \n ## explain.json の形\n \n@@ -150,7 +154,7 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123\n | `primers` | 任意 | Primer[]。無いか空なら、技術の手引きは「書かれていない」と出す |\n | `terms` | 任意 | Term[] |\n \n-**型**(`?` は任意)\n+**型**(`?` は読み取り用の形では任意。新しく公開する解説の条件は表の下も参照)\n \n | 型 | キー |\n | --- | --- |\n@@ -185,6 +189,10 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123\n | LineRange | `start`(1 以上)`end`(start 以上) |\n | Term | `id` `label`(一意)`text`。どれかの印から指す |\n \n+公開時は `language` / `codebase` の各 Primer の `passages` に、その `sha` から実抽出できる空白以外の\n+`excerpt` を 1 件以上含める。過去の解説を読む形は変えず、`passages?` の省略を新しい公開の許可とは扱わない。\n+`primers` 自体の省略・空配列は許可する。テストの抜粋の条件は変えない。\n+\n id・sha・path・layer は一覧の中で一意にする(features / messages / flows / suites / tests の id、\n commitStories の sha、concepts の path、layerRoles の layer、primers の id(kind をまたいで)、terms の id と label)。\n todo のテストは commit も excerpt も持たない。\n@@ -213,10 +221,11 @@ layer / file・LayerRole の layer・concept のパス・出てくる場所の `\n | `messages` / `flows` | 箱どうしのやりとり。`kind` は変える(`cmd`)/ 問い合わせる(`qry`)/ 知らせる(`evt`)、`code` は実際の呼び出しの綴り。このブランチで足した・変えた・消したものは `status` を `added` / `changed` / `removed` にする(テストの抜けは `added` と `changed` で数える)。`flows` は操作・イベントごとのやりとりの順で、2〜4 本 | 1 つの関数の中の手順 |\n | `commitStories` | コミットごとに、`role`(何をするコミットか 1 行)・`why`(なぜこの順でこうしたか)・`review`(レビューで見てほしい点を 1 点 1 文)・振る舞いの前後・行への注釈(`notes`)。`phase` は下ごしらえ(`prep`)/ 本体(`core`)/ 安定化(`hard`)/ 指摘の反映(`revise`)/ 仕上げ(`fin`) | 件名・本文の写し(地図から出る) |\n | `suites` / `tests` | テストごとに、守る振る舞い(`why`)・前提 / 操作 / 期待・使った技法・境界の値の表(`values`)・確かめているやりとり(`covers`)と箱(`targets`)。テストコードは `excerpt` で範囲を指す | テストコードの写し |\n-| `primers` | この PR を読むのに要る技術。language は差分に出てくる順、codebase は全体の流れから部品へ。`occurrences` は 1 件以上で、行は解説の `sha` の時点、`shas` はその箇所を足した・変えたコミット。PR ごとに書く(共有の仕組みは無い) | コード例の写し(`excerpt` で実物の行範囲を指す) |\n+| `primers` | この PR を読むのに要る技術。language は差分に出てくる順、codebase は全体の流れから部品へ。各節に実コードの `excerpt` と、その入力・分岐・結果・採用理由を必要に応じて説明する段を置く。`occurrences` は 1 件以上で、行は解説の `sha` の時点、`shas` はその箇所を足した・変えたコミット。PR ごとに書く(共有の仕組みは無い) | コード本文の手書きコピー。省略する意味ではなく、`excerpt` で実物の行範囲を指す |\n | `terms` | 1 語 1 回。意味は 1〜2 文 | |\n \n - **説明文でも、識別子を地の文の主語にしない。** 実装の名前とファイル名を指すときは `` `…` `` で囲む\n+- 各節の `excerpt` は本文に必要。`declaration` の宣言、`occurrences` の参照先、別の節やテストの抜粋で代用しない\n - **`review` の文は、確認の印の鍵になる。** 読み手のブラウザは「コミットの sha + 文」で確認済みを\n   覚えるので、文を書き直すとその点の印は外れる(別の点へ移らない)\n - **`tests[].name` はテスト名そのままで書く。** ページは、地図がテスト名を調べたファイル(`tests.files`。\n@@ -248,7 +257,7 @@ layer / file・LayerRole の layer・concept のパス・出てくる場所の `\n | ファイル | 内容 |\n | --- | --- |\n | [`templates/index.html`](templates/index.html) | ページの枠(CSS・固定スクリプト・CSP)。固定スクリプトを変えたら CSP の `sha256-` も直す(`check-pr-explain-template.py` が突き合わせる) |\n-| [`templates/explain.json`](templates/explain.json) | `excerpt` 以外のすべてのキーと、Target の 5 つの kind・primers の 2 つの kind・Passage の excerpt 以外の 8 つの kind を使う解説の見本 |\n+| [`templates/explain.json`](templates/explain.json) | Target の 5 つの kind・primers の 2 つの kind・Passage の 9 つの kind を使い、両方の技術の節に `excerpt` を含む解説の見本 |\n | `.github/scripts/build-pr-explain.py` | 解説の検査と、抜粋の中身の書き足し |\n | `.github/scripts/lib/embedded_regions.py` | 抜粋・差分の hunk の始まりの行で効いている埋め込み(script / style 要素・ヒアドキュメント)を開いた行。検査と地図が使う |\n | `.github/scripts/check-pr-explain-template.py` | 枠の CSP と、固定スクリプトが HTML として解釈させる API を使っていないかの検査 |",
+          "patchLines": 76,
+          "truncated": false
+        },
+        {
+          "path": ".claude/skills/pr-explain/templates/explain.json",
+          "status": "M",
+          "oldPath": null,
+          "additions": 16,
+          "deletions": 0,
+          "patch": "@@ -411,6 +411,14 @@\n         {\n           \"kind\": \"memo\",\n           \"text\": \"フレームワークの例外は保存の境界で結果へ変換する。\"\n+        },\n+        {\n+          \"kind\": \"excerpt\",\n+          \"excerpt\": {\n+            \"path\": \"src/SeasoningManager/SeasoningManager/Domain/ItemRegistration.swift\",\n+            \"start\": 1,\n+            \"end\": 3\n+          }\n         }\n       ],\n       \"occurrences\": [\n@@ -454,6 +462,14 @@\n         {\n           \"kind\": \"history\",\n           \"text\": \"この見本では、空の名前でも保存を試していた入口から切り替える。\"\n+        },\n+        {\n+          \"kind\": \"excerpt\",\n+          \"excerpt\": {\n+            \"path\": \"src/SeasoningManager/SeasoningManager/Data/ItemActions.swift\",\n+            \"start\": 1,\n+            \"end\": 3\n+          }\n         }\n       ],\n       \"occurrences\": [",
+          "patchLines": 30,
+          "truncated": false
+        },
+        {
+          "path": ".github/scripts/build-pr-explain-cases.sh",
+          "status": "M",
+          "oldPath": null,
+          "additions": 57,
+          "deletions": 8,
+          "patch": "@@ -35,6 +35,7 @@ git -C \"$repo\" config user.name cases\n git -C \"$repo\" config user.email cases@example.com\n printf 'one\\ntwo\\nthree\\nfour\\nfive\\n' > \"$repo/kept.txt\"\n printf 'a\\nb' > \"$repo/noeol.txt\"\n+printf '   \\n\\t\\n\\n' > \"$repo/blank.txt\"\n mkdir -p \"$repo/sub\"\n # 埋め込みの中から始まる抜粋のためのファイル。中身は Python の文字列で書く(理由は `pr-explain-core-cases.sh` の冒頭)。\n python3 - \"$repo\" <<'PY'\n@@ -70,14 +71,26 @@ git -C \"$repo\" add -A && git -C \"$repo\" commit --quiet -m explained\n sha=\"$(git -C \"$repo\" rev-parse HEAD)\"\n # 解説を書いた後の編集。抜粋は解説時点の sha から読むので載らない(作業ツリーを読む実装なら載る)。\n printf 'ONE\\nTWO\\nTHREE\\nFOUR\\nFIVE\\nSIX\\n' > \"$repo/kept.txt\"\n+printf 'not blank\\nanymore\\ncode\\n' > \"$repo/blank.txt\"\n \n # 見本の sha をこのリポジトリのコミットにした基準と、必須のキーだけの基準。\n python3 - \"$sample\" \"$sha\" \"$work\" <<'PY'\n import json, sys\n sample, sha, work = sys.argv[1:4]\n explain = {**json.load(open(sample, encoding=\"utf-8\")), \"sha\": sha}\n+# 見本から片方の kind の抜粋が消えた退行を、フィクスチャへの置き換え前に捕まえる。\n+assert {p[\"kind\"] for p in explain[\"primers\"]} == {\"language\", \"codebase\"}\n+assert all(any(s[\"kind\"] == \"excerpt\" for s in p.get(\"passages\", [])) for p in explain[\"primers\"])\n+for primer in explain[\"primers\"]:\n+    for passage in primer[\"passages\"]:\n+        if passage[\"kind\"] == \"excerpt\":\n+            passage[\"excerpt\"] = {\"path\": \"kept.txt\", \"start\": 2, \"end\": 3}\n minimal = {\"version\": 1, \"pr\": explain[\"pr\"], \"sha\": sha, \"overview\": {\"title\": \"題\", \"lead\": \"要約\", \"before\": [], \"after\": [{\"text\": \"後\"}]}}\n-for name, value in ((\"sample\", explain), (\"minimal\", minimal)):\n+bases = {\"sample\": explain, \"minimal\": minimal}\n+for kind in (\"language\", \"codebase\"):\n+    primer = {\"kind\": kind, \"id\": \"p\", \"category\": \"c\", \"label\": \"題\", \"gist\": \"要するに\", \"occurrences\": [{\"path\": \"kept.txt\", \"text\": \"ここ\"}], \"passages\": [{\"kind\": \"excerpt\", \"excerpt\": {\"path\": \"kept.txt\", \"start\": 2, \"end\": 3}}]}\n+    bases[kind] = {**minimal, \"primers\": [primer]}\n+for name, value in bases.items():\n     open(f\"{work}/{name}.json\", \"w\", encoding=\"utf-8\").write(json.dumps(value, ensure_ascii=False))\n PY\n pr=\"$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))[\"pr\"])' \"$sample\")\"\n@@ -247,8 +260,29 @@ deny|ref|sample|変わらないことの tests が tests に無い|d[\"impact\"][\"\n deny|code|sample|解説時点の sha がこのリポジトリに無い|d[\"sha\"] = \"f\" * 40\n deny|code|sample|抜粋のパスが解説時点の sha に無い|d[\"tests\"][0][\"excerpt\"] = {\"path\": \"missing.txt\", \"start\": 1, \"end\": 1}\n deny|code|sample|範囲の終わりがファイルの行数 + 1|d[\"tests\"][0][\"excerpt\"] = {\"path\": \"kept.txt\", \"start\": 5, \"end\": 6}\n-pass|-|sample|技術の手引きの見本は、2 つの kind・excerpt 以外の 8 つの段・印の場所 4 種類(gist・text・引数・注意)・sha 2 つの出てくる場所を使い、どの用語も印から指す|import re; ps = d[\"primers\"]; ss = [x for p in ps for x in p.get(\"passages\", [])]; marked = lambda kinds: any(\"[[\" in x[\"text\"] for x in ss if x[\"kind\"] in kinds); assert sorted({p[\"kind\"] for p in ps}) == [\"codebase\", \"language\"] and sorted({x[\"kind\"] for x in ss}) == sorted([\"text\", \"declaration\", \"parameters\", \"caution\", \"memo\", \"rule\", \"spec\", \"history\"]) and all(\"[[\" in p[\"gist\"] for p in ps) and marked({\"text\"}) and any(\"[[\" in a[\"text\"] for x in ss if x[\"kind\"] == \"parameters\" for a in x[\"parameters\"]) and marked({\"caution\", \"memo\", \"rule\", \"spec\", \"history\"}) and \"[[`\" in json.dumps(ps, ensure_ascii=False) and any(len(o.get(\"shas\", [])) == 2 for p in ps for o in p[\"occurrences\"]) and {t[\"id\"] for t in d[\"terms\"]} == set(re.findall(r\"\\|([A-Za-z0-9_-]+)\\]\\]\", json.dumps(ps, ensure_ascii=False)))\n-pass|-|minimal|言語・フレームワークの節は、必須のキーだけでも通る|d[\"primers\"] = [{\"kind\": \"language\", \"id\": \"p\", \"category\": \"c\", \"label\": \"題\", \"gist\": \"要するに\", \"occurrences\": [{\"path\": \"a.ts\", \"text\": \"ここ\"}]}]\n+pass|-|sample|技術の手引きの見本は、2 つの kind・9 つの段・印の場所 4 種類(gist・text・引数・注意)・sha 2 つの出てくる場所を使い、どの用語も印から指す|import re; ps = d[\"primers\"]; ss = [x for p in ps for x in p.get(\"passages\", [])]; marked = lambda kinds: any(\"[[\" in x[\"text\"] for x in ss if x[\"kind\"] in kinds); assert sorted({p[\"kind\"] for p in ps}) == [\"codebase\", \"language\"] and sorted({x[\"kind\"] for x in ss}) == sorted([\"text\", \"declaration\", \"parameters\", \"excerpt\", \"caution\", \"memo\", \"rule\", \"spec\", \"history\"]) and all(\"[[\" in p[\"gist\"] for p in ps) and marked({\"text\"}) and any(\"[[\" in a[\"text\"] for x in ss if x[\"kind\"] == \"parameters\" for a in x[\"parameters\"]) and marked({\"caution\", \"memo\", \"rule\", \"spec\", \"history\"}) and \"[[`\" in json.dumps(ps, ensure_ascii=False) and any(len(o.get(\"shas\", [])) == 2 for p in ps for o in p[\"occurrences\"]) and {t[\"id\"] for t in d[\"terms\"]} == set(re.findall(r\"\\|([A-Za-z0-9_-]+)\\]\\]\", json.dumps(ps, ensure_ascii=False)))\n+pass|-|language|言語の節に実コードの抜粋があれば通る|\n+pass|-|codebase|実装の節に実コードの抜粋があれば通る|\n+pass|-|minimal|primers が空配列でも通る|d[\"primers\"] = []\n+deny|code|language|言語の節の passages が省略されている|del d[\"primers\"][0][\"passages\"]\n+deny|code|codebase|実装の節の passages が省略されている|del d[\"primers\"][0][\"passages\"]\n+deny|code|language|言語の節の passages が空配列|d[\"primers\"][0][\"passages\"] = []\n+deny|code|codebase|実装の節の passages が空配列|d[\"primers\"][0][\"passages\"] = []\n+deny|code|language|言語の節に説明文だけある|d[\"primers\"][0][\"passages\"] = [{\"kind\": \"text\", \"text\": \"コードの説明\"}]\n+deny|code|codebase|実装の節に説明文だけある|d[\"primers\"][0][\"passages\"] = [{\"kind\": \"text\", \"text\": \"コードの説明\"}]\n+deny|code|language|言語の節に手書きの宣言だけある|d[\"primers\"][0][\"passages\"] = [{\"kind\": \"declaration\", \"code\": \"func f()\"}]\n+deny|code|codebase|実装の節に手書きの宣言だけある|d[\"primers\"][0][\"passages\"] = [{\"kind\": \"declaration\", \"code\": \"func f()\"}]\n+deny|code|language|言語の節の出てくる場所は本文の代わりにならない|d[\"primers\"][0][\"passages\"] = []; d[\"primers\"][0][\"occurrences\"][0].update(lineRange={\"start\": 2, \"end\": 3}, text=\"two\\nthree\")\n+deny|code|codebase|実装の節の出てくる場所は本文の代わりにならない|d[\"primers\"][0][\"passages\"] = []; d[\"primers\"][0][\"occurrences\"][0].update(lineRange={\"start\": 2, \"end\": 3}, text=\"two\\nthree\")\n+deny|code|language|別の節だけの抜粋では言語の節を補えない|d[\"primers\"].append({**d[\"primers\"][0], \"id\": \"other\"}); d[\"primers\"][0][\"passages\"] = []\n+deny|code|codebase|別の節だけの抜粋では実装の節を補えない|d[\"primers\"].append({**d[\"primers\"][0], \"id\": \"other\"}); d[\"primers\"][0][\"passages\"] = []\n+deny|code|language|テストだけの抜粋では言語の節を補えない|d[\"suites\"] = [{\"id\": \"s\", \"label\": \"確認\", \"file\": \"kept.txt\"}]; d[\"tests\"] = [{\"id\": \"t\", \"suite\": \"s\", \"name\": \"f\", \"techniques\": [\"boundary\"], \"why\": \"理由\", \"given\": \"前提\", \"when\": \"操作\", \"then\": \"結果\", \"excerpt\": d[\"primers\"][0][\"passages\"][0][\"excerpt\"]}]; d[\"primers\"][0][\"passages\"] = []\n+deny|code|codebase|テストだけの抜粋では実装の節を補えない|d[\"suites\"] = [{\"id\": \"s\", \"label\": \"確認\", \"file\": \"kept.txt\"}]; d[\"tests\"] = [{\"id\": \"t\", \"suite\": \"s\", \"name\": \"f\", \"techniques\": [\"boundary\"], \"why\": \"理由\", \"given\": \"前提\", \"when\": \"操作\", \"then\": \"結果\", \"excerpt\": d[\"primers\"][0][\"passages\"][0][\"excerpt\"]}]; d[\"primers\"][0][\"passages\"] = []\n+deny|code|language|言語の節の抜粋が sha では空白だけ|d[\"primers\"][0][\"passages\"][0][\"excerpt\"] = {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}\n+deny|code|codebase|実装の節の抜粋が sha では空白だけ|d[\"primers\"][0][\"passages\"][0][\"excerpt\"] = {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}\n+pass|-|language|言語の節に空白と実コードの両方の抜粋があれば通る|d[\"primers\"][0][\"passages\"].append({\"kind\": \"excerpt\", \"excerpt\": {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}})\n+pass|-|codebase|実装の節に空白と実コードの両方の抜粋があれば通る|d[\"primers\"][0][\"passages\"].append({\"kind\": \"excerpt\", \"excerpt\": {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}})\n+pass|-|sample|テストの抜粋が空白だけでも従来どおり通る|d[\"tests\"][0][\"excerpt\"] = {\"path\": \"blank.txt\", \"start\": 1, \"end\": 3}\n pass|-|sample|技術の節の題に識別子とバッククォートを書ける|d[\"primers\"][0][\"label\"] = \"`hasOpenedDocuments` の型の述語\"\n pass|-|sample|用語の名前に、継ぎ目のある複合語(WebView)を書ける|d[\"terms\"][0][\"label\"] = \"WebView\"\n pass|-|sample|関連(seeAlso)は、別の kind の節を指せる|d[\"primers\"][0][\"seeAlso\"] = [d[\"primers\"][1][\"id\"]]; d[\"primers\"][1][\"seeAlso\"] = [d[\"primers\"][0][\"id\"]]\n@@ -321,7 +355,7 @@ printf '%s\\n' \"$cases\" > \"$work/cases.txt\"\n python3 - \"$work\" <<'PY'\n import json, sys\n work = sys.argv[1]\n-bases = {name: open(f\"{work}/{name}.json\", encoding=\"utf-8\").read() for name in (\"sample\", \"minimal\")}\n+bases = {name: open(f\"{work}/{name}.json\", encoding=\"utf-8\").read() for name in (\"sample\", \"minimal\", \"language\", \"codebase\")}\n for number, line in enumerate(open(f\"{work}/cases.txt\", encoding=\"utf-8\"), 1):\n     fields = line.rstrip(\"\\n\").split(\"|\", 4)\n     if len(fields) < 5:\n@@ -361,6 +395,13 @@ import json, subprocess, sys\n given = json.load(open(sys.argv[1], encoding=\"utf-8\"))\n out = json.load(open(sys.argv[2], encoding=\"utf-8\"))\n sha = sys.argv[5]\n+def without_excerpt_text(document):\n+    copy = json.loads(json.dumps(document))\n+    excerpts = [t[\"excerpt\"] for t in copy.get(\"tests\", []) if \"excerpt\" in t]\n+    excerpts += [s[\"excerpt\"] for p in copy.get(\"primers\", []) for s in p.get(\"passages\", []) if s[\"kind\"] == \"excerpt\"]\n+    for excerpt in excerpts:\n+        excerpt.pop(\"text\", None)\n+    return copy\n # その commit のファイルの n 行目。開いた行の期待値を、この判定表に綴りを写さずフィクスチャから引く。\n line_at = lambda rev, path, number: subprocess.run([\"git\", \"-C\", sys.argv[4], \"show\", f\"{rev}:{path}\"], capture_output=True, text=True, check=True).stdout.split(\"\\n\")[number - 1]\n print(\"pass\" if eval(sys.argv[3]) else \"deny\")\n@@ -369,11 +410,11 @@ PY\n \n with_excerpt='d[\"tests\"][0][\"excerpt\"] = {\"path\": \"kept.txt\", \"start\": 2, \"end\": 3}'\n \n-run_build sample \"\" --repo \"$repo\"\n+run_build minimal \"\" --repo \"$repo\"\n report pass \"$(inspect_output 'json.dumps(out, ensure_ascii=False) == json.dumps(given, ensure_ascii=False)')\" \"excerpt が無ければ、書き出すのは渡した解説と同じ JSON(キーの順も同じ)\"\n \n run_build sample \"$with_excerpt\" --repo \"$repo\"\n-report pass \"$(inspect_output '\"text\" in out[\"tests\"][0][\"excerpt\"] and json.dumps({**out, \"tests\": [{**out[\"tests\"][0], \"excerpt\": {k: v for k, v in out[\"tests\"][0][\"excerpt\"].items() if k != \"text\"}}, *out[\"tests\"][1:]]}, ensure_ascii=False) == json.dumps(given, ensure_ascii=False)')\" \"埋め込みの無いファイルの抜粋に足すのは text だけ\"\n+report pass \"$(inspect_output '\"text\" in out[\"tests\"][0][\"excerpt\"] and json.dumps(without_excerpt_text(out), ensure_ascii=False) == json.dumps(given, ensure_ascii=False)')\" \"埋め込みの無いファイルの抜粋に足すのは text だけ\"\n report pass \"$(inspect_output 'out[\"tests\"][0][\"excerpt\"][\"text\"] == \"two\\nthree\"')\" \"text は作業ツリーではなく解説時点の sha の中身になる\"\n \n printf '{\"before\": true}\\n' > \"$work/out.json\"\n@@ -383,6 +424,13 @@ kept_out=deny\n [ \"$status\" -eq 1 ] && [ \"$(cat \"$work/out.json\")\" = '{\"before\": true}' ] && kept_out=pass\n report pass \"$kept_out\" \"違反があれば終了コード 1 で、書き出し先のファイルを書き換えない\"\n \n+printf '{\"before\": true}\\n' > \"$work/out.json\"\n+make_case codebase 'd[\"primers\"][0][\"passages\"] = []'\n+code_report=\"$(python3 \"$builder\" \"$work/case.json\" --pr \"$pr\" --out \"$work/out.json\" --repo \"$repo\" 2>&1)\"; status=$?\n+kept_out=deny\n+[ \"$status\" -eq 1 ] && [ \"$(cat \"$work/out.json\")\" = '{\"before\": true}' ] && [[ \"$code_report\" == '[pr-explain-code] primers[0] (p): '* ]] && kept_out=pass\n+report pass \"$kept_out\" \"本文の抜粋が無ければ節の位置と id を報告し、書き出し先を上書きしない\"\n+\n run_build minimal \"\" --repo \"$repo\"; status=$?\n written=deny\n [ \"$status\" -eq 0 ] && [ \"$(inspect_output 'out[\"version\"] == 1')\" = pass ] && written=pass\n@@ -405,7 +453,7 @@ report pass \"$(inspect_output '\"tests\" not in out and out[\"primers\"][0][\"passage\n two_passage_excerpts='ps = d[\"primers\"][0][\"passages\"]; ex = lambda start, end: {\"kind\": \"excerpt\", \"excerpt\": {\"path\": \"kept.txt\", \"start\": start, \"end\": end, \"emphasis\": [{\"start\": end, \"end\": end}]}}; d[\"primers\"][0][\"passages\"] = [ps[0], ex(1, 2), ps[1], ex(4, 5), *ps[2:]]; d[\"tests\"][0][\"excerpt\"] = {\"path\": \"kept.txt\", \"start\": 2, \"end\": 3, \"emphasis\": [{\"start\": 2, \"end\": 2}]}'\n run_build sample \"$two_passage_excerpts\" --repo \"$repo\"\n report pass \"$(inspect_output '[out[\"tests\"][0][\"excerpt\"][\"text\"], out[\"primers\"][0][\"passages\"][1][\"excerpt\"][\"text\"], out[\"primers\"][0][\"passages\"][3][\"excerpt\"][\"text\"]] == [\"two\\nthree\", \"one\\ntwo\", \"four\\nfive\"]')\" \"テストの抜粋と、1 節の 2 つの段の抜粋の 3 か所すべてに、それぞれの範囲の中身が入る\"\n-report pass \"$(inspect_output '[excerpt.pop(\"text\") for excerpt in (out[\"tests\"][0][\"excerpt\"], out[\"primers\"][0][\"passages\"][1][\"excerpt\"], out[\"primers\"][0][\"passages\"][3][\"excerpt\"])] and json.dumps(out, ensure_ascii=False) == json.dumps(given, ensure_ascii=False)')\" \"埋め込みの無いファイルの段の抜粋に足すのも text だけで、強調(emphasis)を含め、ほかは渡したとおり\"\n+report pass \"$(inspect_output 'json.dumps(without_excerpt_text(out), ensure_ascii=False) == json.dumps(given, ensure_ascii=False)')\" \"埋め込みの無いファイルの段の抜粋に足すのも text だけで、強調(emphasis)を含め、ほかは渡したとおり\"\n \n # 埋め込み(script / style の要素・JS などのヒアドキュメント)の中から始まる抜粋には、それを開いた行を足す。\n # $1 パス, $2 始まりの行, $3 終わりの行。tests[0] の抜粋をそこへ置いて検査を走らせる\n@@ -435,8 +483,9 @@ report pass \"$(inspect_output \"out['primers'][0]['passages'][0]['excerpt'].get('\n \n make_case sample 'd[\"primers\"][0][\"passages\"].append({\"kind\": \"excerpt\", \"excerpt\": {\"path\": \"missing.txt\", \"start\": 1, \"end\": 1}})'\n code_report=\"$(python3 \"$builder\" \"$work/case.json\" --pr \"$pr\" --out \"$work/out.json\" --repo \"$repo\" 2>&1)\"\n+missing_index=\"$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1]))[\"primers\"][0][\"passages\"]) - 1)' \"$work/case.json\")\"\n code_route=deny\n-[ \"$code_report\" = \"[pr-explain-code] primers[0].passages[5].excerpt: missing.txt は $sha に無い\" ] && code_route=pass\n+[ \"$code_report\" = \"[pr-explain-code] primers[0].passages[$missing_index].excerpt: missing.txt は $sha に無い\" ] && code_route=pass\n report pass \"$code_route\" \"読めなかった段の抜粋は、primers[0].passages[n].excerpt の道筋で報告する\"\n \n make_case minimal \"\"",
+          "patchLines": 139,
+          "truncated": false,
+          "hunkOpeningLines": [
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": "  python3 - \"$work/case.json\" \"$work/out.json\" \"$1\" \"$repo\" \"$sha\" <<'PY'",
+              "new": "  python3 - \"$work/case.json\" \"$work/out.json\" \"$1\" \"$repo\" \"$sha\" <<'PY'"
+            },
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": null,
+              "new": null
+            }
+          ]
+        },
+        {
+          "path": ".github/scripts/build-pr-explain.py",
+          "status": "M",
+          "oldPath": null,
+          "additions": 20,
+          "deletions": 1,
+          "patch": "@@ -11,7 +11,7 @@\n - `pr-explain-ref` — 解説の中の参照が解説の中に無い(message の from / to・flow の steps など)・用語の印が terms に\n   無い・どの印からも指されない用語\n - `pr-explain-code` — 解説時点の `sha` がこのリポジトリに無い・抜粋のパスがその sha に無い・範囲が\n-  ファイルに収まらない\n+  ファイルに収まらない・技術の各節に空白以外の本文を持つ抜粋が無い\n \n **地図を指す参照(commitStory の sha・Note のパスと行・Target の layer / file・LayerRole の layer・\n concept・primers の出てくる場所の `path`・`lineRange`・`shas` が地図にあるか)は見ない。** 地図は push のたびに\n@@ -22,6 +22,10 @@ concept・primers の出てくる場所の `path`・`lineRange`・`shas` が地\n 無い最終行も 1 行)。入力に `text` を書いた解説は落とす(手で写した中身が黙って上書きされるのを、書いた側に\n 知らせるため)。強調の範囲(`emphasis`)は書いたまま残す。\n \n+技術の各節(`language` / `codebase`)には、その sha から読んだ空白以外の `excerpt` が 1 件以上必要。\n+宣言・出てくる場所・他の節やテストの抜粋は代わりにならない。これは本文の存在の検査であり、説明の質は保証しない。\n+ページの読み取り用の形は変えず、過去の解説は読めるまま、新しく書き出すときの公開条件として検査する。\n+\n 埋め込み(script / style 要素・ヒアドキュメント)を読む拡張子の抜粋には、始まりの行の頭で効いている埋め込みを開いた行を\n `openingLine` として足す。ページが抜粋を途中の行から色分けするためで、拡張子と規則は `lib/embedded_regions.py`。`text` と\n 同じく出力だけのキーで、入力に書いた解説は Excerpt の形に無いキーとして落とす。\n@@ -868,6 +872,19 @@ def with_read_excerpts(explain: dict, repo: str) -> tuple[dict, list[str]]:\n     return reduce(read_route, routes_with(Shape(\"Excerpt\")), (explain, []))\n \n \n+def primer_code_problems(explain: dict) -> list[str]:\n+    \"\"\"読み出し済みの解説で、各技術の節に空白以外の実コードの抜粋があるかを見る。\"\"\"\n+    problems = []\n+    for index, primer in enumerate(explain.get(\"primers\", [])):\n+        has_code = any(\n+            passage[\"kind\"] == \"excerpt\" and passage[\"excerpt\"][\"text\"].strip()\n+            for passage in primer.get(\"passages\", [])\n+        )\n+        if not has_code:\n+            problems.append(f\"primers[{index}] ({primer['id']}): 対象 sha の空白以外の本文を持つ excerpt が 1 件以上必要\")\n+    return problems\n+\n+\n def collect_violations(explain: object, pr: int, repo: str) -> tuple[dict | None, list[str]]:\n     \"\"\"解説を検査し、書き出す値と報告の行を返す。\n \n@@ -882,6 +899,8 @@ def collect_violations(explain: object, pr: int, repo: str) -> tuple[dict | None\n     meta = [] if explain[\"pr\"] == pr else [f\"[pr-explain-meta] pr が公開先の PR #{pr} と違う(今は {explain['pr']})\"]\n     refs = [f\"[pr-explain-ref] {problem}\" for problem in reference_problems(explain)]\n     written, code = with_read_excerpts(explain, repo)\n+    if not code:\n+        code = primer_code_problems(written)\n     violations = meta + refs + [f\"[pr-explain-code] {problem}\" for problem in code]\n     return (None if violations else written), violations\n ",
+          "patchLines": 49,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "from": ".claude/skills/pr-explain/templates/explain.json",
+      "to": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+      "status": "kept"
+    },
+    {
+      "from": ".claude/skills/pr-explain/templates/explain.json",
+      "to": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "status": "kept"
+    },
+    {
+      "from": ".claude/skills/pr-explain/templates/explain.json",
+      "to": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+      "status": "kept"
+    },
+    {
+      "from": ".claude/skills/pr-explain/templates/index.html",
+      "to": ".claude/skills/pr-explain/templates/explain.json",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/build-pr-explain-cases.sh",
+      "to": ".claude/skills/pr-explain/templates/explain.json",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/build-pr-explain-cases.sh",
+      "to": ".github/scripts/build-pr-explain.py",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/build-pr-explain-cases.sh",
+      "to": ".github/scripts/lib/cases-report.sh",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/build-pr-explain-local.py",
+      "to": ".github/scripts/build-pr-explain.py",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/build-pr-explain.py",
+      "to": ".github/scripts/lib/embedded_regions.py",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-core-cases.sh",
+      "to": ".github/scripts/build-pr-explain-cases.sh",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-core-cases.sh",
+      "to": ".github/scripts/build-pr-explain.py",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-pages-cases.sh",
+      "to": ".github/scripts/build-pr-explain.py",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-pages.sh",
+      "to": ".github/scripts/build-pr-explain.py",
+      "status": "kept"
+    }
+  ]
+}
