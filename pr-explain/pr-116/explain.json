@@ -388,12 +388,65 @@
       "id": "result",
       "kind": "language",
       "category": "Swift",
-      "label": "Result",
-      "gist": "成功と失敗を値として返し、呼び出し元が入力エラーと保存エラーを区別できます。",
+      "label": "Result：成功と失敗を戻り値にする",
+      "gist": "戻り値の型を読むと、成功時に何を返すかと、失敗の種類が分かります。",
       "passages": [
         {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 53,
+            "end": 56,
+            "emphasis": [
+              {
+                "start": 56,
+                "end": 56
+              }
+            ],
+            "text": "    func updateDates(\n        _ item: Item, expirationDate: Date?, openingDate: Date?,\n        now: Date = Date(), calendar: Calendar = .current\n    ) -> Result<Void, ActionError> {"
+          }
+        },
+        {
           "kind": "text",
-          "text": "`ActionError.validation` は業務上の日付エラー、`ActionError.persistence` はフレームワーク側の元エラーを保持します。"
+          "text": "L56の `Result<Void, ActionError>` は「成功なら追加の値を返さず、失敗なら `ActionError` を返す」という型です。`Void` は値がないことを表し、成功時の実際の値は `()` です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 7,
+            "end": 13,
+            "emphasis": [
+              {
+                "start": 11,
+                "end": 12
+              }
+            ],
+            "text": "    nonisolated enum ActionError: Error, Sendable {\n        case pendingChanges\n        case productNotInContext\n        case itemNotInContext\n        case validation(ItemRules.ValidationError)\n        case persistence(any Error)\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "エラーは `enum` で種類を分けます。`validation(...)` の括弧には日付ルールのエラー、`persistence(...)` には保存処理の元のエラーを保持します。単に失敗したかどうかだけでなく、何が失敗したかを呼び出し側へ渡せます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 78,
+            "end": 86,
+            "emphasis": [
+              {
+                "start": 80,
+                "end": 85
+              }
+            ],
+            "text": "        item.expirationDate = expirationDate\n\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "L80の `switch` は保存結果を2つに分けます。成功なら `.success(())`、失敗なら元のエラーを `.persistence(error)` に包んだ `.failure(...)` を返します。保存失敗の分岐では、戻る前に `rollback()` で元の保存値へ戻します。"
         }
       ],
       "occurrences": [
@@ -403,69 +456,240 @@
             "start": 53,
             "end": 56
           },
-          "text": "日付編集の戻り値に使用する。"
+          "text": "日付編集APIの戻り値を宣言する。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+          "lineRange": {
+            "start": 80,
+            "end": 85
+          },
+          "text": "保存結果を成功と失敗へ分けて返す。"
         }
+      ],
+      "seeAlso": [
+        "boundary",
+        "save-dependency"
       ]
     },
     {
-      "id": "boundary",
-      "kind": "codebase",
-      "category": "保存",
-      "label": "保存単位と失敗時の復旧",
-      "gist": "取消は保存単位全体に作用するため、未保存変更がないことを確認してから対象を変更します。",
-      "status": "added",
-      "tests": [
-        "pending",
-        "retry"
-      ],
-      "flows": [
-        "save"
-      ],
+      "id": "optional-guard",
+      "kind": "language",
+      "category": "Swift",
+      "label": "Optionalとguard：変更前に処理を止める",
+      "gist": "処理を続けられる条件を先に確認し、満たさないときはモデルに触れる前に戻ります。",
       "passages": [
         {
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
-            "start": 57,
-            "end": 75,
-            "text": "        // rollbackで他の入力を失わないよう、モデルへ反映する前に保存境界を確認する。\n        guard !context.hasChanges else {\n            return .failure(.pendingChanges)\n        }\n\n        guard item.modelContext === context else {\n            return .failure(.itemNotInContext)\n        }\n\n        guard let status = item.status else {\n            return .failure(.validation(.unknownCurrentStatus))\n        }\n\n        let rules = ItemRules(status: status, openingDate: openingDate, consumedDate: item.consumedDate)\n        switch item.updateState(using: rules, now: now, calendar: calendar) {\n        case .success:\n            break\n        case .failure(let error):\n            return .failure(.validation(error))"
+            "start": 53,
+            "end": 68,
+            "emphasis": [
+              {
+                "start": 54,
+                "end": 54
+              },
+              {
+                "start": 58,
+                "end": 67
+              }
+            ],
+            "text": "    func updateDates(\n        _ item: Item, expirationDate: Date?, openingDate: Date?,\n        now: Date = Date(), calendar: Calendar = .current\n    ) -> Result<Void, ActionError> {\n        // rollbackで他の入力を失わないよう、モデルへ反映する前に保存境界を確認する。\n        guard !context.hasChanges else {\n            return .failure(.pendingChanges)\n        }\n\n        guard item.modelContext === context else {\n            return .failure(.itemNotInContext)\n        }\n\n        guard let status = item.status else {\n            return .failure(.validation(.unknownCurrentStatus))\n        }"
           }
         },
         {
           "kind": "text",
-          "text": "検証成功後に期限を反映し、保存を1回呼びます。保存失敗時は `context.rollback()` で保存前へ戻し、入力値は呼び出し側が保持します。"
+          "text": "L54の `Date?` は、日付または `nil` を受け取れる型です。賞味期限の `nil` は期限の解除を表します。開封日の `nil` を許可できるかは、その個体の状態に応じて後段の日付ルールが判断します。"
         },
         {
-          "kind": "excerpt",
-          "excerpt": {
-            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
-            "start": 78,
-            "end": 85,
-            "text": "        item.expirationDate = expirationDate\n\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))"
-          }
+          "kind": "text",
+          "text": "`guard 条件 else { return ... }` は、条件が成り立たなければその場で戻る書き方です。L58では未保存変更がないこと、L62では対象の個体を同じ保存単位が所有していることを確認します。"
+        },
+        {
+          "kind": "text",
+          "text": "L62の `===` は、値が同じかではなく同じインスタンスかを調べます。別の `ModelContext` が同じストアを読んでいても、ここでは同じ所有者として扱いません。"
+        },
+        {
+          "kind": "text",
+          "text": "L66の `guard let status = item.status` は、不在かもしれない状態から、存在する値だけを取り出します。未知の保存値で `nil` になった場合は、未開封などへ補完せずエラーを返します。"
         }
       ],
       "occurrences": [
         {
           "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
           "lineRange": {
-            "start": 57,
-            "end": 85
+            "start": 53,
+            "end": 68
           },
-          "text": "保存前の確認、検証、保存失敗の復旧をひとつの入口で実施する。"
+          "text": "入力の型と、保存モデルを変更する前の3つの条件を確認する。"
         }
+      ],
+      "seeAlso": [
+        "result",
+        "boundary"
+      ]
+    },
+    {
+      "id": "save-dependency",
+      "kind": "language",
+      "category": "Swift / SwiftData",
+      "label": "クロージャとMainActor：保存処理を渡す",
+      "gist": "保存の実行方法を関数の値として受け取り、通常の保存と失敗する保存を差し替えます。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 15,
+            "end": 26,
+            "emphasis": [
+              {
+                "start": 16,
+                "end": 16
+              },
+              {
+                "start": 21,
+                "end": 22
+              }
+            ],
+            "text": "    private let context: ModelContext\n    private let save: @MainActor (ModelContext) -> Result<Void, any Error>\n\n    /// saveはcontextを同期的に保存し、保存成功時だけ.successを返す。保存後に.failureを返す実装は契約外。\n    init(\n        context: ModelContext,\n        save: @escaping @MainActor (ModelContext) -> Result<Void, any Error> = { context in\n            Result { try context.save() }\n        }\n    ) {\n        self.context = context\n        self.save = save"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "L16の `(ModelContext) -> Result<Void, any Error>` は「保存単位を受け取り、保存結果を返す関数」の型です。`save` に実行結果ではなく処理そのものを保持し、L80の `save(context)` で呼び出します。"
+        },
+        {
+          "kind": "text",
+          "text": "`@escaping` は、渡されたクロージャを初期化処理の終了後も保持して使うことを表します。`@MainActor` はこの保存処理をメインアクター上で呼ぶ契約で、呼び出しただけでバックグラウンド処理になるわけではありません。"
+        },
+        {
+          "kind": "text",
+          "text": "通常の保存はL22の `Result { try context.save() }` です。SwiftDataの `throws` による失敗を、この接続部分で `Result` に変換します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+            "start": 523,
+            "end": 538,
+            "emphasis": [
+              {
+                "start": 524,
+                "end": 526
+              },
+              {
+                "start": 533,
+                "end": 537
+              }
+            ],
+            "text": "        var saveCalls = 0\n        let failing = ItemActions(context: context) { _ in\n            saveCalls += 1\n            return .failure(StoreError.unavailable)\n        }\n\n        let result = failing.updateDates(\n            item, expirationDate: expirationDate, openingDate: opening, now: registrationDate\n        )\n\n        guard case .failure(.persistence(let error)) = result else {\n            Issue.record(\"元の日付保存エラーが返されなかった\")\n            return\n        }\n        #expect(error as? StoreError == .unavailable)\n        #expect(saveCalls == 1)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "テストでは、常に `.failure(StoreError.unavailable)` を返す処理を渡します。L537は元のエラーが保持されること、L538は保存が1回だけ呼ばれたことを確認しています。実際のストアを使いながら、保存失敗を決まった条件で再現できます。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+          "lineRange": {
+            "start": 15,
+            "end": 26
+          },
+          "text": "保存処理の型と通常の実装を定義する。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+          "lineRange": {
+            "start": 523,
+            "end": 538
+          },
+          "text": "失敗する保存処理を注入して結果を確かめる。"
+        }
+      ],
+      "seeAlso": [
+        "result",
+        "boundary"
       ]
     },
     {
       "id": "calendar",
       "kind": "language",
       "category": "Foundation",
-      "label": "暦日による比較",
-      "gist": "同じ瞬間でも地域により日付が変わるため、開封日の未来判定は渡されたカレンダーで行います。",
+      "label": "Calendar：時刻ではなく暦日を比較する",
+      "gist": "開封日の未来判定は、指定した地域での「何日か」にそろえてから比較します。",
       "passages": [
         {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+            "start": 56,
+            "end": 69,
+            "emphasis": [
+              {
+                "start": 60,
+                "end": 67
+              }
+            ],
+            "text": "        guard let openingDate else {\n            return .failure(.openingDateRequired)\n        }\n\n        let openingDay = calendar.startOfDay(for: openingDate)\n        guard openingDay <= calendar.startOfDay(for: now) else {\n            return .failure(.futureOpeningDate)\n        }\n\n        if let consumedDate {\n            guard calendar.startOfDay(for: consumedDate) >= openingDay else {\n                return .failure(.consumedDateBeforeOpeningDate)\n            }\n        }"
+          }
+        },
+        {
           "kind": "text",
-          "text": "保存操作の `calendar` と `now` を既存のルールへ渡すことで、端末の暦日を扱いながら固定条件でテストできます。"
+          "text": "L60の `startOfDay(for:)` は、与えられた日時が属する日の開始日時を返します。開封日と基準日時の両方をこの形にそろえるため、同じ日の朝と夜は同じ日として扱えます。"
+        },
+        {
+          "kind": "text",
+          "text": "L61では開封日が今日以前か、L66では使い切り日が開封日以降かを確認します。`Date` の瞬間同士を直接比較するのではなく、渡された `Calendar` に基づく暦日の前後関係を使います。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 70,
+            "end": 76,
+            "emphasis": [
+              {
+                "start": 71,
+                "end": 71
+              }
+            ],
+            "text": "        let rules = ItemRules(status: status, openingDate: openingDate, consumedDate: item.consumedDate)\n        switch item.updateState(using: rules, now: now, calendar: calendar) {\n        case .success:\n            break\n        case .failure(let error):\n            return .failure(.validation(error))\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "保存操作は受け取った `now` と `calendar` をL71で既存の日付ルールへ渡します。通常は端末のカレンダーを使い、テストではUTCや日本時間を明示して日付境界を固定します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+            "start": 574,
+            "end": 605,
+            "emphasis": [
+              {
+                "start": 574,
+                "end": 575
+              },
+              {
+                "start": 582,
+                "end": 590
+              },
+              {
+                "start": 594,
+                "end": 599
+              }
+            ],
+            "text": "        let now = Date(timeIntervalSince1970: 1_736_006_400)  // 2025-01-04 16:00 UTC\n        let opening = now.addingTimeInterval(9 * 3600)\n        var saveCalls = 0\n        let actions = ItemActions(context: context) { context in\n            saveCalls += 1\n            return Result { try context.save() }\n        }\n\n        guard\n            case .failure(.validation(.futureOpeningDate)) = actions.updateDates(\n                item, expirationDate: nil, openingDate: opening, now: now, calendar: try calendar(secondsFromGMT: 0)\n            )\n        else {\n            Issue.record(\"UTCの翌日の開封日が拒否されなかった\")\n            return\n        }\n        #expect(saveCalls == 0)\n        #expect(ItemSnapshot(item) == original)\n        #expect(!context.hasChanges)\n\n        try actions.updateDates(\n            item, expirationDate: nil, openingDate: opening, now: now,\n            calendar: try calendar(secondsFromGMT: 9 * 3600)\n        ).get()\n\n        #expect(saveCalls == 1)\n        #expect(item.openingDate == opening)\n        #expect(item.expirationDate == nil)\n        #expect(item.updatedAt == now)\n        #expect(!context.hasChanges)\n        let reader = ModelContext(container)\n        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == ItemSnapshot(item))"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "このテストの基準時刻は2025年1月4日16:00 UTC、開封時刻は9時間後の1月5日01:00 UTCです。UTCでは翌日なので拒否され、日本時間では両方とも1月5日なので保存されます。L590とL599の保存回数が、拒否と成功の違いを確認します。"
         }
       ],
       "occurrences": [
@@ -473,10 +697,202 @@
           "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
           "lineRange": {
             "start": 70,
-            "end": 71
+            "end": 76
           },
-          "text": "基準日時とカレンダーを既存の検証へそのまま渡す。"
+          "text": "基準日時とカレンダーを日付検証へ渡す。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+          "lineRange": {
+            "start": 574,
+            "end": 605
+          },
+          "text": "同じ入力をUTCと日本時間で検証する。"
         }
+      ],
+      "seeAlso": [
+        "validation-apply",
+        "boundary"
+      ]
+    },
+    {
+      "id": "boundary",
+      "kind": "codebase",
+      "category": "保存",
+      "label": "日付編集：入力の検証から1回の保存まで",
+      "gist": "日付の入力値を受け取り、対象確認、検証、反映、保存をこの入口でまとめて扱います。",
+      "status": "added",
+      "tests": [
+        "selected",
+        "invalid",
+        "pending",
+        "retry"
+      ],
+      "flows": [
+        "save",
+        "reject"
+      ],
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 53,
+            "end": 87,
+            "emphasis": [
+              {
+                "start": 58,
+                "end": 67
+              },
+              {
+                "start": 70,
+                "end": 78
+              },
+              {
+                "start": 80,
+                "end": 85
+              }
+            ],
+            "text": "    func updateDates(\n        _ item: Item, expirationDate: Date?, openingDate: Date?,\n        now: Date = Date(), calendar: Calendar = .current\n    ) -> Result<Void, ActionError> {\n        // rollbackで他の入力を失わないよう、モデルへ反映する前に保存境界を確認する。\n        guard !context.hasChanges else {\n            return .failure(.pendingChanges)\n        }\n\n        guard item.modelContext === context else {\n            return .failure(.itemNotInContext)\n        }\n\n        guard let status = item.status else {\n            return .failure(.validation(.unknownCurrentStatus))\n        }\n\n        let rules = ItemRules(status: status, openingDate: openingDate, consumedDate: item.consumedDate)\n        switch item.updateState(using: rules, now: now, calendar: calendar) {\n        case .success:\n            break\n        case .failure(let error):\n            return .failure(.validation(error))\n        }\n\n        item.expirationDate = expirationDate\n\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "1. L58–68で処理を続けられるか確認します。特に `context.hasChanges` の確認は、保存に失敗して `rollback()` を呼んだときに、ほかの編集中の入力まで取り消さないために必要です。"
+        },
+        {
+          "kind": "text",
+          "text": "2. L70–76で、現在の状態と使い切り日を維持したまま、入力された開封日を既存の日付ルールへ渡します。日付エラーを受け取るとここで戻るため、L78の賞味期限も変更されません。"
+        },
+        {
+          "kind": "text",
+          "text": "3. 検証が成功した後でL78の賞味期限を反映し、L80で保存を1回呼びます。状態・開封日・使い切り日・更新日時の反映は、直前に呼んだ既存の `updateState` が担当しています。"
+        },
+        {
+          "kind": "text",
+          "text": "4. 保存失敗時はL84で元の保存値へ戻し、L85で元のエラーを返します。引数の日付は保存モデルとは別の値なので、呼び出し側が同じ入力を保持して再送できます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+            "start": 549,
+            "end": 565,
+            "emphasis": [
+              {
+                "start": 549,
+                "end": 555
+              },
+              {
+                "start": 556,
+                "end": 565
+              }
+            ],
+            "text": "        // draftの日付はモデルへ事前反映せず、同じ入力をそのまま再試行できる。\n        try ItemActions(context: context).updateDates(\n            item, expirationDate: expirationDate, openingDate: opening, now: registrationDate\n        ).get()\n\n        #expect(!context.hasChanges)\n        expectEditedDates(item, expiration: expirationDate, opening: opening)\n        #expect(item.id == original.id)\n        #expect(item.statusRawValue == original.statusRawValue)\n        #expect(item.consumedDate == original.consumedDate)\n        #expect(item.product === product)\n        #expect(ItemSnapshot(sibling) == siblingSnapshot)\n        let reader = ModelContext(container)\n        let items = try reader.fetch(FetchDescriptor<Item>())\n        #expect(items.count == 2)\n        #expect(ItemSnapshot(try #require(items.first { $0.id == item.id })) == ItemSnapshot(item))\n        #expect(ItemSnapshot(try #require(items.first { $0.id == sibling.id })) == siblingSnapshot)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "保存失敗後のテストは、同じ個体参照と日付を再び渡します。日付が更新されることに加えて、ID・状態・使い切り日・商品との関係・別個体が保たれることも確認しています。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+          "lineRange": {
+            "start": 53,
+            "end": 87
+          },
+          "text": "今回追加した日付編集の実装全体。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+          "lineRange": {
+            "start": 549,
+            "end": 565
+          },
+          "text": "元の保存値へ戻した後の再試行を確かめる。"
+        }
+      ],
+      "seeAlso": [
+        "result",
+        "optional-guard",
+        "save-dependency",
+        "validation-apply"
+      ]
+    },
+    {
+      "id": "validation-apply",
+      "kind": "codebase",
+      "category": "検証",
+      "label": "既存ルール：検証成功時だけ値を反映する",
+      "gist": "日付の業務ルールは既存の検証へ集約し、保存操作はその結果を使います。",
+      "tests": [
+        "invalid",
+        "calendar",
+        "selected"
+      ],
+      "flows": [
+        "save",
+        "reject"
+      ],
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 70,
+            "end": 76,
+            "emphasis": [
+              {
+                "start": 70,
+                "end": 75
+              }
+            ],
+            "text": "        let rules = ItemRules(status: status, openingDate: openingDate, consumedDate: item.consumedDate)\n        switch item.updateState(using: rules, now: now, calendar: calendar) {\n        case .success:\n            break\n        case .failure(let error):\n            return .failure(.validation(error))\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "今回の入口では、既存の状態と使い切り日から `ItemRules` を組み立て、`updateState` を呼びます。失敗した場合は `.validation(error)` に包み、その時点で処理を止めます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+            "start": 75,
+            "end": 87,
+            "emphasis": [
+              {
+                "start": 80,
+                "end": 85
+              }
+            ],
+            "text": "extension Item {\n    /// 全検証が成功した場合だけ反映する。ModelContextの保存・保存失敗時の復旧は呼び出し側が行う。\n    func updateState(\n        using rules: ItemRules, now: Date, calendar: Calendar = .current\n    ) -> Result<Void, ItemRules.ValidationError> {\n        rules.validate(from: status, now: now, calendar: calendar).map {\n            statusRawValue = rules.status.rawValue\n            openingDate = rules.openingDate\n            consumedDate = rules.consumedDate\n            updatedAt = now\n        }\n    }\n}"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "既存の `updateState` はL80の `validate(...)` で全体を検証します。`Result.map` の中身は成功時だけ実行されるため、検証失敗ではL81–84のどの値にも触れません。"
+        },
+        {
+          "kind": "text",
+          "text": "検証に成功すると状態・開封日・使い切り日・更新日時を反映します。この処理自体はストアへ保存せず、今回追加した保存操作が賞味期限も反映した後にまとめて保存します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+          "lineRange": {
+            "start": 70,
+            "end": 76
+          },
+          "text": "今回の変更と既存の日付検証の接続部分。"
+        }
+      ],
+      "seeAlso": [
+        "calendar",
+        "boundary"
       ]
     }
   ]
