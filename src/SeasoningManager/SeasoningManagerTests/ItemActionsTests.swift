@@ -641,6 +641,519 @@ struct ItemActionsTests {
         expectProductValues(product)
     }
 
+    private enum StatusTransition: CaseIterable {
+        case open
+        case consume
+
+        var source: ItemStatus {
+            switch self {
+            case .open:
+                return .unopened
+            case .consume:
+                return .inUse
+            }
+        }
+
+        var destination: ItemStatus {
+            switch self {
+            case .open:
+                return .inUse
+            case .consume:
+                return .consumed
+            }
+        }
+
+        func apply(
+            _ actions: ItemActions, to item: Item, date: Date, now: Date, calendar: Calendar = .current
+        ) -> Result<Void, ItemActions.ActionError> {
+            switch self {
+            case .open:
+                return actions.open(item, openingDate: date, now: now, calendar: calendar)
+            case .consume:
+                return actions.consume(item, consumedDate: date, now: now, calendar: calendar)
+            }
+        }
+    }
+
+    @Test(arguments: StatusTransition.allCases)
+    private func statusTransitionSavesConfirmedDateAndStatusTogetherOnce(_ transition: StatusTransition) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let otherProduct = try makeSavedProduct(in: context, name: "みそ")
+        let item = try makeSavedItem(in: context, product: product, status: transition.source)
+        let sibling = try makeSavedItem(in: context, product: product)
+        let otherItem = try makeSavedItem(in: context, product: otherProduct)
+        let original = ItemSnapshot(item)
+        let siblingSnapshot = ItemSnapshot(sibling)
+        let otherSnapshot = ItemSnapshot(otherItem)
+        let confirmedDate = originalDate.addingTimeInterval(86_400)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            // 保存を呼ぶ時点で、確認済み日付と状態が同時に反映されている。
+            self.expectTransitionedValues(
+                item, original: original, transition: transition, confirmedDate: confirmedDate
+            )
+            #expect(item.product === product)
+            #expect(ItemSnapshot(sibling) == siblingSnapshot)
+            #expect(ItemSnapshot(otherItem) == otherSnapshot)
+            return Result { try context.save() }
+        }
+
+        try transition.apply(actions, to: item, date: confirmedDate, now: registrationDate).get()
+
+        #expect(saveCalls == 1)
+        #expect(!context.hasChanges)
+        expectTransitionedValues(item, original: original, transition: transition, confirmedDate: confirmedDate)
+        #expect(ItemSnapshot(sibling) == siblingSnapshot)
+        #expect(ItemSnapshot(otherItem) == otherSnapshot)
+        #expect(Set((product.items ?? []).map(\.id)) == Set([item.id, sibling.id]))
+        #expect(otherProduct.items?.map(\.id) == [otherItem.id])
+        expectProductValues(product)
+        expectProductValues(otherProduct, name: "みそ")
+
+        let reader = ModelContext(container)
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        #expect(items.count == 3)
+        let saved = try #require(items.first { $0.id == item.id })
+        #expect(ItemSnapshot(saved) == ItemSnapshot(item))
+        #expect(ItemSnapshot(try #require(items.first { $0.id == sibling.id })) == siblingSnapshot)
+        #expect(ItemSnapshot(try #require(items.first { $0.id == otherItem.id })) == otherSnapshot)
+        let products = try reader.fetch(FetchDescriptor<Product>())
+        #expect(products.count == 2)
+        let savedProduct = try #require(products.first { $0.id == product.id })
+        let savedOther = try #require(products.first { $0.id == otherProduct.id })
+        #expect(saved.product === savedProduct)
+        #expect(Set((savedProduct.items ?? []).map(\.id)) == Set([item.id, sibling.id]))
+        #expect(savedOther.items?.map(\.id) == [otherItem.id])
+        expectProductValues(savedProduct)
+        expectProductValues(savedOther, name: "みそ")
+    }
+
+    @Test(
+        arguments: [
+            (StatusTransition.open, "inUse", ItemRules.ValidationError.invalidTransition),
+            (.open, "consumed", .invalidTransition),
+            (.consume, "unopened", .invalidTransition),
+            (.consume, "consumed", .invalidTransition),
+            (.open, "futureStatus", .unknownCurrentStatus),
+            (.consume, "futureStatus", .unknownCurrentStatus),
+        ] as [(StatusTransition, String, ItemRules.ValidationError)]
+    )
+    private func statusTransitionRejectsInvalidSourcesWithoutChangingSavedValues(
+        _ input: (transition: StatusTransition, status: String, error: ItemRules.ValidationError)
+    ) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(in: context, product: product, status: input.transition.source)
+        item.statusRawValue = input.status
+        try context.save()
+        let original = ItemSnapshot(item)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        let result = input.transition.apply(actions, to: item, date: originalDate, now: registrationDate)
+
+        guard case .failure(.validation(let error)) = result else {
+            Issue.record("重複操作・飛び越し・逆向き・未知の状態が拒否されなかった")
+            return
+        }
+        #expect(error == input.error)
+        #expect(saveCalls == 0)
+        #expect(!context.hasChanges)
+        #expect(ItemSnapshot(item) == original)
+        #expect(item.product === product)
+        #expect(product.items?.map(\.id) == [item.id])
+        expectProductValues(product)
+        let reader = ModelContext(container)
+        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == original)
+    }
+
+    @Test(
+        arguments: [
+            (
+                StatusTransition.open, nil, nil, Date(timeIntervalSince1970: 1_750_100_123),
+                ItemRules.ValidationError.futureOpeningDate
+            ),
+            (
+                .open, nil, Date(timeIntervalSince1970: 1_600_000_000), Date(timeIntervalSince1970: 1_600_086_400),
+                .unexpectedConsumedDate
+            ),
+            (.consume, nil, nil, Date(timeIntervalSince1970: 1_600_086_400), .openingDateRequired),
+            (
+                .consume, Date(timeIntervalSince1970: 1_600_000_000), nil, Date(timeIntervalSince1970: 1_599_913_600),
+                .consumedDateBeforeOpeningDate
+            ),
+            (
+                .consume, Date(timeIntervalSince1970: 1_750_100_123), nil, Date(timeIntervalSince1970: 1_750_186_523),
+                .futureOpeningDate
+            ),
+        ] as [(StatusTransition, Date?, Date?, Date, ItemRules.ValidationError)]
+    )
+    private func statusTransitionValidatesDatesBeforeMutatingOrSaving(
+        _ input: (
+            transition: StatusTransition, opening: Date?, consumed: Date?, confirmed: Date,
+            error: ItemRules.ValidationError
+        )
+    ) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(in: context, product: product, status: input.transition.source)
+        item.openingDate = input.opening
+        item.consumedDate = input.consumed
+        try context.save()
+        let original = ItemSnapshot(item)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        let result = input.transition.apply(
+            actions, to: item, date: input.confirmed, now: registrationDate, calendar: try calendar(secondsFromGMT: 0)
+        )
+
+        guard case .failure(.validation(let error)) = result else {
+            Issue.record("不正な日付を持つ状態遷移が拒否されなかった")
+            return
+        }
+        #expect(error == input.error)
+        #expect(saveCalls == 0)
+        #expect(!context.hasChanges)
+        #expect(ItemSnapshot(item) == original)
+        #expect(item.product === product)
+        #expect(product.items?.map(\.id) == [item.id])
+        expectProductValues(product)
+        let reader = ModelContext(container)
+        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == original)
+    }
+
+    @Test(arguments: StatusTransition.allCases)
+    private func statusTransitionRejectsUnmanagedAndForeignItems(_ transition: StatusTransition) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let owner = ModelContext(container)
+        let product = try makeSavedProduct(in: owner)
+        let saved = try makeSavedItem(in: owner, product: product, status: transition.source)
+        let unmanaged = Item(product: Product(name: "未登録", type: "調味料"), status: transition.source)
+        let savedSnapshot = ItemSnapshot(saved)
+        let unmanagedSnapshot = ItemSnapshot(unmanaged)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        for item in [unmanaged, saved] {
+            guard
+                case .failure(.itemNotInContext) = transition.apply(
+                    actions, to: item, date: originalDate, now: registrationDate
+                )
+            else {
+                Issue.record("未管理または別contextの個体が拒否されなかった")
+                return
+            }
+        }
+
+        #expect(saveCalls == 0)
+        #expect(ItemSnapshot(saved) == savedSnapshot)
+        #expect(ItemSnapshot(unmanaged) == unmanagedSnapshot)
+        #expect(saved.modelContext === owner)
+        #expect(unmanaged.modelContext == nil)
+        #expect(!context.hasChanges)
+        #expect(!owner.hasChanges)
+        #expect(product.items?.map(\.id) == [saved.id])
+        expectProductValues(product)
+        let reader = ModelContext(container)
+        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 1)
+        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == savedSnapshot)
+    }
+
+    @Test(arguments: StatusTransition.allCases, PendingEdit.allCases)
+    private func statusTransitionPreservesPendingChanges(
+        _ transition: StatusTransition, _ pendingEdit: PendingEdit
+    ) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let product = try makeSavedProduct(in: context)
+        let other = try makeSavedProduct(in: context, name: "みそ")
+        let savedItem = try makeSavedItem(in: context, product: product, status: transition.source)
+        let savedSnapshot = ItemSnapshot(savedItem)
+        let target: Item
+        switch pendingEdit {
+        case .item:
+            target = savedItem
+            target.statusRawValue = "futureStatus"
+        case .unrelatedProduct:
+            target = savedItem
+            other.name = "編集中のみそ"
+        case .insertedItem:
+            target = Item(product: product, status: transition.source, updatedAt: originalDate)
+            context.insert(target)
+        }
+        let pendingSnapshot = ItemSnapshot(target)
+        let pendingName = other.name
+        let pendingIDs = Set((product.items ?? []).map(\.id))
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        guard
+            case .failure(.pendingChanges) = transition.apply(
+                actions, to: target, date: originalDate, now: registrationDate
+            )
+        else {
+            Issue.record("未保存変更を持つcontextで状態が変更された")
+            return
+        }
+
+        #expect(saveCalls == 0)
+        #expect(context.hasChanges)
+        #expect(ItemSnapshot(target) == pendingSnapshot)
+        #expect(target.modelContext === context)
+        #expect(Set((product.items ?? []).map(\.id)) == pendingIDs)
+        expectProductValues(other, name: pendingName)
+        let reader = ModelContext(container)
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        #expect(items.count == 1)
+        #expect(ItemSnapshot(try #require(items.first)) == savedSnapshot)
+        let products = try reader.fetch(FetchDescriptor<Product>())
+        expectProductValues(try #require(products.first { $0.id == other.id }), name: "みそ")
+    }
+
+    @Test(arguments: StatusTransition.allCases)
+    private func failedStatusSaveRestoresFieldsAndRelationshipsForTheSameInputRetry(
+        _ transition: StatusTransition
+    ) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(in: context, product: product, status: transition.source)
+        let sibling = try makeSavedItem(in: context, product: product)
+        let original = ItemSnapshot(item)
+        let siblingSnapshot = ItemSnapshot(sibling)
+        let confirmedDate = originalDate.addingTimeInterval(86_400)
+        var saveCalls = 0
+        var shouldFail = true
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            self.expectTransitionedValues(
+                item, original: original, transition: transition, confirmedDate: confirmedDate
+            )
+            if shouldFail {
+                return .failure(StoreError.unavailable)
+            }
+
+            return Result { try context.save() }
+        }
+
+        let result = transition.apply(actions, to: item, date: confirmedDate, now: registrationDate)
+
+        guard case .failure(.persistence(let error)) = result else {
+            Issue.record("状態変更の元の保存エラーが返されなかった")
+            return
+        }
+        #expect(error as? StoreError == .unavailable)
+        #expect(saveCalls == 1)
+        #expect(!context.hasChanges)
+        #expect(ItemSnapshot(item) == original)
+        #expect(ItemSnapshot(sibling) == siblingSnapshot)
+        #expect(item.product === product)
+        #expect(sibling.product === product)
+        #expect(Set((product.items ?? []).map(\.id)) == Set([item.id, sibling.id]))
+        expectProductValues(product)
+        let failedReader = ModelContext(container)
+        let failedItems = try failedReader.fetch(FetchDescriptor<Item>())
+        #expect(failedItems.count == 2)
+        #expect(ItemSnapshot(try #require(failedItems.first { $0.id == item.id })) == original)
+        #expect(ItemSnapshot(try #require(failedItems.first { $0.id == sibling.id })) == siblingSnapshot)
+        let failedProduct = try #require(failedReader.fetch(FetchDescriptor<Product>()).first)
+        #expect(Set((failedProduct.items ?? []).map(\.id)) == Set([item.id, sibling.id]))
+        expectProductValues(failedProduct)
+
+        // 確認済み日付を変えず、同じ操作を保存失敗後に再試行できる。
+        shouldFail = false
+        try transition.apply(actions, to: item, date: confirmedDate, now: registrationDate).get()
+
+        #expect(saveCalls == 2)
+        #expect(!context.hasChanges)
+        expectTransitionedValues(item, original: original, transition: transition, confirmedDate: confirmedDate)
+        #expect(ItemSnapshot(sibling) == siblingSnapshot)
+        #expect(item.product === product)
+        #expect(Set((product.items ?? []).map(\.id)) == Set([item.id, sibling.id]))
+        expectProductValues(product)
+        let reader = ModelContext(container)
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        #expect(items.count == 2)
+        #expect(ItemSnapshot(try #require(items.first { $0.id == item.id })) == ItemSnapshot(item))
+        #expect(ItemSnapshot(try #require(items.first { $0.id == sibling.id })) == siblingSnapshot)
+    }
+
+    @Test func openingUsesTheInjectedLocalDayAndPreservesTheConfirmedTime() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(in: context, product: product, status: .unopened)
+        let original = ItemSnapshot(item)
+        let now = Date(timeIntervalSince1970: 1_736_006_400)
+        let opening = now.addingTimeInterval(9 * 3600)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        guard
+            case .failure(.validation(.futureOpeningDate)) = actions.open(
+                item, openingDate: opening, now: now, calendar: try calendar(secondsFromGMT: 0)
+            )
+        else {
+            Issue.record("UTCの翌日の開封が拒否されなかった")
+            return
+        }
+        #expect(saveCalls == 0)
+        #expect(ItemSnapshot(item) == original)
+        #expect(!context.hasChanges)
+
+        // 日本では同じ暦日なので、現在時刻より後の確認済み時刻もそのまま保存する。
+        try actions.open(
+            item, openingDate: opening, now: now, calendar: try calendar(secondsFromGMT: 9 * 3600)
+        ).get()
+
+        #expect(saveCalls == 1)
+        #expect(item.status == .inUse)
+        #expect(item.openingDate == opening)
+        #expect(item.consumedDate == nil)
+        #expect(item.updatedAt == now)
+        #expect(!context.hasChanges)
+        let reader = ModelContext(container)
+        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == ItemSnapshot(item))
+    }
+
+    @Test func consumingUsesTheInjectedLocalDayInsteadOfTheOrderOfTimes() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(in: context, product: product)
+        let opening = Date(timeIntervalSince1970: 1_736_006_400)
+        let consumed = opening.addingTimeInterval(-2 * 3600)
+        item.openingDate = opening
+        try context.save()
+        let original = ItemSnapshot(item)
+        var saveCalls = 0
+        let actions = ItemActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+
+        guard
+            case .failure(.validation(.consumedDateBeforeOpeningDate)) = actions.consume(
+                item, consumedDate: consumed, now: registrationDate, calendar: try calendar(secondsFromGMT: 9 * 3600)
+            )
+        else {
+            Issue.record("日本で開封日の前日になる使い切りが拒否されなかった")
+            return
+        }
+        #expect(saveCalls == 0)
+        #expect(ItemSnapshot(item) == original)
+        #expect(!context.hasChanges)
+
+        // UTCでは同じ暦日なので、開封時刻より前の使い切り時刻も許可する。
+        try actions.consume(
+            item, consumedDate: consumed, now: registrationDate, calendar: try calendar(secondsFromGMT: 0)
+        ).get()
+
+        #expect(saveCalls == 1)
+        #expect(item.status == .consumed)
+        #expect(item.openingDate == opening)
+        #expect(item.consumedDate == consumed)
+        #expect(item.updatedAt == registrationDate)
+        #expect(!context.hasChanges)
+        let reader = ModelContext(container)
+        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == ItemSnapshot(item))
+    }
+
+    @Test func consumingAllowsAFutureConfirmedDateUnderTheCurrentSpecification() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        let item = try makeSavedItem(in: context, product: product)
+        let original = ItemSnapshot(item)
+        let future = registrationDate.addingTimeInterval(86_400)
+
+        try ItemActions(context: context).consume(item, consumedDate: future, now: registrationDate).get()
+
+        expectTransitionedValues(item, original: original, transition: .consume, confirmedDate: future)
+        #expect(!context.hasChanges)
+        let reader = ModelContext(container)
+        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == ItemSnapshot(item))
+    }
+
+    @Test(arguments: StatusTransition.allCases)
+    private func statusTransitionsSurviveReopeningTheStore(_ transition: StatusTransition) throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("transitioned-items.store")
+        let confirmedDate = originalDate.addingTimeInterval(86_400)
+        let expected: ItemSnapshot
+
+        do {
+            let container = try makeContainer(at: url)
+            let context = ModelContext(container)
+            let product = try makeSavedProduct(in: context)
+            let item = try makeSavedItem(in: context, product: product, status: transition.source)
+            try transition.apply(
+                ItemActions(context: context), to: item, date: confirmedDate, now: registrationDate
+            ).get()
+            expected = ItemSnapshot(item)
+            #expect(!context.hasChanges)
+        }
+
+        let reopened = try makeContainer(at: url)
+        let reader = ModelContext(reopened)
+        let items = try reader.fetch(FetchDescriptor<Item>())
+        let products = try reader.fetch(FetchDescriptor<Product>())
+        #expect(items.count == 1)
+        #expect(products.count == 1)
+        let item = try #require(items.first)
+        let product = try #require(products.first)
+        #expect(ItemSnapshot(item) == expected)
+        #expect(item.status == transition.destination)
+        #expect(item.product === product)
+        #expect(product.items?.map(\.id) == [item.id])
+        expectProductValues(product)
+    }
+
+    private func expectTransitionedValues(
+        _ item: Item, original: ItemSnapshot, transition: StatusTransition, confirmedDate: Date
+    ) {
+        #expect(item.id == original.id)
+        #expect(item.product?.id == original.productID)
+        #expect(item.expirationDate == original.expirationDate)
+        #expect(item.status == transition.destination)
+        #expect(item.statusRawValue == transition.destination.rawValue)
+        #expect(item.updatedAt == registrationDate)
+        switch transition {
+        case .open:
+            #expect(item.openingDate == confirmedDate)
+            #expect(item.consumedDate == original.consumedDate)
+        case .consume:
+            #expect(item.openingDate == original.openingDate)
+            #expect(item.consumedDate == confirmedDate)
+        }
+    }
+
     private struct ItemSnapshot: Equatable {
         let id: UUID
         let productID: UUID?
