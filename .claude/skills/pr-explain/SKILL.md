@@ -83,12 +83,14 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123
    - 検証エージェントの指摘: とくに `test-reviewer` の「壊して落ちた / 落ちなかった判断」はテストの材料
    - このセッションの記憶: Issue に書くほどではなかった判断・試して捨てた形
 2. **見本 [`templates/explain.json`](templates/explain.json) をリポジトリの外の作業用ファイルへ写して
-   書く**(`mktemp -d` など)。見本は `excerpt` 以外のすべてのキーと、Target の 5 つの kind・primers の
-   2 つの kind・Passage の excerpt 以外の 8 つの kind を使っている。要らない任意のキーは消す
+   書く**(`mktemp -d` など)。見本は Target の 5 つの kind・primers の 2 つの kind・Passage の 9 つの kind を
+   使っている。パス・sha・行は実際の PR に置き換え、要らない任意のキーは消す
 3. **下の「explain.json の形」と「書き方」で書く**
 4. **事実の主張を確かめる。** 解説は「この関数は◯◯を返す」「この操作で□□になる」の集まりなので、
    対象 sha のソース・テスト・差分を実際に読み、各主張と対応する根拠を確認する。
-   テストの宣言とテスト成功は別に記す。Note の行番号は、そのコミット時点のファイルを開いて合わせる
+   テストの宣言とテスト成功は別に記す。Note の行番号は、そのコミット時点のファイルを開いて合わせる。
+   公開前に上のローカル生成を行い、画面または DOM で技術の各節にコード本文と対応する説明が出ていることを確認する。
+   検査成功は本文の存在などの確認であり、説明の質の保証として扱わない
 5. **置く**
 
    ```bash
@@ -98,6 +100,7 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123
    - push の前に `build-pr-explain.py` が検査し、テストの抜粋と、primers の段の抜粋(`excerpt`)に中身(`text`)と、埋め込み
      (script / style 要素・ヒアドキュメント)の中から始まるものには開いた行(`openingLine`)を足す(拡張子と規則は
      `.github/scripts/lib/embedded_regions.py`)。落ちたら報告を読んで直す(報告の分類は `build-pr-explain.py` の冒頭)
+   - `language` / `codebase` の各節に、その sha の空白以外のコード本文を持つ `excerpt` が 1 件以上なければ公開しない
    - 解説の `sha` は push してから置く。リモートの追跡ブランチに無い sha の解説は置かない
    - 終了コードの意味は `pr-explain-pages.sh` の冒頭。**3** なら `PR Explain` の run の完了を待って
      からやり直す。閉じた PR には置かない
@@ -107,6 +110,7 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123
      他のフォルダ・他のブランチは触らない
 6. **`PR Explain Deploy` の公開成功と固定 PR コメントを確認して、URL をユーザーに伝える**。
    コメントには閲覧リンク・対象 SHA・公開 CI のリンクが出る。公開失敗や古い head の場合は新しいリンクを投稿しない。
+   公開ページでも技術の各節を開き、コード本文が表示されることを確認する。
 
 ## explain.json の形
 
@@ -150,7 +154,7 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123
 | `primers` | 任意 | Primer[]。無いか空なら、技術の手引きは「書かれていない」と出す |
 | `terms` | 任意 | Term[] |
 
-**型**(`?` は任意)
+**型**(`?` は読み取り用の形では任意。新しく公開する解説の条件は表の下も参照)
 
 | 型 | キー |
 | --- | --- |
@@ -185,6 +189,10 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123
 | LineRange | `start`(1 以上)`end`(start 以上) |
 | Term | `id` `label`(一意)`text`。どれかの印から指す |
 
+公開時は `language` / `codebase` の各 Primer の `passages` に、その `sha` から実抽出できる空白以外の
+`excerpt` を 1 件以上含める。過去の解説を読む形は変えず、`passages?` の省略を新しい公開の許可とは扱わない。
+`primers` 自体の省略・空配列は許可する。テストの抜粋の条件は変えない。
+
 id・sha・path・layer は一覧の中で一意にする(features / messages / flows / suites / tests の id、
 commitStories の sha、concepts の path、layerRoles の layer、primers の id(kind をまたいで)、terms の id と label)。
 todo のテストは commit も excerpt も持たない。
@@ -213,10 +221,11 @@ layer / file・LayerRole の layer・concept のパス・出てくる場所の `
 | `messages` / `flows` | 箱どうしのやりとり。`kind` は変える(`cmd`)/ 問い合わせる(`qry`)/ 知らせる(`evt`)、`code` は実際の呼び出しの綴り。このブランチで足した・変えた・消したものは `status` を `added` / `changed` / `removed` にする(テストの抜けは `added` と `changed` で数える)。`flows` は操作・イベントごとのやりとりの順で、2〜4 本 | 1 つの関数の中の手順 |
 | `commitStories` | コミットごとに、`role`(何をするコミットか 1 行)・`why`(なぜこの順でこうしたか)・`review`(レビューで見てほしい点を 1 点 1 文)・振る舞いの前後・行への注釈(`notes`)。`phase` は下ごしらえ(`prep`)/ 本体(`core`)/ 安定化(`hard`)/ 指摘の反映(`revise`)/ 仕上げ(`fin`) | 件名・本文の写し(地図から出る) |
 | `suites` / `tests` | テストごとに、守る振る舞い(`why`)・前提 / 操作 / 期待・使った技法・境界の値の表(`values`)・確かめているやりとり(`covers`)と箱(`targets`)。テストコードは `excerpt` で範囲を指す | テストコードの写し |
-| `primers` | この PR を読むのに要る技術。language は差分に出てくる順、codebase は全体の流れから部品へ。`occurrences` は 1 件以上で、行は解説の `sha` の時点、`shas` はその箇所を足した・変えたコミット。PR ごとに書く(共有の仕組みは無い) | コード例の写し(`excerpt` で実物の行範囲を指す) |
+| `primers` | この PR を読むのに要る技術。language は差分に出てくる順、codebase は全体の流れから部品へ。各節に実コードの `excerpt` と、その入力・分岐・結果・採用理由を必要に応じて説明する段を置く。`occurrences` は 1 件以上で、行は解説の `sha` の時点、`shas` はその箇所を足した・変えたコミット。PR ごとに書く(共有の仕組みは無い) | コード本文の手書きコピー。省略する意味ではなく、`excerpt` で実物の行範囲を指す |
 | `terms` | 1 語 1 回。意味は 1〜2 文 | |
 
 - **説明文でも、識別子を地の文の主語にしない。** 実装の名前とファイル名を指すときは `` `…` `` で囲む
+- 各節の `excerpt` は本文に必要。`declaration` の宣言、`occurrences` の参照先、別の節やテストの抜粋で代用しない
 - **`review` の文は、確認の印の鍵になる。** 読み手のブラウザは「コミットの sha + 文」で確認済みを
   覚えるので、文を書き直すとその点の印は外れる(別の点へ移らない)
 - **`tests[].name` はテスト名そのままで書く。** ページは、地図がテスト名を調べたファイル(`tests.files`。
@@ -248,7 +257,7 @@ layer / file・LayerRole の layer・concept のパス・出てくる場所の `
 | ファイル | 内容 |
 | --- | --- |
 | [`templates/index.html`](templates/index.html) | ページの枠(CSS・固定スクリプト・CSP)。固定スクリプトを変えたら CSP の `sha256-` も直す(`check-pr-explain-template.py` が突き合わせる) |
-| [`templates/explain.json`](templates/explain.json) | `excerpt` 以外のすべてのキーと、Target の 5 つの kind・primers の 2 つの kind・Passage の excerpt 以外の 8 つの kind を使う解説の見本 |
+| [`templates/explain.json`](templates/explain.json) | Target の 5 つの kind・primers の 2 つの kind・Passage の 9 つの kind を使い、両方の技術の節に `excerpt` を含む解説の見本 |
 | `.github/scripts/build-pr-explain.py` | 解説の検査と、抜粋の中身の書き足し |
 | `.github/scripts/lib/embedded_regions.py` | 抜粋・差分の hunk の始まりの行で効いている埋め込み(script / style 要素・ヒアドキュメント)を開いた行。検査と地図が使う |
 | `.github/scripts/check-pr-explain-template.py` | 枠の CSP と、固定スクリプトが HTML として解釈させる API を使っていないかの検査 |

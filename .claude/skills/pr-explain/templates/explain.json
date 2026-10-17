@@ -411,6 +411,14 @@
         {
           "kind": "memo",
           "text": "フレームワークの例外は保存の境界で結果へ変換する。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRegistration.swift",
+            "start": 1,
+            "end": 3
+          }
         }
       ],
       "occurrences": [
@@ -454,6 +462,14 @@
         {
           "kind": "history",
           "text": "この見本では、空の名前でも保存を試していた入口から切り替える。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 1,
+            "end": 3
+          }
         }
       ],
       "occurrences": [
