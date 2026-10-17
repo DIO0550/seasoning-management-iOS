@@ -1,0 +1,270 @@
+{
+  "version": 1,
+  "pr": 115,
+  "sha": "30245676c6ceceb2b1f91be1bcdb25aefc8b77bf",
+  "overview": {
+    "title": "PRの変更を5画面で読む",
+    "lead": "実装後に変更の地図と解説を生成し、構造・経緯・テスト・振る舞い・技術を行き来して読めるようにした。",
+    "before": [
+      {
+        "text": "変更の全体像と根拠を差分や会話から探していた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "実装手順から検査済みの解説を生成できる。"
+      }
+    ]
+  },
+  "concepts": [
+    {
+      "path": ".github/scripts/build-pr-explain-local.py",
+      "name": "ローカル生成",
+      "role": "地図と検査済み解説と表示枠を出力先へ揃える。"
+    },
+    {
+      "path": ".github/scripts/build-pr-change-map.py",
+      "name": "変更の地図",
+      "role": "Gitの差分・履歴とテスト宣言の増減を読む。"
+    },
+    {
+      "path": ".github/scripts/build-pr-explain.py",
+      "name": "解説の検査",
+      "role": "説明の形と参照を確かめ、実コミットから抜粋を取得する。"
+    },
+    {
+      "path": ".claude/skills/pr-explain/templates/index.html",
+      "name": "5画面の表示",
+      "role": "地図と解説を組み合わせ、画面間の移動を提供する。"
+    },
+    {
+      "path": "harness/tests/test_pr_explain.py",
+      "name": "生成機構の検証",
+      "role": "不正入力の拒否と公開先の保持を確認する。"
+    },
+    {
+      "path": ".github/workflows/pr-explain-deploy.yml",
+      "name": "公開と案内",
+      "role": "公開した地図と現在のPRを照合して閲覧リンクを投稿する。"
+    },
+    {
+      "path": "harness/tests/test_pr_explain_comment.py",
+      "name": "案内の検証",
+      "role": "公開後の新規投稿・更新・対象外の抑止を検証する。"
+    }
+  ],
+  "messages": [
+    {
+      "id": "validate",
+      "from": ".github/scripts/build-pr-explain-local.py",
+      "to": ".github/scripts/build-pr-explain.py",
+      "kind": "qry",
+      "name": "解説を検査する",
+      "code": "build-pr-explain.py --pr --out --repo",
+      "via": "exec",
+      "status": "added"
+    },
+    {
+      "id": "map",
+      "from": ".github/scripts/build-pr-explain-local.py",
+      "to": ".github/scripts/build-pr-change-map.py",
+      "kind": "qry",
+      "name": "差分を地図にする",
+      "code": "build-pr-change-map.py --base --head --pr",
+      "via": "exec",
+      "status": "added"
+    },
+    {
+      "id": "copy",
+      "from": ".github/scripts/build-pr-explain-local.py",
+      "to": ".claude/skills/pr-explain/templates/index.html",
+      "kind": "qry",
+      "name": "表示枠を取得する",
+      "code": "shutil.copyfile(template, output / \"index.html\")",
+      "via": "file",
+      "status": "added"
+    }
+  ],
+  "flows": [
+    {
+      "id": "local",
+      "label": "手元で解説を生成する",
+      "steps": [
+        "validate",
+        "map",
+        "copy"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "5bf42cfd62573966e64cff4892e58aa5990a337b",
+      "phase": "core",
+      "role": "生成・検査・表示・公開を実装フローへ組み込む",
+      "why": "共通の表示枠を再利用し、Swiftのテストと保存構成に合わせるため。",
+      "flows": [
+        "local"
+      ],
+      "review": [
+        "信頼するbaseだけを実行し、PRのheadをコードとして実行しない。",
+        "Pagesの初回設定と導入PRの未公開を区別する。"
+      ]
+    },
+    {
+      "sha": "30245676c6ceceb2b1f91be1bcdb25aefc8b77bf",
+      "phase": "revise",
+      "role": "公開成功後にリンクを案内する",
+      "why": "未公開のリンクを投稿せず、公開した同じ版を根拠にするため。",
+      "review": [
+        "公開失敗や古い変更では案内を投稿しない。",
+        "同じコメントを更新し、再実行で重複させない。"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "harness",
+      "label": "PR解説の回帰検証",
+      "file": "harness/tests/test_pr_explain.py"
+    },
+    {
+      "id": "comments",
+      "label": "公開後の案内",
+      "file": "harness/tests/test_pr_explain_comment.py"
+    }
+  ],
+  "tests": [
+    {
+      "id": "render",
+      "suite": "harness",
+      "name": "test_renderer_core_matches_validator_and_all_five_screens",
+      "techniques": [
+        "regression"
+      ],
+      "why": "検査器と5画面の表示核の語彙・参照・画面移動を揃える。",
+      "given": "地図と解説の組合せ",
+      "when": "表示核のケースを実行する",
+      "then": "期待したデータ結合と参照先になる。",
+      "commit": "5bf42cfd62573966e64cff4892e58aa5990a337b",
+      "targets": [
+        ".claude/skills/pr-explain/templates/index.html"
+      ]
+    },
+    {
+      "id": "published-url",
+      "suite": "comments",
+      "name": "test_create_uses_actual_deployment_url_sha_and_ci_run",
+      "techniques": [
+        "regression",
+        "state"
+      ],
+      "why": "公開した場所と変更の版を正しいPRへ案内する。",
+      "given": "公開した地図と、同じ変更を持つ開いたPR",
+      "when": "公開後の投稿処理を実行する",
+      "then": "閲覧リンク・対象SHA・公開CIログを含む固定コメントが作られる。",
+      "commit": "30245676c6ceceb2b1f91be1bcdb25aefc8b77bf",
+      "targets": [
+        ".github/workflows/pr-explain-deploy.yml"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "変更の全体像を辿る",
+    "lead": "変更点と根拠を一つの解説から読む。",
+    "changed": {
+      "before": [
+        {
+          "text": "差分と会話を行き来して全体像を探す。"
+        }
+      ],
+      "after": [
+        {
+          "text": "構造・経緯・テスト・振る舞い・技術の画面を切り替えて読む。"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "公開設定前の確認",
+        "before": [],
+        "after": [
+          {
+            "text": "手元で解説を生成し、内容を確認できる。"
+          }
+        ]
+      },
+      {
+        "label": "公開後の案内",
+        "before": [
+          {
+            "text": "配置直後の未公開リンクが案内される。"
+          }
+        ],
+        "after": [
+          {
+            "text": "公開に成功してから、閲覧リンクが案内される。"
+          }
+        ],
+        "tests": [
+          "published-url"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "json",
+      "kind": "language",
+      "category": "データ形式",
+      "label": "JSON",
+      "gist": "地図と解説を、画面のコードと分けて渡す形式。",
+      "occurrences": [
+        {
+          "path": ".github/scripts/build-pr-explain-local.py",
+          "text": "生成した地図と解説を出力先へコピーする。",
+          "shas": [
+            "5bf42cfd62573966e64cff4892e58aa5990a337b"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checked",
+      "kind": "codebase",
+      "category": "生成",
+      "label": "検査を通して出力する",
+      "gist": "地図と説明を検査してから出力先へ揃える。",
+      "flows": [
+        "local"
+      ],
+      "occurrences": [
+        {
+          "path": ".github/scripts/build-pr-explain-local.py",
+          "text": "検査に失敗した場合は既存の出力を更新しない。",
+          "shas": [
+            "5bf42cfd62573966e64cff4892e58aa5990a337b"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "publish-comments",
+      "kind": "codebase",
+      "category": "公開",
+      "label": "公開後の案内",
+      "gist": "公開した同じ地図と現在の変更を照合してから、閲覧リンクを投稿する。",
+      "tests": [
+        "published-url"
+      ],
+      "occurrences": [
+        {
+          "path": ".github/workflows/pr-explain-deploy.yml",
+          "text": "公開成功後に、同じ作業フォルダの情報を使って案内する。",
+          "shas": [
+            "30245676c6ceceb2b1f91be1bcdb25aefc8b77bf"
+          ]
+        }
+      ]
+    }
+  ]
+}
