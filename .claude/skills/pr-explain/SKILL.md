@@ -42,7 +42,7 @@ gh-pages の `pr-explain/pr-<番号>/` に置くのは次の 3 つだけ。
 | `change-map.json` | 変更の地図 | Actions が push のたびに置き直す |
 | `explain.json` | 解説 | セッションが `put-explain` で置く |
 
-URL は `https://dio0550.github.io/seasoning-management-iOS/pr-explain/pr-<番号>/`。`PR Explain` が専用の固定コメントに載せるので、同じリンクのコメントを増やさない。**解説は PR ブランチにも master にも入れない**(master に溜まり、
+閲覧先は Pages の公開 URL に `pr-explain/pr-<番号>/` を続けた場所(標準構成は `https://dio0550.github.io/seasoning-management-iOS/pr-explain/pr-<番号>/`)。`PR Explain Deploy` の公開成功後に、公開した地図の head と現在の PR の head が一致するものだけ専用の固定コメントに載せる。同じリンクのコメントを増やさない。**解説は PR ブランチにも master にも入れない**(master に溜まり、
 Files changed にも混ざるため)。
 
 Pages の公開には Settings → Pages → Source を **GitHub Actions** にする初回設定が必要。
@@ -105,7 +105,8 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123
      終わっていないだけなら置き直さなくてよい(run が終われば地図の head と揃う)
    - **gh-pages へ push してよいのは、このスクリプトで `pr-explain/pr-<番号>/` へ置くときだけ。**
      他のフォルダ・他のブランチは触らない
-6. **URL をユーザーに伝える**
+6. **`PR Explain Deploy` の公開成功と固定 PR コメントを確認して、URL をユーザーに伝える**。
+   コメントには閲覧リンク・対象 SHA・公開 CI のリンクが出る。公開失敗や古い head の場合は新しいリンクを投稿しない。
 
 ## explain.json の形
 

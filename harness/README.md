@@ -152,7 +152,7 @@ Linux や Xcode のない環境では終了コード 2 で未実施を知らせ�
 コメント権限は集約ジョブだけに付け、PR のコードを checkout / 実行しない。
 fork の PR は読み取り専用トークンのため Actions の Summary に表示する。
 workflow 全体の取消やランナー待ちでは集約ジョブが実行されないことがあり、その状態はエージェントが完了報告に記す。
-自動コメントの対象は iOS CI だけ。`Agent harness` / `Swift format` とローカル検証はエージェントが別途報告する。
+テスト結果の自動コメントの対象は iOS CI だけ。`Agent harness` / `Swift format` とローカル検証はエージェントが別途報告する。
 自動コメントと完了報告が揃っているか確認し、取得できていない数値を推測で埋めない。
 
 ローカルでも結果を保存してカバレッジを有効にする場合は、新規の出力先を指定する。
@@ -210,7 +210,7 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123
 `pull_request_target` で **base SHA のコードだけ**を checkout し、PR の head は Git object として fetch して読む。
 head のスクリプト・hook・アプリ・テストを実行せず、型検査や iOS 実行も行わない。
 古い PR イベントは現在の状態と head を照合して除く。変更ごとに `index.html` と `change-map.json` を
-`gh-pages/pr-explain/pr-N/` へ配置し、専用の固定 PR コメントへ URL を載せる。
+`gh-pages/pr-explain/pr-N/` へ配置する。閲覧リンクは `PR Explain Deploy` の公開成功後に専用の固定 PR コメントへ載せる。
 PR を閉じるとそのフォルダを削除し、reopen では地図の再生成後に解説を置き直す。
 
 セッションが書いた解説は次のコマンドで検査して公開する。sha は push 済みのものを使う。
@@ -226,6 +226,9 @@ bash .github/scripts/pr-explain-pages.sh put-explain 123 /tmp/explain.json
 `PR Explain Deploy` は gh-pages の push、`PR Explain` 成功後の `workflow_run`、手動実行でサイト全体を公開する。
 `GITHUB_TOKEN` での push は別の push workflow を起動しないため、`workflow_run` も必要。
 デプロイはサイト共通の concurrency で直列化し、ロック取得後に最新 gh-pages を checkout する。
+公開成功後に同じ checkout 済みの版を読み、公開した地図の head と現在の PR の head が一致するときだけ、
+閲覧リンク・対象 SHA・公開 CI のリンクを固定コメントへ投稿または更新する。未公開・失敗・古い SHA のリンクは投稿しない。
+同じ本文の再実行では更新せず、閉じた PR・fork・Dependabot・地図の不備があるフォルダは対象外。
 セッションによる gh-pages への push で workflow が起動しない認証を使う場合は、手動で deploy を実行する。
 workflow で使う Actions は GitHub 公式だけを 40 桁 SHA で固定している。
 
