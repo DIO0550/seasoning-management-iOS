@@ -23,14 +23,31 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testProductRegistrationNavigationAndBack() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
+        // 保存済み商品の有無によらず、共通の登録操作から遷移できる。
+        let productList = app.navigationBars["商品一覧"]
+        XCTAssertTrue(productList.waitForExistence(timeout: 5))
+
+        let registerButton = productList.buttons["product-list-register"]
+        XCTAssertTrue(registerButton.isHittable)
+        registerButton.tap()
+
+        let registration = app.navigationBars["商品登録"]
+        XCTAssertTrue(registration.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["商品登録機能は準備中です"].exists)
+        XCTAssertFalse(app.buttons["保存"].exists)
+        XCTAssertFalse(app.textFields.firstMatch.exists)
+
+        // 暫定画面の標準戻るボタンで一覧と登録操作に戻れる。
+        let backButton = registration.buttons.element(boundBy: 0)
+        XCTAssertTrue(backButton.isHittable)
+        backButton.tap()
+
+        XCTAssertTrue(productList.waitForExistence(timeout: 5))
+        XCTAssertTrue(registerButton.isHittable)
     }
 
     @MainActor
