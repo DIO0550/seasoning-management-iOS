@@ -1,0 +1,746 @@
+{
+  "version": 1,
+  "pr": 122,
+  "sha": "182a97caf71188b528b0e1c15d9a14a34521829d",
+  "issue": 31,
+  "overview": {
+    "title": "商品画像と現在の在庫本数を一覧に表示する",
+    "lead": "商品名・種類だけだった行に、画像と未開封・使用中の本数を追加します。使い切り履歴と未知の状態は現在の本数に含めず、画像を復元できない場合は代替アイコンを表示します。",
+    "before": [
+      {
+        "text": "一覧から商品画像や未開封・使用中の本数を確認できなかった。"
+      }
+    ],
+    "after": [
+      {
+        "text": "画像があればサムネイルを表示し、画像なし・復元不可なら代替アイコンを表示する。"
+      },
+      {
+        "text": "商品に紐づく未開封・使用中だけを、それぞれ0本も含めて表示する。",
+        "message": "read-stock"
+      },
+      {
+        "text": "使い切りや未知の保存値があっても、現在の本数へ加えない。"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "履歴と現在の区別",
+        "text": "保存する件数は増やさず、個体の状態から導出する。使い切りや未知値を既知の在庫へ補完しない。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift"
+        }
+      },
+      {
+        "title": "画像と読み上げ",
+        "text": "画像なし・復元不可に同じ代替表示を使い、行の読み上げに状態別の本数を含める。実機確認は未実施。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "catalog",
+      "label": "商品一覧",
+      "role": "商品を画像で見分け、現在の状態別本数を確認する。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+      "name": "商品一覧の行",
+      "role": "画像・商品名・種類・本数と読み上げを組み立てる。",
+      "feature": "catalog",
+      "change": "サムネイル、代替アイコン、未開封・使用中の本数を追加する。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+      "name": "商品と在庫の集計",
+      "role": "紐づく個体から現在の本数を導出する。",
+      "feature": "catalog",
+      "change": "`stockCounts` を計算プロパティとして追加する。保存属性は増やさない。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "name": "保存された個体の状態",
+      "role": "商品との関係と保存された状態を持つ。未知値は `status == nil` として扱う。",
+      "feature": "catalog"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+      "name": "在庫集計の検証",
+      "role": "実際の保存境界を使い、除外条件と再集計を確認する。",
+      "feature": "catalog",
+      "change": "5つのテスト宣言・引数展開9ケースを追加する。"
+    }
+  ],
+  "messages": [
+    {
+      "id": "read-stock",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+      "kind": "qry",
+      "name": "現在の本数を読む",
+      "code": "product.stockCounts",
+      "via": "state",
+      "returns": "未開封と使用中の名前付き件数",
+      "status": "added"
+    },
+    {
+      "id": "read-status",
+      "from": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "kind": "qry",
+      "name": "関連個体の状態を読む",
+      "code": "for item in items ?? []; switch item.status",
+      "via": "state",
+      "returns": "既知の状態または不在",
+      "status": "added"
+    },
+    {
+      "id": "verify-stock",
+      "from": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+      "kind": "qry",
+      "name": "保存後の本数を検証する",
+      "code": "saved.stockCounts",
+      "via": "state",
+      "returns": "保存済みの関連個体から求めた本数",
+      "status": "added"
+    }
+  ],
+  "flows": [
+    {
+      "id": "show-stock",
+      "label": "一覧で在庫を確認する",
+      "steps": [
+        "read-stock",
+        "read-status"
+      ]
+    },
+    {
+      "id": "check-stock",
+      "label": "保存と更新後の集計を確認する",
+      "steps": [
+        "verify-stock",
+        "read-status"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "182a97caf71188b528b0e1c15d9a14a34521829d",
+      "phase": "core",
+      "role": "商品に属する集計を一覧表示へつなぐ",
+      "why": "既存の一覧行と商品の個体リレーションを利用し、本番2ファイルと不可分の集計テスト1ファイルに絞った。画面内だけで集計する案は、商品の計算として一か所に置いて検証するため採用しなかった。画像選択や登録フォームは対象外。",
+      "flows": [
+        "show-stock",
+        "check-stock"
+      ],
+      "review": [
+        "使い切り・未知状態を現在の本数へ含めていないか。",
+        "同名の別商品の個体を混ぜていないか。",
+        "画像の代替表示と本数の読み上げを確認できるか。"
+      ],
+      "before": [
+        {
+          "text": "行には商品名と種類のみが出ていた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "画像と状態別本数が同じ行に表示される。"
+        }
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+          "start": 29,
+          "end": 43,
+          "text": "保存済みの合計を増減する方式ではなく、元の個体から導出する。未知の保存値を書き換えない。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+          "start": 90,
+          "end": 106,
+          "text": "画像の復元に成功した場合だけ画像を表示する。未設定と復元不可の両方に代替アイコンを用意する。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "stock",
+      "label": "商品の状態別本数",
+      "file": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "mixed",
+      "suite": "stock",
+      "name": "savedStockExcludesConsumedAndUnknownStatuses",
+      "techniques": [
+        "boundary",
+        "regression"
+      ],
+      "why": "使い切りや未知値を現在の本数へ混ぜる回帰を検出する。",
+      "given": "未開封2・使用中1・使い切り1・未知1を保存する。",
+      "when": "別のコンテキストで商品を読み集計する。",
+      "then": "未開封2・使用中1となり、未知値も変更されない。",
+      "commit": "182a97caf71188b528b0e1c15d9a14a34521829d",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+        "start": 8,
+        "end": 36,
+        "text": "    @Test(arguments: [\"\", \"futureStatus\"])\n    func savedStockExcludesConsumedAndUnknownStatuses(_ rawValue: String) throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(product)\n\n        for status in [ItemStatus.unopened, .unopened, .inUse, .consumed] {\n            context.insert(Item(product: product, status: status))\n        }\n        let unknown = Item(product: product)\n        unknown.statusRawValue = rawValue\n        context.insert(unknown)\n        try context.save()\n\n        // 保存した個体の逆リレーションから集計し、未知の保存値を補完しない。\n        let reader = ModelContext(container)\n        let saved = try #require(try reader.fetch(FetchDescriptor<Product>()).first)\n        let items = try #require(saved.items)\n        let savedUnknown = try #require(items.first { $0.id == unknown.id })\n\n        #expect(items.count == 5)\n        #expect(items.allSatisfy { $0.product?.id == saved.id })\n        #expect(saved.stockCounts.unopened == 2)\n        #expect(saved.stockCounts.inUse == 1)\n        #expect(savedUnknown.statusRawValue == rawValue)\n        #expect(savedUnknown.status == nil)\n        #expect(!reader.hasChanges)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "verify-stock",
+        "read-status"
+      ]
+    },
+    {
+      "id": "separate",
+      "suite": "stock",
+      "name": "sameNameProductsKeepTheirOwnStock",
+      "techniques": [
+        "regression"
+      ],
+      "why": "名前で商品をまとめてしまう回帰を検出する。",
+      "given": "同じ名前の2商品に別々の個体を保存する。",
+      "when": "各商品から本数を読む。",
+      "then": "それぞれ未開封2・使用中0と未開封0・使用中1になる。",
+      "commit": "182a97caf71188b528b0e1c15d9a14a34521829d",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+        "start": 38,
+        "end": 59,
+        "text": "    @Test func sameNameProductsKeepTheirOwnStock() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let first = Product(name: \"しょうゆ\", type: \"調味料\")\n        let second = Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(first)\n        context.insert(second)\n        context.insert(Item(product: first))\n        context.insert(Item(product: first))\n        context.insert(Item(product: second, status: .inUse))\n        try context.save()\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())\n        let savedFirst = try #require(products.first { $0.id == first.id })\n        let savedSecond = try #require(products.first { $0.id == second.id })\n\n        #expect(savedFirst.stockCounts.unopened == 2)\n        #expect(savedFirst.stockCounts.inUse == 0)\n        #expect(savedSecond.stockCounts.unopened == 0)\n        #expect(savedSecond.stockCounts.inUse == 1)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "verify-stock",
+        "read-status"
+      ]
+    },
+    {
+      "id": "zeros",
+      "suite": "stock",
+      "name": "productsWithoutCurrentStockReportBothZeros",
+      "techniques": [
+        "boundary",
+        "equivalence"
+      ],
+      "why": "履歴・未知値だけの商品で現在の本数が増えないことを確認する。",
+      "given": "個体なし・使い切りのみ・未知値のみの4入力を使う。",
+      "when": "保存後に商品を読み集計する。",
+      "then": "どの入力でも両方0になる。",
+      "commit": "182a97caf71188b528b0e1c15d9a14a34521829d",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+        "start": 61,
+        "end": 81,
+        "text": "    @Test(arguments: [[String](), [\"consumed\"], [\"futureStatus\"], [\"\"]])\n    func productsWithoutCurrentStockReportBothZeros(_ rawValues: [String]) throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(product)\n\n        for rawValue in rawValues {\n            let item = Item(product: product)\n            item.statusRawValue = rawValue\n            context.insert(item)\n        }\n        try context.save()\n\n        let reader = ModelContext(container)\n        let saved = try #require(try reader.fetch(FetchDescriptor<Product>()).first)\n\n        #expect((saved.items ?? []).count == rawValues.count)\n        #expect(saved.stockCounts.unopened == 0)\n        #expect(saved.stockCounts.inUse == 0)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "verify-stock",
+        "read-status"
+      ]
+    },
+    {
+      "id": "missing",
+      "suite": "stock",
+      "name": "missingItemRelationshipReportsBothZeros",
+      "techniques": [
+        "boundary"
+      ],
+      "why": "関係が未設定でも集計できることを確認する。",
+      "given": "個体関係が未設定の商品を作る。",
+      "when": "2種類の本数を読む。",
+      "then": "両方0となる。",
+      "commit": "182a97caf71188b528b0e1c15d9a14a34521829d",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+        "start": 83,
+        "end": 89,
+        "text": "    @Test func missingItemRelationshipReportsBothZeros() {\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n\n        #expect(product.items == nil)\n        #expect(product.stockCounts.unopened == 0)\n        #expect(product.stockCounts.inUse == 0)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "verify-stock",
+        "read-status"
+      ]
+    },
+    {
+      "id": "updates",
+      "suite": "stock",
+      "name": "stockRecalculatesAfterStatusChangesAndDeletion",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "集計値を保持して更新を取りこぼす回帰を検出する。",
+      "given": "未開封1・使用中1を保存する。",
+      "when": "使用中へ変更、使い切りへ変更、現在個体を削除し、それぞれ再集計する。",
+      "then": "(1,1)→(0,2)→(0,1)→(0,0)となる。",
+      "commit": "182a97caf71188b528b0e1c15d9a14a34521829d",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+        "start": 91,
+        "end": 129,
+        "text": "    @Test func stockRecalculatesAfterStatusChangesAndDeletion() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        let unopened = Item(product: product)\n        let inUse = Item(product: product, status: .inUse)\n        context.insert(product)\n        context.insert(unopened)\n        context.insert(inUse)\n        try context.save()\n\n        #expect(product.stockCounts.unopened == 1)\n        #expect(product.stockCounts.inUse == 1)\n\n        unopened.statusRawValue = ItemStatus.inUse.rawValue\n        try context.save()\n\n        #expect(product.stockCounts.unopened == 0)\n        #expect(product.stockCounts.inUse == 2)\n\n        inUse.statusRawValue = ItemStatus.consumed.rawValue\n        try context.save()\n\n        #expect(product.stockCounts.unopened == 0)\n        #expect(product.stockCounts.inUse == 1)\n\n        context.delete(unopened)\n        try context.save()\n\n        #expect(product.stockCounts.unopened == 0)\n        #expect(product.stockCounts.inUse == 0)\n\n        let reader = ModelContext(container)\n        let saved = try #require(try reader.fetch(FetchDescriptor<Product>()).first)\n\n        #expect(saved.items?.map(\\.id) == [inUse.id])\n        #expect(saved.stockCounts.unopened == 0)\n        #expect(saved.stockCounts.inUse == 0)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "verify-stock",
+        "read-status"
+      ]
+    },
+    {
+      "id": "visual",
+      "suite": "stock",
+      "name": "画像・本数表示・文字拡大・読み上げの画面確認",
+      "techniques": [
+        "boundary"
+      ],
+      "why": "集計テストだけでは描画と画面更新を保証できない。",
+      "given": "画像あり・なし・破損、混在する個体と大きい文字の表示。",
+      "when": "一覧を開き、保存状態の変更と読み上げを確認する。",
+      "then": "代替表示と本数が正しく表示・更新され、文字が読める。",
+      "todo": true,
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "一覧で商品の見分けと本数確認ができる",
+    "lead": "画像と現在の本数を一覧にまとめます。過去に使い切った本数は現在の在庫に含めません。",
+    "changed": {
+      "before": [
+        {
+          "text": "商品名と種類だけを確認できた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "画像または代替アイコンと、未開封・使用中の本数を確認できる。",
+          "message": "read-stock"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "履歴が混じる商品",
+        "before": [],
+        "after": [
+          {
+            "text": "未開封2本、使用中1本と履歴がある商品は、未開封2本・使用中1本と表示する。"
+          }
+        ],
+        "tests": [
+          "mixed"
+        ]
+      },
+      {
+        "label": "現在の在庫がない商品",
+        "before": [],
+        "after": [
+          {
+            "text": "個体なし・履歴のみ・状態不明のみでも、未開封0本・使用中0本と表示する。"
+          }
+        ],
+        "tests": [
+          "zeros",
+          "missing"
+        ]
+      },
+      {
+        "label": "画像がない・開けない商品",
+        "before": [],
+        "after": [
+          {
+            "text": "画像の代わりに写真のアイコンを表示する。"
+          }
+        ],
+        "tests": [
+          "visual"
+        ]
+      }
+    ],
+    "kept": [
+      {
+        "text": "同名の商品を自動でまとめず、それぞれの商品に紐づく本数を使う。",
+        "tests": [
+          "separate"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "models",
+      "kind": "language",
+      "category": "Swiftと画面・保存の基礎",
+      "label": "SwiftDataのモデルとリレーション",
+      "gist": "モデルは保存するデータの形、リレーションは保存データ同士のつながりです。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftDataは、Swiftのオブジェクトを保存して後から読み戻すための仕組みです。`@Model` はクラス宣言に付けるマクロで、保存や変更の追跡に必要なコードをコンパイル時に生成します。`@` で始まる記法は宣言へ特別な規則を付ける形です。"
+        },
+        {
+          "kind": "text",
+          "text": "リレーションは、たとえば「この商品にはどの個体が紐づくか」という関係です。`@Relationship` がその関係を表し、`[Item]?` は個体の配列が設定されていない場合もあることを表します。個体側には逆向きの商品の参照が定義されています。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+            "start": 4,
+            "end": 26,
+            "text": "/// 永続化用の商品。入力値の業務検証は保存操作側で行う。\n@Model\nfinal class Product {\n    // CloudKitで使えない一意制約に頼らず、商品ごとにIDを発行する。\n    private(set) var id: UUID = UUID()\n    var name: String = \"\"\n    var type: String = \"\"\n    @Attribute(.externalStorage) var image: Data?\n    var priceYen: Int64?\n\n    // 栄養値と基準量は実際の値を100倍した整数。未設定と0を区別する。\n    var calories: Int64?\n    var protein: Int64?\n    var fat: Int64?\n    var sugar: Int64?\n    var carbohydrates: Int64?\n    var nutrientBasisAmount: Int64?\n    var nutrientBasisUnit: String?\n    var updatedAt: Date = Date()\n\n    // 個体がある商品の削除拒否は保存操作側で行う。\n    @Relationship(deleteRule: .nullify)\n    var items: [Item]?"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "このPRは既存の `items` の関係を読みます。集計結果を保存する属性は追加しません。保存値と集計結果を二重管理すると、開封や削除のたびに両方の更新が必要になるためです。"
+        },
+        {
+          "kind": "text",
+          "text": "`.nullify` は関係先が削除されたときに参照を外す保存上の方針です。在庫の数え方や、個体がある商品の削除可否そのものを決める規則ではありません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+          "lineRange": {
+            "start": 4,
+            "end": 26
+          },
+          "text": "対象コミットの実コードと対応する説明。",
+          "shas": [
+            "182a97caf71188b528b0e1c15d9a14a34521829d"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "computed",
+      "kind": "language",
+      "category": "Swiftと画面・保存の基礎",
+      "label": "計算プロパティと名前付きタプル",
+      "gist": "プロパティを読むたびに計算し、2種類の本数を名前付きの組で返します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "計算プロパティは、値を専用の保存場所へ持つ代わりに、読み取り時に処理を行うプロパティです。関数のように `()` を付けず、`product.stockCounts` と読めます。今回の本数は個体が元データなので、この形が合います。"
+        },
+        {
+          "kind": "text",
+          "text": "タプルは複数の値を一組として扱うSwiftの記法です。`(unopened: Int, inUse: Int)` は整数2つの組に名前を付けています。`counts.unopened` と名前で読めるので、どちらが何の本数かを取り違えにくくなります。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+            "start": 28,
+            "end": 44,
+            "text": "    /// 在庫は個体から都度求め、使い切りと未知の状態は本数に含めない。\n    var stockCounts: (unopened: Int, inUse: Int) {\n        var counts = (unopened: 0, inUse: 0)\n\n        for item in items ?? [] {\n            switch item.status {\n            case .unopened?:\n                counts.unopened += 1\n            case .inUse?:\n                counts.inUse += 1\n            case .consumed?, nil:\n                break\n            }\n        }\n\n        return counts\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "最初に両方を0にし、紐づく個体を一巡して対応する方を増やします。読み取りのたびに計算するため、以前の集計値を持ち続けません。保存状態が変わった後の次の読み取りは新しい状態を数えます。"
+        },
+        {
+          "kind": "text",
+          "text": "計算することと画面が再描画されることは別です。保存モデルの変更をSwiftUIが追跡しているかを含む実際の画面更新は、iOS上の確認が必要で、この環境では未実施です。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+          "lineRange": {
+            "start": 28,
+            "end": 44
+          },
+          "text": "対象コミットの実コードと対応する説明。",
+          "shas": [
+            "182a97caf71188b528b0e1c15d9a14a34521829d"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "optional",
+      "kind": "language",
+      "category": "Swiftと画面・保存の基礎",
+      "label": "Optionalと状態のパターンマッチ",
+      "gist": "値がない場合を、既知の状態へ勝手に置き換えず分岐します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "Optionalは「値がある」か「値がない」を型で表す仕組みです。型名の後ろの `?` はその型が不在にもなれることを示し、不在は `nil` と書きます。個体の `status` は、保存文字列が未知なら `nil` を返す契約です。"
+        },
+        {
+          "kind": "text",
+          "text": "`switch` は値の形に応じて処理を分けます。`case .unopened?:` の末尾の `?` は、「Optionalの中に未開封という値が入っている」場合に一致するパターンです。ここでは型の宣言に付く `?` と違い、値の形を判定しています。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+            "start": 32,
+            "end": 40,
+            "text": "        for item in items ?? [] {\n            switch item.status {\n            case .unopened?:\n                counts.unopened += 1\n            case .inUse?:\n                counts.inUse += 1\n            case .consumed?, nil:\n                break\n            }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`items ?? []` の `??` は、左側が不在なら右側の空配列を使う演算子です。関係先がない商品を0本として数えるために使います。一方で未知の状態を未開封へ補完することはしません。"
+        },
+        {
+          "kind": "text",
+          "text": "`case .consumed?, nil:` は、使い切りか状態不明なら何も加えない、という分岐です。未知の保存文字列はそのまま残り、読み取りだけで保存値を修正しません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+          "lineRange": {
+            "start": 32,
+            "end": 40
+          },
+          "text": "対象コミットの実コードと対応する説明。",
+          "shas": [
+            "182a97caf71188b528b0e1c15d9a14a34521829d"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "views",
+      "kind": "language",
+      "category": "Swiftと画面・保存の基礎",
+      "label": "SwiftUIのViewと画像の復元",
+      "gist": "Viewは画面の構成を記述し、画像データを復元できた場合だけ写真を表示します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftUIでは、画面や画面の一部分を `View` として記述します。`some View` は、具体的な画面部品の型を呼び出し側へ隠しつつ、Viewとして扱えるという戻り値の書き方です。`Group` の中の条件分岐で表示内容を切り替えています。"
+        },
+        {
+          "kind": "text",
+          "text": "保存されている `Data` はバイト列であり、そのままでは画像として表示できません。UIKitの `UIImage(data:)` で画像へ復元し、それを `Image(uiImage:)` に渡すことでSwiftUIへ接続します。復元できないデータからは画像が得られません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+            "start": 90,
+            "end": 107,
+            "text": "    private var thumbnail: some View {\n        Group {\n            if let data = product.image, let image = UIImage(data: data) {\n                Image(uiImage: image)\n                    .resizable()\n                    .scaledToFill()\n            } else {\n                Image(systemName: \"photo\")\n                    .font(.title2)\n                    .foregroundStyle(.secondary)\n                    .frame(maxWidth: .infinity, maxHeight: .infinity)\n                    .background(.quaternary)\n            }\n        }\n        .frame(width: 64, height: 64)\n        .clipShape(RoundedRectangle(cornerRadius: 8))\n        .accessibilityHidden(true)\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`if let` はOptionalの値がある場合だけ中身を取り出します。ここではカンマで2つをつなぎ、画像データの存在と復元成功の両方を確認します。どちらかが成立しなければ、写真を表す標準アイコンへ進みます。"
+        },
+        {
+          "kind": "text",
+          "text": "`.resizable()` などのドットで続く呼び出しは、表示の設定を重ねる修飾子です。64×64の枠に切り抜き、装飾の画像は個別に読み上げません。商品名と本数の読み上げは行全体で設定しています。画像表示の手動確認は未実施です。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+          "lineRange": {
+            "start": 90,
+            "end": 107
+          },
+          "text": "対象コミットの実コードと対応する説明。",
+          "shas": [
+            "182a97caf71188b528b0e1c15d9a14a34521829d"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "actor-testing",
+      "kind": "language",
+      "category": "Swiftと画面・保存の基礎",
+      "label": "MainActorとSwift Testing",
+      "gist": "MainActorは処理を動かす場所の規則で、テストの件数とは別の概念です。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "actorは、同時に実行される処理からデータを守るために、アクセスする実行領域を区切るSwiftの仕組みです。MainActorは特別な共有actorで、メインスレッド上で動く実行領域と結び付いています。メインスレッドはアプリの画面処理を担う基本のスレッドです。"
+        },
+        {
+          "kind": "text",
+          "text": "`@MainActor` は「この宣言に属する処理やデータへのアクセスはMainActorの規則に従う」という注釈です。単に速くするための指定や、新しいバックグラウンド処理を作る命令ではありません。ここではSwiftDataを扱うテスト構造体に付け、アプリ側のactor設定と合わせています。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+            "start": 1,
+            "end": 24,
+            "text": "import Foundation\nimport SwiftData\nimport Testing\n@testable import SeasoningManager\n\n@MainActor\nstruct ProductStockTests {\n    @Test(arguments: [\"\", \"futureStatus\"])\n    func savedStockExcludesConsumedAndUnknownStatuses(_ rawValue: String) throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(product)\n\n        for status in [ItemStatus.unopened, .unopened, .inUse, .consumed] {\n            context.insert(Item(product: product, status: status))\n        }\n        let unknown = Item(product: product)\n        unknown.statusRawValue = rawValue\n        context.insert(unknown)\n        try context.save()\n\n        // 保存した個体の逆リレーションから集計し、未知の保存値を補完しない。\n        let reader = ModelContext(container)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "Swift Testingは `@Test` でテストを宣言し、`#expect` で期待する結果を確かめる仕組みです。`@Test(arguments:)` は同じ振る舞いを複数の入力で検証します。このファイルは宣言5つを引数展開すると9ケースです。"
+        },
+        {
+          "kind": "text",
+          "text": "`ModelContainer` は保存モデルの集合と保存先を用意し、`ModelContext` は読み書きの作業単位を持ちます。テストではケースごとにメモリ内のコンテナを作って保存し、新しいコンテキストから読んでいます。ユーザーの端末データは使いません。テストコードの追加と実行成功は別で、Linuxでは実行していません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+          "lineRange": {
+            "start": 1,
+            "end": 24
+          },
+          "text": "対象コミットの実コードと対応する説明。",
+          "shas": [
+            "182a97caf71188b528b0e1c15d9a14a34521829d"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stock-flow",
+      "kind": "codebase",
+      "category": "商品画像と在庫の実装",
+      "label": "商品から現在の本数を表示する",
+      "gist": "一覧は商品に集計を問い合わせ、返された本数を表示と読み上げの両方で使います。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "一覧行は `product.stockCounts` を一度読み、名前付きの2つの値を受け取ります。表示側へ状態の判定を散らさず、「どの個体を数えるか」は商品側に置いています。"
+        },
+        {
+          "kind": "text",
+          "text": "画像は横、商品名・種類・2種類の本数は縦に並べます。本数が0でも行を省かず、どちらの状態が0なのかを文字で確認できます。長い名前を行数制限で省略する変更は入れていません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+            "start": 64,
+            "end": 87,
+            "text": "    var body: some View {\n        let counts = product.stockCounts\n\n        HStack(alignment: .top, spacing: 12) {\n            thumbnail\n\n            VStack(alignment: .leading, spacing: 4) {\n                Text(displayName)\n                    .font(.headline)\n\n                Text(\"種類: \\(displayType)\")\n                    .font(.subheadline)\n                    .foregroundStyle(.secondary)\n\n                Text(\"未開封: \\(counts.unopened)本\")\n                Text(\"使用中: \\(counts.inUse)本\")\n            }\n            .frame(maxWidth: .infinity, alignment: .leading)\n        }\n        .fixedSize(horizontal: false, vertical: true)\n        .accessibilityElement(children: .ignore)\n        .accessibilityLabel(\n            \"商品名、\\(displayName)、種類、\\(displayType)、未開封、\\(counts.unopened)本、使用中、\\(counts.inUse)本\"\n        )"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "行は1つの読み上げ要素として扱い、商品名・種類の後に未開封・使用中の本数を加えます。画像の重複読み上げは避けます。見た目と読み上げの実機確認、文字拡大時の表示は未実施です。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+          "lineRange": {
+            "start": 64,
+            "end": 87
+          },
+          "text": "対象コミットの実コードと対応する説明。",
+          "shas": [
+            "182a97caf71188b528b0e1c15d9a14a34521829d"
+          ]
+        }
+      ],
+      "status": "added",
+      "flows": [
+        "show-stock"
+      ],
+      "tests": [
+        "mixed",
+        "zeros",
+        "visual"
+      ]
+    },
+    {
+      "id": "test-boundary",
+      "kind": "codebase",
+      "category": "商品画像と在庫の実装",
+      "label": "保存後の集計と再計算を検証する",
+      "gist": "配列へ期待値を直に入れず、保存した商品と個体の関係から本数を確かめます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "単に0・1を返すかだけでなく、未開封から使用中、使い切り、削除という保存状態の変化に対して、同じ商品の集計結果を読み直します。"
+        },
+        {
+          "kind": "text",
+          "text": "このテストは個体の保存属性を変更して集計の再計算を確認するものです。開封日などの業務検証を含む保存操作API全体をテストするものではなく、それらは既存の別テストが担当します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+            "start": 91,
+            "end": 129,
+            "text": "    @Test func stockRecalculatesAfterStatusChangesAndDeletion() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        let unopened = Item(product: product)\n        let inUse = Item(product: product, status: .inUse)\n        context.insert(product)\n        context.insert(unopened)\n        context.insert(inUse)\n        try context.save()\n\n        #expect(product.stockCounts.unopened == 1)\n        #expect(product.stockCounts.inUse == 1)\n\n        unopened.statusRawValue = ItemStatus.inUse.rawValue\n        try context.save()\n\n        #expect(product.stockCounts.unopened == 0)\n        #expect(product.stockCounts.inUse == 2)\n\n        inUse.statusRawValue = ItemStatus.consumed.rawValue\n        try context.save()\n\n        #expect(product.stockCounts.unopened == 0)\n        #expect(product.stockCounts.inUse == 1)\n\n        context.delete(unopened)\n        try context.save()\n\n        #expect(product.stockCounts.unopened == 0)\n        #expect(product.stockCounts.inUse == 0)\n\n        let reader = ModelContext(container)\n        let saved = try #require(try reader.fetch(FetchDescriptor<Product>()).first)\n\n        #expect(saved.items?.map(\\.id) == [inUse.id])\n        #expect(saved.stockCounts.unopened == 0)\n        #expect(saved.stockCounts.inUse == 0)\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "最後に別の読み取りコンテキストで確認し、削除済み個体が本数へ残らず、使い切り個体だけが関係先として残ることを確かめます。同名商品が分離されることや、未知値が書き換わらないことは同じファイルの別のケースで確認します。"
+        },
+        {
+          "kind": "text",
+          "text": "テスト追加は9ケースですが、この環境にSwift/Xcodeがないため実行は未実施です。画像の分岐や画面の再描画をこの集計テストの成功だけで保証することもできません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+          "lineRange": {
+            "start": 91,
+            "end": 129
+          },
+          "text": "対象コミットの実コードと対応する説明。",
+          "shas": [
+            "182a97caf71188b528b0e1c15d9a14a34521829d"
+          ]
+        }
+      ],
+      "status": "added",
+      "flows": [
+        "check-stock"
+      ],
+      "tests": [
+        "updates",
+        "separate"
+      ]
+    }
+  ]
+}
