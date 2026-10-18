@@ -1,0 +1,135 @@
+{
+  "version": 2,
+  "pr": 120,
+  "headBranch": "feat/30-delete-individual-items",
+  "baseBranch": "master",
+  "mergeBase": "ec73501dd5fb514f61b2be075af313cd28905cb5",
+  "head": "e122b29518e7ce84df9720a3edf657b76c647975",
+  "groups": [
+    {
+      "label": "Data",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 27,
+          "deletions": 1,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "単体テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 396,
+          "deletions": 0,
+          "changed": true,
+          "target": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift"
+        }
+      ]
+    },
+    {
+      "label": "ハーネス",
+      "files": [
+        {
+          "path": ".claude/skills/pr-explain/templates/explain.json",
+          "changed": false
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "confirmedDeletionRemovesOnlyTheSelectedIDAndPreservesAllSurvivors"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "deletingTheLastItemKeepsTheProductAndItsValues"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "deletionAcceptsUnknownSavedStatusesWithoutCoercingThem"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "deletionAndSurvivingRelationshipsPersistAfterReopeningTheStore"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "deletionPreservesPendingInputWithoutSavingOrRollingBack"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "deletionPreservesUnrelatedPendingInsertionsAndDeletions"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "deletionRejectsUnmanagedAndForeignItemsWithoutSaving"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "failedDeletionRestoresTheSameObjectAndRelationshipsBeforeRetry"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "name": "unconfirmedDeletionLeavesEverySavedValueAndRelationshipUntouched"
+      }
+    ],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "e122b29518e7ce84df9720a3edf657b76c647975",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-10-18T15:52:02+09:00",
+      "subject": "feat: delete individual items and consumed history (#30)",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 27,
+          "deletions": 1,
+          "patch": "@@ -1,13 +1,14 @@\n import Foundation\n import SwiftData\n \n-/// 未保存の変更がないcontextで、個体の登録・日付編集・開封・使い切りを一回の保存として行う。\n+/// 未保存の変更がないcontextで、個体の登録・日付編集・開封・使い切り・削除を一回の保存として行う。\n @MainActor\n struct ItemActions {\n     nonisolated enum ActionError: Error, Sendable {\n         case pendingChanges\n         case productNotInContext\n         case itemNotInContext\n+        case deletionNotConfirmed\n         case validation(ItemRules.ValidationError)\n         case persistence(any Error)\n     }\n@@ -100,6 +101,31 @@ struct ItemActions {\n         return transition(item, from: .inUse, using: rules, now: now, calendar: calendar)\n     }\n \n+    /// 同じcontextの保存済み個体を、状態にかかわらず確認済みの場合だけ削除する。\n+    func delete(_ item: Item, confirmed: Bool) -> Result<Void, ActionError> {\n+        guard !context.hasChanges else {\n+            return .failure(.pendingChanges)\n+        }\n+\n+        guard item.modelContext === context else {\n+            return .failure(.itemNotInContext)\n+        }\n+\n+        guard confirmed else {\n+            return .failure(.deletionNotConfirmed)\n+        }\n+\n+        context.delete(item)\n+\n+        switch save(context) {\n+        case .success:\n+            return .success(())\n+        case .failure(let error):\n+            context.rollback()\n+            return .failure(.persistence(error))\n+        }\n+    }\n+\n     private func transition(\n         _ item: Item, from source: ItemStatus, using rules: ItemRules, now: Date, calendar: Calendar\n     ) -> Result<Void, ActionError> {",
+          "patchLines": 48,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 396,
+          "deletions": 0,
+          "patch": "@@ -1136,6 +1136,402 @@ struct ItemActionsTests {\n         expectProductValues(product)\n     }\n \n+    @Test(arguments: ItemStatus.allCases)\n+    func confirmedDeletionRemovesOnlyTheSelectedIDAndPreservesAllSurvivors(_ status: ItemStatus) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        let other = try makeSavedProduct(in: context, name: \"みそ\")\n+        let item = try makeSavedItem(in: context, product: product, status: status)\n+        let deletedID = item.id\n+        let productID = product.id\n+        let otherID = other.id\n+        let siblings = try ItemStatus.allCases.map { try makeSavedItem(in: context, product: product, status: $0) }\n+        let siblingSnapshots = siblings.map(ItemSnapshot.init)\n+        let otherItem = try makeSavedItem(in: context, product: other, status: .consumed)\n+        let otherSnapshot = ItemSnapshot(otherItem)\n+        var saveCalls = 0\n+        let actions = ItemActions(context: context) { context in\n+            saveCalls += 1\n+            return Result { try context.save() }\n+        }\n+\n+        try actions.delete(item, confirmed: true).get()\n+\n+        #expect(saveCalls == 1)\n+        #expect(!context.hasChanges)\n+        // 保存済みの削除対象には触れず、削除前に控えたIDと残った個体で確認する。\n+        #expect(try context.fetch(FetchDescriptor<Item>()).allSatisfy { $0.id != deletedID })\n+        try expectInventory(\n+            in: context, productID: productID, items: siblingSnapshots,\n+            otherProductID: otherID, otherItems: [otherSnapshot]\n+        )\n+        try expectInventory(\n+            in: ModelContext(container), productID: productID, items: siblingSnapshots,\n+            otherProductID: otherID, otherItems: [otherSnapshot]\n+        )\n+    }\n+\n+    @Test(arguments: ItemStatus.allCases)\n+    func unconfirmedDeletionLeavesEverySavedValueAndRelationshipUntouched(_ status: ItemStatus) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        let other = try makeSavedProduct(in: context, name: \"みそ\")\n+        let item = try makeSavedItem(in: context, product: product, status: status)\n+        let sibling = try makeSavedItem(in: context, product: product, status: .consumed)\n+        let snapshots = [ItemSnapshot(item), ItemSnapshot(sibling)]\n+        var saveCalls = 0\n+        let actions = ItemActions(context: context) { context in\n+            saveCalls += 1\n+            return Result { try context.save() }\n+        }\n+\n+        guard case .failure(.deletionNotConfirmed) = actions.delete(item, confirmed: false) else {\n+            Issue.record(\"確認前の個体削除が拒否されなかった\")\n+            return\n+        }\n+\n+        #expect(saveCalls == 0)\n+        #expect(!context.hasChanges)\n+        #expect(item.modelContext === context)\n+        try expectInventory(\n+            in: context, productID: product.id, items: snapshots, otherProductID: other.id, otherItems: []\n+        )\n+        try expectInventory(\n+            in: ModelContext(container), productID: product.id, items: snapshots,\n+            otherProductID: other.id, otherItems: []\n+        )\n+    }\n+\n+    @Test(arguments: ItemStatus.allCases)\n+    func failedDeletionRestoresTheSameObjectAndRelationshipsBeforeRetry(_ status: ItemStatus) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        let other = try makeSavedProduct(in: context, name: \"みそ\")\n+        let item = try makeSavedItem(in: context, product: product, status: status)\n+        let original = ItemSnapshot(item)\n+        let productID = product.id\n+        let otherID = other.id\n+        let sibling = try makeSavedItem(in: context, product: product, status: .consumed)\n+        let siblingSnapshot = ItemSnapshot(sibling)\n+        let otherItem = try makeSavedItem(in: context, product: other)\n+        let otherSnapshot = ItemSnapshot(otherItem)\n+        var saveCalls = 0\n+        var shouldFail = true\n+        let actions = ItemActions(context: context) { context in\n+            saveCalls += 1\n+            if shouldFail {\n+                return .failure(StoreError.unavailable)\n+            }\n+\n+            return Result { try context.save() }\n+        }\n+\n+        guard case .failure(.persistence(let error)) = actions.delete(item, confirmed: true) else {\n+            Issue.record(\"個体削除の元の保存エラーが返されなかった\")\n+            return\n+        }\n+\n+        #expect(error as? StoreError == .unavailable)\n+        #expect(saveCalls == 1)\n+        #expect(!context.hasChanges)\n+        #expect(item.modelContext === context)\n+        #expect(item.product === product)\n+        #expect(ItemSnapshot(item) == original)\n+        let restored = try #require(context.fetch(FetchDescriptor<Item>()).first { $0.id == original.id })\n+        #expect(restored === item)\n+        try expectInventory(\n+            in: context, productID: productID, items: [original, siblingSnapshot],\n+            otherProductID: otherID, otherItems: [otherSnapshot]\n+        )\n+        try expectInventory(\n+            in: ModelContext(container), productID: productID, items: [original, siblingSnapshot],\n+            otherProductID: otherID, otherItems: [otherSnapshot]\n+        )\n+\n+        // rollback後も同じ個体を渡し、入力や参照を作り直さずに再試行する。\n+        shouldFail = false\n+        try actions.delete(item, confirmed: true).get()\n+\n+        #expect(saveCalls == 2)\n+        #expect(!context.hasChanges)\n+        try expectInventory(\n+            in: context, productID: productID, items: [siblingSnapshot],\n+            otherProductID: otherID, otherItems: [otherSnapshot]\n+        )\n+        try expectInventory(\n+            in: ModelContext(container), productID: productID, items: [siblingSnapshot],\n+            otherProductID: otherID, otherItems: [otherSnapshot]\n+        )\n+    }\n+\n+    @Test func deletionRejectsUnmanagedAndForeignItemsWithoutSaving() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let owner = ModelContext(container)\n+        let product = try makeSavedProduct(in: owner)\n+        let saved = try makeSavedItem(in: owner, product: product)\n+        let unmanaged = makeExistingItem(product: Product(name: \"未登録\", type: \"調味料\"))\n+        let savedSnapshot = ItemSnapshot(saved)\n+        let unmanagedSnapshot = ItemSnapshot(unmanaged)\n+        var saveCalls = 0\n+        let actions = ItemActions(context: context) { context in\n+            saveCalls += 1\n+            return Result { try context.save() }\n+        }\n+\n+        for item in [unmanaged, saved] {\n+            guard case .failure(.itemNotInContext) = actions.delete(item, confirmed: true) else {\n+                Issue.record(\"未管理または別contextの個体の削除が拒否されなかった\")\n+                return\n+            }\n+        }\n+\n+        #expect(saveCalls == 0)\n+        #expect(ItemSnapshot(unmanaged) == unmanagedSnapshot)\n+        #expect(ItemSnapshot(saved) == savedSnapshot)\n+        #expect(unmanaged.modelContext == nil)\n+        #expect(saved.modelContext === owner)\n+        #expect(saved.product === product)\n+        #expect(product.items?.map(\\.id) == [savedSnapshot.id])\n+        expectProductValues(product)\n+        #expect(!context.hasChanges)\n+        #expect(!owner.hasChanges)\n+        let reader = ModelContext(container)\n+        let items = try reader.fetch(FetchDescriptor<Item>())\n+        #expect(items.count == 1)\n+        #expect(ItemSnapshot(try #require(items.first)) == savedSnapshot)\n+        expectProductValues(try #require(reader.fetch(FetchDescriptor<Product>()).first))\n+    }\n+\n+    @Test(arguments: PendingEdit.allCases)\n+    private func deletionPreservesPendingInputWithoutSavingOrRollingBack(_ pendingEdit: PendingEdit) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        context.autosaveEnabled = false\n+        let product = try makeSavedProduct(in: context)\n+        let other = try makeSavedProduct(in: context, name: \"みそ\")\n+        let saved = try makeSavedItem(in: context, product: product)\n+        let savedSnapshot = ItemSnapshot(saved)\n+        let target: Item\n+        switch pendingEdit {\n+        case .item:\n+            target = saved\n+            target.expirationDate = expirationDate\n+        case .unrelatedProduct:\n+            target = saved\n+            other.name = \"編集中のみそ\"\n+        case .insertedItem:\n+            target = makeExistingItem(product: product)\n+            context.insert(target)\n+        }\n+        let pendingSnapshot = ItemSnapshot(target)\n+        let pendingName = other.name\n+        let pendingIDs = Set((product.items ?? []).map(\\.id))\n+        var saveCalls = 0\n+        let actions = ItemActions(context: context) { context in\n+            saveCalls += 1\n+            return Result { try context.save() }\n+        }\n+\n+        guard case .failure(.pendingChanges) = actions.delete(target, confirmed: true) else {\n+            Issue.record(\"未保存変更があるcontextで個体が削除された\")\n+            return\n+        }\n+\n+        #expect(saveCalls == 0)\n+        #expect(context.hasChanges)\n+        #expect(ItemSnapshot(target) == pendingSnapshot)\n+        #expect(target.modelContext === context)\n+        #expect(target.product === product)\n+        #expect(Set((product.items ?? []).map(\\.id)) == pendingIDs)\n+        expectProductValues(product)\n+        expectProductValues(other, name: pendingName)\n+        try expectInventory(\n+            in: ModelContext(container), productID: product.id, items: [savedSnapshot],\n+            otherProductID: other.id, otherItems: []\n+        )\n+    }\n+\n+    private enum PendingItemChange: CaseIterable {\n+        case insert\n+        case delete\n+    }\n+\n+    @Test(arguments: PendingItemChange.allCases)\n+    private func deletionPreservesUnrelatedPendingInsertionsAndDeletions(_ change: PendingItemChange) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        context.autosaveEnabled = false\n+        let product = try makeSavedProduct(in: context)\n+        let other = try makeSavedProduct(in: context, name: \"みそ\")\n+        let item = try makeSavedItem(in: context, product: product)\n+        let original = ItemSnapshot(item)\n+        let unrelated = try makeSavedItem(in: context, product: other, status: .consumed)\n+        let unrelatedSnapshot = ItemSnapshot(unrelated)\n+        switch change {\n+        case .insert:\n+            context.insert(makeExistingItem(product: other))\n+        case .delete:\n+            context.delete(unrelated)\n+        }\n+        let pendingOtherIDs = Set((other.items ?? []).map(\\.id))\n+        let pendingInsertions = Set(context.insertedModelsArray.map(\\.persistentModelID))\n+        let pendingDeletions = Set(context.deletedModelsArray.map(\\.persistentModelID))\n+        var saveCalls = 0\n+        let actions = ItemActions(context: context) { context in\n+            saveCalls += 1\n+            return Result { try context.save() }\n+        }\n+\n+        guard case .failure(.pendingChanges) = actions.delete(item, confirmed: true) else {\n+            Issue.record(\"無関係な個体の未保存追加・削除があるcontextで削除された\")\n+            return\n+        }\n+\n+        #expect(saveCalls == 0)\n+        #expect(context.hasChanges)\n+        #expect(ItemSnapshot(item) == original)\n+        #expect(item.product === product)\n+        #expect(product.items?.map(\\.id) == [original.id])\n+        #expect(Set((other.items ?? []).map(\\.id)) == pendingOtherIDs)\n+        #expect(Set(context.insertedModelsArray.map(\\.persistentModelID)) == pendingInsertions)\n+        #expect(Set(context.deletedModelsArray.map(\\.persistentModelID)) == pendingDeletions)\n+        expectProductValues(product)\n+        expectProductValues(other, name: \"みそ\")\n+        try expectInventory(\n+            in: ModelContext(container), productID: product.id, items: [original],\n+            otherProductID: other.id, otherItems: [unrelatedSnapshot]\n+        )\n+    }\n+\n+    @Test func deletingTheLastItemKeepsTheProductAndItsValues() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        let productID = product.id\n+        let item = try makeSavedItem(in: context, product: product, status: .consumed)\n+\n+        try ItemActions(context: context).delete(item, confirmed: true).get()\n+\n+        #expect(!context.hasChanges)\n+        #expect(try context.fetchCount(FetchDescriptor<Item>()) == 0)\n+        #expect((product.items ?? []).isEmpty)\n+        #expect(product.modelContext === context)\n+        expectProductValues(product)\n+        let reader = ModelContext(container)\n+        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 0)\n+        let products = try reader.fetch(FetchDescriptor<Product>())\n+        #expect(products.count == 1)\n+        let saved = try #require(products.first)\n+        #expect(saved.id == productID)\n+        #expect((saved.items ?? []).isEmpty)\n+        expectProductValues(saved)\n+    }\n+\n+    @Test(arguments: [\"\", \"futureStatus\"])\n+    func deletionAcceptsUnknownSavedStatusesWithoutCoercingThem(_ rawValue: String) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        let item = try makeSavedItem(in: context, product: product)\n+        item.statusRawValue = rawValue\n+        try context.save()\n+        let original = ItemSnapshot(item)\n+        let productID = product.id\n+        var saveCalls = 0\n+        let actions = ItemActions(context: context) { context in\n+            saveCalls += 1\n+            // 保存を実行する前にも、未知の状態が既知の値へ書き換えられていない。\n+            #expect(item.statusRawValue == rawValue)\n+            #expect(item.status == nil)\n+            return Result { try context.save() }\n+        }\n+\n+        guard case .failure(.deletionNotConfirmed) = actions.delete(item, confirmed: false) else {\n+            Issue.record(\"未知の状態の個体で削除確認の失敗結果が返されなかった\")\n+            return\n+        }\n+        #expect(saveCalls == 0)\n+        #expect(ItemSnapshot(item) == original)\n+        #expect(!context.hasChanges)\n+\n+        try actions.delete(item, confirmed: true).get()\n+\n+        #expect(saveCalls == 1)\n+        #expect(!context.hasChanges)\n+        let reader = ModelContext(container)\n+        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 0)\n+        let products = try reader.fetch(FetchDescriptor<Product>())\n+        #expect(products.count == 1)\n+        let savedProduct = try #require(products.first)\n+        #expect(savedProduct.id == productID)\n+        #expect((savedProduct.items ?? []).isEmpty)\n+        expectProductValues(savedProduct)\n+    }\n+\n+    @Test(arguments: ItemStatus.allCases)\n+    func deletionAndSurvivingRelationshipsPersistAfterReopeningTheStore(_ status: ItemStatus) throws {\n+        let directory = FileManager.default.temporaryDirectory\n+            .appendingPathComponent(UUID().uuidString, isDirectory: true)\n+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)\n+        defer { try? FileManager.default.removeItem(at: directory) }\n+        let url = directory.appendingPathComponent(\"deleted-items.store\")\n+        let productID: UUID\n+        let otherID: UUID\n+        let siblingSnapshot: ItemSnapshot\n+        let otherSnapshot: ItemSnapshot\n+\n+        do {\n+            let container = try makeContainer(at: url)\n+            let context = ModelContext(container)\n+            let product = try makeSavedProduct(in: context)\n+            let other = try makeSavedProduct(in: context, name: \"みそ\")\n+            let item = try makeSavedItem(in: context, product: product, status: status)\n+            productID = product.id\n+            otherID = other.id\n+            siblingSnapshot = ItemSnapshot(try makeSavedItem(in: context, product: product, status: .consumed))\n+            otherSnapshot = ItemSnapshot(try makeSavedItem(in: context, product: other))\n+\n+            try ItemActions(context: context).delete(item, confirmed: true).get()\n+\n+            #expect(!context.hasChanges)\n+        }\n+\n+        let reopened = try makeContainer(at: url)\n+        try expectInventory(\n+            in: ModelContext(reopened), productID: productID, items: [siblingSnapshot],\n+            otherProductID: otherID, otherItems: [otherSnapshot]\n+        )\n+    }\n+\n+    private func expectInventory(\n+        in context: ModelContext, productID: UUID, items expectedItems: [ItemSnapshot],\n+        otherProductID: UUID, otherItems expectedOtherItems: [ItemSnapshot]\n+    ) throws {\n+        let products = try context.fetch(FetchDescriptor<Product>())\n+        #expect(products.count == 2)\n+        #expect(Set(products.map(\\.id)) == Set([productID, otherProductID]))\n+        let product = try #require(products.first { $0.id == productID })\n+        let other = try #require(products.first { $0.id == otherProductID })\n+        expectProductValues(product)\n+        expectProductValues(other, name: \"みそ\")\n+        #expect(Set((product.items ?? []).map(\\.id)) == Set(expectedItems.map(\\.id)))\n+        #expect(Set((other.items ?? []).map(\\.id)) == Set(expectedOtherItems.map(\\.id)))\n+        let items = try context.fetch(FetchDescriptor<Item>())\n+        let expected = expectedItems + expectedOtherItems\n+        #expect(items.count == expected.count)\n+        #expect(Set(items.map(\\.id)) == Set(expected.map(\\.id)))\n+        for snapshot in expected {\n+            let item = try #require(items.first { $0.id == snapshot.id })\n+            let owner = try #require(products.first { $0.id == snapshot.productID })\n+            #expect(ItemSnapshot(item) == snapshot)\n+            #expect(item.product === owner)\n+        }\n+    }\n+\n     private func expectTransitionedValues(\n         _ item: Item, original: ItemSnapshot, transition: StatusTransition, confirmedDate: Date\n     ) {",
+          "patchLines": 403,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "from": ".claude/skills/pr-explain/templates/explain.json",
+      "to": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "status": "kept"
+    },
+    {
+      "from": ".claude/skills/pr-explain/templates/explain.json",
+      "to": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+      "status": "kept"
+    }
+  ]
+}
