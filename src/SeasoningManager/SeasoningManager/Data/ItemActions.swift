@@ -1,13 +1,14 @@
 import Foundation
 import SwiftData
 
-/// 未保存の変更がないcontextで、個体の登録・日付編集・開封・使い切りを一回の保存として行う。
+/// 未保存の変更がないcontextで、個体の登録・日付編集・開封・使い切り・削除を一回の保存として行う。
 @MainActor
 struct ItemActions {
     nonisolated enum ActionError: Error, Sendable {
         case pendingChanges
         case productNotInContext
         case itemNotInContext
+        case deletionNotConfirmed
         case validation(ItemRules.ValidationError)
         case persistence(any Error)
     }
@@ -98,6 +99,31 @@ struct ItemActions {
     ) -> Result<Void, ActionError> {
         let rules = ItemRules(status: .consumed, openingDate: item.openingDate, consumedDate: consumedDate)
         return transition(item, from: .inUse, using: rules, now: now, calendar: calendar)
+    }
+
+    /// 同じcontextの保存済み個体を、状態にかかわらず確認済みの場合だけ削除する。
+    func delete(_ item: Item, confirmed: Bool) -> Result<Void, ActionError> {
+        guard !context.hasChanges else {
+            return .failure(.pendingChanges)
+        }
+
+        guard item.modelContext === context else {
+            return .failure(.itemNotInContext)
+        }
+
+        guard confirmed else {
+            return .failure(.deletionNotConfirmed)
+        }
+
+        context.delete(item)
+
+        switch save(context) {
+        case .success:
+            return .success(())
+        case .failure(let error):
+            context.rollback()
+            return .failure(.persistence(error))
+        }
     }
 
     private func transition(
