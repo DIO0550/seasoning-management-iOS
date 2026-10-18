@@ -472,7 +472,7 @@
         },
         {
           "kind": "text",
-          "text": "このPRの削除も既存の保存操作と同じ場所で実行する。別の actor から使う場合は呼び出し側で actor の境界を扱う必要があるが、このメソッド自体は非同期処理を新しく開始しない。"
+          "text": "このPRの削除も既存の保存操作と同じ場所で実行する。別の actor から使う場合は呼び出し側で actor の境界を扱う必要があるが、このメソッド自体は非同期処理を新しく開始しない。エラー型にある `nonisolated` は、その宣言をactorの隔離に属させない指定で、副作用を持たないエラーの種類を隔離の外からも扱うための既存指定。`Sendable` はactor間で安全に渡せる型であるという契約を表す。"
         },
         {
           "kind": "caution",
@@ -519,7 +519,20 @@
         },
         {
           "kind": "text",
-          "text": "確認不足には `.deletionNotConfirmed`、保存失敗には `.persistence(error)` を返す。注入した保存処理は `Result<Void, any Error>` を返し、削除APIはそれを業務上の失敗の型に包み直す。元の保存エラーは捨てない。"
+          "text": "確認不足には `.deletionNotConfirmed`、保存失敗には `.persistence(error)` を返す。注入した保存処理は `Result<Void, any Error>` を返し、削除APIはそれを業務上の失敗の型に包み直す。元の保存エラーは捨てない。`any Error` は、`Error` というエラーの契約を満たすさまざまな具体的な型を受け入れる書き方。保存先ごとに異なるエラーを保持するために使っている。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 19,
+            "end": 30,
+            "text": "    /// saveはcontextを同期的に保存し、保存成功時だけ.successを返す。保存後に.failureを返す実装は契約外。\n    init(\n        context: ModelContext,\n        save: @escaping @MainActor (ModelContext) -> Result<Void, any Error> = { context in\n            Result { try context.save() }\n        }\n    ) {\n        self.context = context\n        self.save = save\n    }\n\n    func create("
+          }
+        },
+        {
+          "kind": "text",
+          "text": "初期化の抜粋にある `Result { try context.save() }` は、フレームワークの保存が投げるエラーを成功・失敗の値に変換する。波括弧はクロージャという名前のない処理を表し、`context in` の左がその入力、右が処理本体。`@escaping` は受け取った処理を初期化の終了後も保持する指定で、保存操作はこの処理をプロパティに保持して必要な時に呼ぶ。テストはこの引数だけを差し替え、失敗を再現する。"
         },
         {
           "kind": "caution",
