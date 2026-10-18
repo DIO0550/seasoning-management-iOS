@@ -25,6 +25,24 @@ final class Product {
     @Relationship(deleteRule: .nullify)
     var items: [Item]?
 
+    /// 在庫は個体から都度求め、使い切りと未知の状態は本数に含めない。
+    var stockCounts: (unopened: Int, inUse: Int) {
+        var counts = (unopened: 0, inUse: 0)
+
+        for item in items ?? [] {
+            switch item.status {
+            case .unopened?:
+                counts.unopened += 1
+            case .inUse?:
+                counts.inUse += 1
+            case .consumed?, nil:
+                break
+            }
+        }
+
+        return counts
+    }
+
     init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) {
         self.id = id
         self.name = name

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ProductListView: View {
     @Query(sort: [SortDescriptor(\Product.type), SortDescriptor(\Product.name)])
@@ -61,17 +62,48 @@ private struct ProductListRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(displayName)
-                .font(.headline)
+        let counts = product.stockCounts
 
-            Text("種類: \(displayType)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            thumbnail
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(displayName)
+                    .font(.headline)
+
+                Text("種類: \(displayType)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Text("未開封: \(counts.unopened)本")
+                Text("使用中: \(counts.inUse)本")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("商品名、\(displayName)、種類、\(displayType)")
+        .accessibilityLabel(
+            "商品名、\(displayName)、種類、\(displayType)、未開封、\(counts.unopened)本、使用中、\(counts.inUse)本"
+        )
+    }
+
+    private var thumbnail: some View {
+        Group {
+            if let data = product.image, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "photo")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.quaternary)
+            }
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityHidden(true)
     }
 }
 
@@ -89,7 +121,7 @@ private struct ProductRegistrationPlaceholderView: View {
 private struct ProductListPreview: View {
     private let containerResult: Result<ModelContainer, Error>
 
-    init(products: [Product]) {
+    init(products: [Product], items: [Item] = []) {
         do {
             let schema = Schema([Product.self, Item.self])
             let configuration = ModelConfiguration(
@@ -101,6 +133,9 @@ private struct ProductListPreview: View {
 
             for product in products {
                 container.mainContext.insert(product)
+            }
+            for item in items {
+                container.mainContext.insert(item)
             }
             try container.mainContext.save()
 
@@ -139,4 +174,41 @@ private struct ProductListPreview: View {
         Product(name: "本みりん", type: " \n"),
         Product(name: "商品名が長くても最後まで確認できる、国産丸大豆を使った減塩しょうゆ", type: "しょうゆ"),
     ])
+}
+
+#Preview("画像あり・なし・破損と在庫") {
+    let pictured = Product(name: "丸大豆しょうゆ", type: "しょうゆ")
+    pictured.image = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 80)).image { context in
+        UIColor.systemTeal.setFill()
+        context.fill(CGRect(x: 0, y: 0, width: 80, height: 80))
+        UIColor.white.setFill()
+        context.fill(CGRect(x: 29, y: 14, width: 22, height: 8))
+        context.fill(CGRect(x: 22, y: 24, width: 36, height: 44))
+    }.pngData()
+
+    let missing = Product(name: "米みそ", type: "みそ")
+    let corrupt = Product(name: "本みりん", type: "みりん")
+    corrupt.image = Data([0, 1, 2, 3])
+    let openingDate = Date(timeIntervalSince1970: 1_700_000_000)
+    let consumedDate = openingDate.addingTimeInterval(86_400)
+    let unknown = Item(product: pictured)
+    unknown.statusRawValue = "futureStatus"
+
+    return ProductListPreview(
+        products: [pictured, missing, corrupt],
+        items: [
+            Item(product: pictured),
+            Item(product: pictured),
+            Item(product: pictured, status: .inUse, openingDate: openingDate),
+            Item(
+                product: pictured, status: .consumed,
+                openingDate: openingDate, consumedDate: consumedDate
+            ),
+            unknown,
+            Item(
+                product: corrupt, status: .consumed,
+                openingDate: openingDate, consumedDate: consumedDate
+            ),
+        ]
+    )
 }
