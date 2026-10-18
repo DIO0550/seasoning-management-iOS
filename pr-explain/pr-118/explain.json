@@ -504,9 +504,34 @@
       "id": "main-actor",
       "kind": "language",
       "category": "Swift と SwiftData",
-      "label": "`@MainActor` と入れ子の型",
-      "gist": "保存操作と、その操作を呼ぶテスト補助メソッドを同じ実行境界へそろえる。",
+      "label": "`MainActor` とは何か・`@MainActor` の読み方",
+      "gist": "共有データに触る処理を順番に進める actor の一つ。Apple のアプリでは、画面更新を担うメインスレッドと結び付いている。",
       "passages": [
+        {
+          "kind": "text",
+          "text": "actor は、複数の処理が同じデータを同時に書き換えないよう、管理下のデータに触る処理を順番に実行させる Swift の仕組み。同時の読み書きで更新が衝突する問題を防ぐ。このアクセスの制限を「隔離（actor isolation）」という。"
+        },
+        {
+          "kind": "text",
+          "text": "スレッドはプログラムの処理が進む道筋で、メインスレッドは Apple のアプリで画面の描画や操作への応答を担う道筋。`MainActor` はアプリ内で共有される特別な actor で、Apple のプラットフォームではメインスレッドで処理を実行する。actor はデータへのアクセス規則、スレッドは処理を進める実行の仕組みを表す。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 5,
+            "end": 6,
+            "text": "@MainActor\nstruct ItemActions {"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "Swift では、宣言の前に `@` で始まる注釈（属性）を書いて、その宣言に規則を与える。ここでは `struct` が `ItemActions` という型を宣言し、直前の `@MainActor` が、その型の通常の操作を MainActor に隔離する。関数の前に書けば、その関数へ規則を付けられる。"
+        },
+        {
+          "kind": "text",
+          "text": "この PR の保存操作は `ItemActions` に属するので、MainActor 上から呼び出す。呼び出し元も同じ MainActor 上なら、完了をその場で待つ通常の呼び方ができる。外側から呼ぶには、途中で待てる非同期関数を表す `async` と、待つ可能性のある呼び出しを示す `await` を使うなど、呼び出し側の対応が必要になる。"
+        },
         {
           "kind": "excerpt",
           "excerpt": {
@@ -518,11 +543,11 @@
         },
         {
           "kind": "text",
-          "text": "保存 API は `@MainActor` の `ItemActions` に属する。テストスイートへ付けた注釈だけでは、入れ子の enum のメソッドに同じ分離が付かないため、`apply` 自身に `@MainActor` を指定する。"
+          "text": "テストでは、選択肢をまとめる `enum` である `StatusTransition` を、テストをまとめる型の内側に宣言している。外側の型に付けた `@MainActor` だけでは、内側の別の型に属する関数 `apply` に同じ隔離は付かない。`apply` 自身へ `@MainActor` を付け、`actions.open` と `actions.consume` を同じ actor 上で呼べるようにした。初回 CI のビルドエラーはこの注釈で修正した。"
         },
         {
-          "kind": "text",
-          "text": "呼び出し元のテストも `@MainActor` 上なので、この補助メソッドを同期的に呼べる。ケース列挙に使う enum 全体や `allCases` の分離は変えない。初回 CI が検出したビルドエラーをこの注釈で修正した。"
+          "kind": "caution",
+          "text": "`@MainActor` は、呼び出し元を問わず自動的に実行場所を切り替える印ではない。重い計算を裏で実行する指定でもなく、メインスレッドを長時間使えば画面の応答が止まる。また、`await` で待つ間は同じ actor の別の処理が進めるため、非同期関数全体を割り込まれずに実行する保証にはならない。"
         }
       ],
       "occurrences": [
@@ -543,25 +568,59 @@
       "id": "result",
       "kind": "language",
       "category": "Swift と SwiftData",
-      "label": "`Result` と失敗の種類",
-      "gist": "呼び出し側は、入力の誤りと保存の失敗を型で区別できる。",
+      "label": "`Result` とは何か・成功と失敗の読み方",
+      "gist": "成功か失敗のどちらか一方を値として返し、呼び出し側が結果に応じた処理を選べるようにする Swift の型。",
       "passages": [
+        {
+          "kind": "text",
+          "text": "`Result` は、処理が成功したか失敗したかを値にして返す Swift の型。成功は `success`、失敗は `failure` という選択肢で表し、それぞれ返すデータやエラーを一緒に持てる。呼び出し側が失敗を受け取り、内容に応じて入力の修正や再試行を選ぶために使う。"
+        },
         {
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
-            "start": 103,
-            "end": 137,
-            "text": "    private func transition(\n        _ item: Item, from source: ItemStatus, using rules: ItemRules, now: Date, calendar: Calendar\n    ) -> Result<Void, ActionError> {\n        guard !context.hasChanges else {\n            return .failure(.pendingChanges)\n        }\n\n        guard item.modelContext === context else {\n            return .failure(.itemNotInContext)\n        }\n\n        guard let status = item.status else {\n            return .failure(.validation(.unknownCurrentStatus))\n        }\n\n        // 日付編集と異なり、同状態への再操作も許可しない。\n        guard status == source else {\n            return .failure(.validation(.invalidTransition))\n        }\n\n        switch item.updateState(using: rules, now: now, calendar: calendar) {\n        case .success:\n            break\n        case .failure(let error):\n            return .failure(.validation(error))\n        }\n\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))\n        }\n    }"
+            "start": 96,
+            "end": 98,
+            "text": "    func consume(\n        _ item: Item, consumedDate: Date, now: Date = Date(), calendar: Calendar = .current\n    ) -> Result<Void, ActionError> {"
           }
         },
         {
           "kind": "text",
-          "text": "`Result<Void, ActionError>` の成功値は完了だけを表す。`pendingChanges` は未保存入力の存在、`validation` は状態や日付の不正、`persistence` は保存処理そのものの失敗を表す。"
+          "text": "基本形は `Result<Success, Failure>`。山括弧の中は「成功で返すデータの型」と「失敗で返すエラーの型」で、型を差し替えて使えるこの書き方をジェネリクスという。この抜粋の `Result<Void, ActionError>` は、成功時には追加のデータを返さず、失敗時には `ActionError` 型のエラーを返すという意味。`Void` は中身のない値 `()` の型なので、成功の完了は `.success(())` と書く。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 7,
+            "end": 13,
+            "text": "    nonisolated enum ActionError: Error, Sendable {\n        case pendingChanges\n        case productNotInContext\n        case itemNotInContext\n        case validation(ItemRules.ValidationError)\n        case persistence(any Error)\n    }"
+          }
         },
         {
           "kind": "text",
-          "text": "`switch save(context)` の失敗分岐では、受け取った元のエラーを捨てずに `persistence` へ包む。画面側は再試行の必要性を判断できる。"
+          "text": "エラーの型は、選択肢を列挙する `enum` で定義している。`case` が一つの選択肢を宣言し、`pendingChanges` は未保存の入力がある場合、`validation` は状態や日付が不正な場合、`persistence` は保存処理が失敗した場合を表す。`validation(...)` と `persistence(...)` は、失敗の詳しい内容も値として持つ。"
+        },
+        {
+          "kind": "text",
+          "text": "次の `save(context)` は、保存用に保持しておいた処理の呼び出し。普段はその中で `context.save()` を実行し、テストでは別の処理に差し替えられる。処理を保持する書き方は `ModelContext` の節で説明する。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 129,
+            "end": 136,
+            "text": "\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`switch` は受け取った値の選択肢ごとに処理を分ける構文。`case .success` は保存成功を受け取り、呼び出し側へ `.success(())` を返す。`case .failure(let error)` は失敗の中からエラーを `error` という名前で取り出す。失敗時は未保存の変更を戻してから `.failure(.persistence(error))` を返し、保存処理から受け取った元のエラーも保持する。"
+        },
+        {
+          "kind": "caution",
+          "text": "`Result` 自体は結果を伝えるための値。変更の取り消しや再試行は自動では行わない。この PR では失敗を受け取った分岐で `context.rollback()` を明示的に呼び、復元したうえで呼び出し側へ失敗を知らせる。"
         }
       ],
       "occurrences": [
@@ -578,36 +637,75 @@
         }
       ],
       "seeAlso": [
-        "atomic"
+        "atomic",
+        "context"
       ]
     },
     {
       "id": "context",
       "kind": "language",
       "category": "Swift と SwiftData",
-      "label": "`ModelContext` の保存と復元",
-      "gist": "変更を追跡する保存領域全体に復元が及ぶため、既存の未保存入力を先に検出する。",
+      "label": "SwiftData と `ModelContext`・変更を保存する仕組み",
+      "gist": "商品や個体のメモリ内の変更を追跡し、保存先へ反映したり、最後に保存した状態へ戻したりする窓口。",
       "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftData は、商品や個体などのアプリ内のデータを終了後も残し、次回の起動時に読み直せるようにする Apple の仕組み。扱うデータを表す型を「モデル」、保存したデータの置き場を「ストア」という。このアプリでは商品と個体がモデルに当たる。"
+        },
+        {
+          "kind": "text",
+          "text": "`ModelContext` は、読み込んだモデルのメモリ内の変更を追跡し、ストアへの保存を取りまとめる窓口。保存先のファイルと、その手前で変更を管理する context を分けて考える。モデルの状態や日付を書き換えた時点では、メモリ内の値が変わっており、保存によって次回の起動後にも残る。"
+        },
         {
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
-            "start": 103,
-            "end": 137,
-            "text": "    private func transition(\n        _ item: Item, from source: ItemStatus, using rules: ItemRules, now: Date, calendar: Calendar\n    ) -> Result<Void, ActionError> {\n        guard !context.hasChanges else {\n            return .failure(.pendingChanges)\n        }\n\n        guard item.modelContext === context else {\n            return .failure(.itemNotInContext)\n        }\n\n        guard let status = item.status else {\n            return .failure(.validation(.unknownCurrentStatus))\n        }\n\n        // 日付編集と異なり、同状態への再操作も許可しない。\n        guard status == source else {\n            return .failure(.validation(.invalidTransition))\n        }\n\n        switch item.updateState(using: rules, now: now, calendar: calendar) {\n        case .success:\n            break\n        case .failure(let error):\n            return .failure(.validation(error))\n        }\n\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))\n        }\n    }"
+            "start": 105,
+            "end": 111,
+            "text": "    ) -> Result<Void, ActionError> {\n        guard !context.hasChanges else {\n            return .failure(.pendingChanges)\n        }\n\n        guard item.modelContext === context else {\n            return .failure(.itemNotInContext)"
           }
         },
         {
           "kind": "text",
-          "text": "`ModelContext` は複数の保存モデルをまとめて追跡する。`save` はその変更を永続化し、`rollback` は未保存の変更を元へ戻す。対象個体だけを自動で切り分ける操作ではない。"
+          "text": "`hasChanges` は、まだ保存していない変更があるかを表す値。先頭の `guard` は条件を満たせないとき `else` 側で処理を抜ける構文で、`!` は真偽を反転する。したがって `guard !context.hasChanges` は「未保存の変更がない場合だけ先へ進む」という読み方になる。変更があれば `.pendingChanges` を返し、編集中の入力へ触れずに止まる。"
         },
         {
           "kind": "text",
-          "text": "先頭の `context.hasChanges` で処理を止めれば、他の入力を保存したり復元で消したりしない。さらに所属する `modelContext` を比較し、別の保存領域の個体へ更新を広げない。"
+          "text": "個体の `modelContext` は、その個体を管理している context を表す。`===` は、別々に作ったものではなく、同じ一つの context を指しているかを調べる演算子で、値が等しいかを調べる `==` と使い分ける。`item.modelContext === context` により、更新先と同じ context が管理する個体だけを受け入れる。同じストアを使っていても、別に作った context の個体はここで拒否する。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 16,
+            "end": 23,
+            "text": "    private let save: @MainActor (ModelContext) -> Result<Void, any Error>\n\n    /// saveはcontextを同期的に保存し、保存成功時だけ.successを返す。保存後に.failureを返す実装は契約外。\n    init(\n        context: ModelContext,\n        save: @escaping @MainActor (ModelContext) -> Result<Void, any Error> = { context in\n            Result { try context.save() }\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "クロージャは、処理を値として持てる、名前のない関数のようなもの。この抜粋では `save` という名前で保存処理を保持し、`(ModelContext) -> Result<Void, any Error>` が「context を受け取り、成功か失敗を返す処理」の型を表す。普段は `= { context in ... }` の処理を使い、その中で `context.save()` を呼ぶ。テストでは、保存失敗を返す別の処理へ差し替えられる。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 129,
+            "end": 136,
+            "text": "\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`save(context)` は、保持した保存処理へ context を渡して呼び出す書き方。その処理の中の `context.save()` が、context の追跡している未保存の変更をまとめてストアへ反映する。`context.rollback()` は最後に保存した状態へ戻し、未保存の追加や削除も取り消す。どちらも今回の個体だけに自動で範囲を限定する操作ではないため、別の商品の編集中の値も影響を受け得る。"
+        },
+        {
+          "kind": "text",
+          "text": "この PR では、最初に未保存の変更がないことを確認してから、対象の個体の状態と日付を変える。保存に失敗した場合は `rollback()` で元の状態へ戻す。この順序により、今回より前からあった編集中の入力を巻き込んで保存したり、復元時に消したりすることを防ぐ。"
         },
         {
           "kind": "caution",
-          "text": "保存クロージャは同期的に保存し、成功した場合だけ成功を返す契約。保存済みなのに失敗を返す実装は対象外。実際の SwiftData 実行は Xcode 環境で確認する。"
+          "text": "SwiftData には自動保存もあり、すべての更新で手動の `save()` が必須という意味ではない。今回は操作の成功・失敗をその場で返すため、保存を明示的に実行する。保存処理は完了した場合だけ成功を返す契約であり、保存済みなのに失敗を返す実装は対象外。"
         }
       ],
       "occurrences": [
