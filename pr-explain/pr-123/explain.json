@@ -1,0 +1,858 @@
+{
+  "version": 1,
+  "pr": 123,
+  "sha": "650fd1a99b748d9c0b57fc5a09473b0b3d7a3f5c",
+  "issue": 34,
+  "overview": {
+    "title": "名前と種類から商品を登録する",
+    "lead": "準備中だった画面を登録フォームに置き換えました。入力中は商品を作らず、保存できたときだけ一覧へ戻ります。",
+    "before": [
+      {
+        "text": "商品一覧の登録操作は、準備中の案内を表示していた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "名前と種類を入力し、両方が有効な場合だけ商品を保存する。",
+        "message": "save-product"
+      },
+      {
+        "text": "キャンセルや戻る操作では商品を作らない。保存に失敗した場合は入力を残して再試行できる。"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "保存してから画面を閉じる",
+        "text": "保存結果を受け取る分岐と、入力を保持する状態を確認してください。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
+        }
+      },
+      {
+        "title": "失敗後の再試行",
+        "text": "失敗後に同じ入力から保存し直し、商品が重複しないことを検証します。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "registration",
+      "label": "商品の登録",
+      "role": "名前と種類の入力を、既存の保存処理につなぐ。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+      "name": "商品一覧",
+      "role": "保存済み商品を表示し、登録画面への入口を置く。",
+      "feature": "registration",
+      "change": "空状態とツールバーの両方を実際のフォームへ接続した。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "name": "登録フォーム",
+      "role": "入力中の文字列とエラーを保持し、保存結果に応じて画面を閉じる。",
+      "feature": "registration",
+      "change": "必須項目と保存・取消操作を追加した。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "name": "商品の保存操作",
+      "role": "入力を検証し、保存または失敗時の巻き戻しを行う。",
+      "feature": "registration"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift",
+      "name": "入力の検証",
+      "role": "必須項目や数値を共通のルールで検証する。今回は名前と種類を使う。",
+      "feature": "registration"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+      "name": "検証用の保存先",
+      "role": "DebugのUIテストに専用のディスクストアを渡す。",
+      "change": "テストの保存先を隔離し、通常データへの依存と影響を避けた。"
+    }
+  ],
+  "messages": [
+    {
+      "id": "open-form",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "kind": "cmd",
+      "name": "登録画面を開く",
+      "code": "NavigationLink { ProductFormView() }",
+      "via": "state",
+      "status": "changed",
+      "payload": "商品一覧の登録操作",
+      "returns": "空の入力状態を持つ画面"
+    },
+    {
+      "id": "save-product",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "kind": "cmd",
+      "name": "商品を保存する",
+      "code": "actions.create(from: draft)",
+      "via": "call",
+      "status": "added",
+      "payload": "入力した名前と種類",
+      "returns": "Result<Product, ActionError>"
+    },
+    {
+      "id": "validate",
+      "from": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift",
+      "kind": "qry",
+      "name": "入力内容を確かめる",
+      "code": "draft.validated()",
+      "via": "call",
+      "payload": "変更していない入力文字列",
+      "returns": "有効な値または項目と理由を持つエラー"
+    }
+  ],
+  "flows": [
+    {
+      "id": "register",
+      "label": "商品を入力して保存する",
+      "steps": [
+        "open-form",
+        "save-product",
+        "validate"
+      ]
+    },
+    {
+      "id": "retry",
+      "label": "入力を残して保存し直す",
+      "steps": [
+        "save-product",
+        "validate"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447",
+      "phase": "core",
+      "role": "登録の入口と入力状態をつなぎ、取消と失敗をテストする。",
+      "why": "保存境界と検証ルールは既に存在するため、画面に同じ業務判断を増やさず再利用した。共有の保存先を使い、一覧の更新経路も保った。テストレビューで画面外の商品を不存在と誤認する問題が見つかり、起動設定1ファイルを追加して各UIテストの保存先を隔離した。",
+      "flows": [
+        "register",
+        "retry"
+      ],
+      "review": [
+        "入力・キャンセルの経路に商品モデルの作成や保存がないこと。",
+        "保存成功の場合だけ画面を閉じ、失敗時は元の文字列を保持すること。",
+        "SwiftとiOSテストはCIの状態を確認し、テスト宣言の追加を実行成功と混同しないこと。"
+      ]
+    },
+    {
+      "sha": "650fd1a99b748d9c0b57fc5a09473b0b3d7a3f5c",
+      "phase": "fin",
+      "role": "条件付きコードの字下げを公式formatterの指定に合わせる。",
+      "why": "MacのSwift format CIが条件付きコンパイル内の字下げを指摘したため修正した。振る舞いは変えていない。",
+      "review": [
+        "条件付きコードの中身だけが4スペース深くなっていること。"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "form-state",
+      "label": "入力状態と保存結果",
+      "file": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift"
+    },
+    {
+      "id": "form-ui",
+      "label": "画面の操作",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "enteringDraftDoesNotChangeContext",
+      "suite": "form-state",
+      "name": "enteringDraftDoesNotChangeContext",
+      "why": "入力だけでは商品を作らない",
+      "given": "新しい入力状態と空の保存先",
+      "when": "名前と種類を入力する",
+      "then": "保存先に変更と商品がなく、入力エラーもない",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 16,
+        "end": 35,
+        "text": "    @Test func enteringDraftDoesNotChangeContext() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n\n        state.draft.name = \"　登録前の商品 \"\n        state.draft.type = \"　しょうゆ \"\n\n        #expect(!context.hasChanges)\n        #expect(try context.fetchCount(FetchDescriptor<Product>()) == 0)\n        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)\n        #expect(state.error == nil)\n    }\n\n    @Test(arguments: [\"\", \" \\t\\n\", \"　\", \"\\u{00a0}\\u{2003}\\u{2028}\"])\n    func blankNameRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: input, type: \"しょうゆ\"), field: .name)\n    }\n\n    @Test(arguments: [\"\", \" \\t\\n\", \"　\", \"\\u{00a0}\\u{2003}\\u{2028}\"])"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+        "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift"
+      ],
+      "covers": [
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    },
+    {
+      "id": "blankNameRemainsInFormWithoutSaving",
+      "suite": "form-state",
+      "name": "blankNameRemainsInFormWithoutSaving",
+      "why": "空白だけの名前を保存しない",
+      "given": "種類は有効、名前は空文字・半角・全角・Unicode空白",
+      "when": "保存を押す",
+      "then": "名前のエラーを保持し、元の文字列と保存件数0を保つ",
+      "techniques": [
+        "boundary",
+        "equivalence"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 31,
+        "end": 50,
+        "text": "    func blankNameRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: input, type: \"しょうゆ\"), field: .name)\n    }\n\n    @Test(arguments: [\"\", \" \\t\\n\", \"　\", \"\\u{00a0}\\u{2003}\\u{2028}\"])\n    func blankTypeRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: \"丸大豆しょうゆ\", type: input), field: .type)\n    }\n\n    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        #expect(state.save(using: ProductActions(context: context)))\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+        "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift"
+      ],
+      "covers": [
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    },
+    {
+      "id": "blankTypeRemainsInFormWithoutSaving",
+      "suite": "form-state",
+      "name": "blankTypeRemainsInFormWithoutSaving",
+      "why": "空白だけの種類を保存しない",
+      "given": "名前は有効、種類は空文字・半角・全角・Unicode空白",
+      "when": "保存を押す",
+      "then": "種類のエラーを保持し、元の文字列と保存件数0を保つ",
+      "techniques": [
+        "boundary",
+        "equivalence"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 36,
+        "end": 55,
+        "text": "    func blankTypeRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: \"丸大豆しょうゆ\", type: input), field: .type)\n    }\n\n    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        #expect(state.save(using: ProductActions(context: context)))\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())\n        #expect(products.count == 1)\n        let product = try #require(products.first)\n        #expect(product.name == \"丸大豆 しょうゆ\")\n        #expect(product.type == \"和風 調味料\")\n        #expect(!context.hasChanges)"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+        "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift"
+      ],
+      "covers": [
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    },
+    {
+      "id": "savingCreatesOneNormalizedProduct",
+      "suite": "form-state",
+      "name": "savingCreatesOneNormalizedProduct",
+      "why": "保存後の値を別の読み取り口でも確かめる",
+      "given": "前後に空白、内部に空白を含む名前と種類",
+      "when": "保存する",
+      "then": "前後の空白だけを除いた商品が1件になり、未保存変更が残らない",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 40,
+        "end": 59,
+        "text": "    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        #expect(state.save(using: ProductActions(context: context)))\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())\n        #expect(products.count == 1)\n        let product = try #require(products.first)\n        #expect(product.name == \"丸大豆 しょうゆ\")\n        #expect(product.type == \"和風 調味料\")\n        #expect(!context.hasChanges)\n        #expect(state.error == nil)\n    }\n\n    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+        "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift"
+      ],
+      "covers": [
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    },
+    {
+      "id": "persistenceFailurePreservesDraftAndRetryClearsError",
+      "suite": "form-state",
+      "name": "persistenceFailurePreservesDraftAndRetryClearsError",
+      "why": "保存失敗から同じ入力で再試行できる",
+      "given": "保存処理だけを失敗させる実際のメモリ内保存先",
+      "when": "失敗後に入力を変えず通常の保存処理で再試行する",
+      "then": "失敗時は元の入力と理由が残り商品0件、再試行後は商品1件になりエラーが消える",
+      "techniques": [
+        "error",
+        "state",
+        "regression"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 59,
+        "end": 78,
+        "text": "    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　再試行する商品 \"\n        state.draft.type = \" しょうゆ\\t\"\n        let failing = ProductActions(context: context) { _ in\n            .failure(StoreError.unavailable)\n        }\n\n        #expect(!state.save(using: failing))\n\n        guard case .persistence(let underlying) = state.error else {\n            Issue.record(\"保存失敗が画面の状態に保持されなかった\")\n            return\n        }\n        #expect(underlying as? StoreError == .unavailable)\n        #expect(state.saveErrorMessage?.contains(\"保存先を利用できません。\") == true)\n        #expect(state.draft.name == \"　再試行する商品 \")\n        #expect(state.draft.type == \" しょうゆ\\t\")"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+        "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift"
+      ],
+      "covers": [
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    },
+    {
+      "id": "unrelatedUnsavedChangesSurviveInputAndRejectedSave",
+      "suite": "form-state",
+      "name": "unrelatedUnsavedChangesSurviveInputAndRejectedSave",
+      "why": "他の未保存変更を保護する",
+      "given": "既存商品の名前に未保存変更がある共有の保存先",
+      "when": "別商品の登録を試す",
+      "then": "保存処理を呼ばず入力と既存の編集を保持し、保存済みの値を変えない",
+      "techniques": [
+        "error",
+        "state"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 95,
+        "end": 114,
+        "text": "    @Test func unrelatedUnsavedChangesSurviveInputAndRejectedSave() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let existing = Product(name: \"元の商品\", type: \"みそ\")\n        context.insert(existing)\n        try context.save()\n        existing.name = \"ほかの画面で編集中\"\n        var saveCalls = 0\n        let actions = ProductActions(context: context) { context in\n            saveCalls += 1\n            return Result { try context.save() }\n        }\n        var state = ProductFormState()\n        state.draft.name = \" 新しい商品 \"\n        state.draft.type = \" しょうゆ \"\n\n        #expect(existing.name == \"ほかの画面で編集中\")\n        #expect(context.hasChanges)\n        #expect(!state.save(using: actions))\n"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+        "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift"
+      ],
+      "covers": [
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    },
+    {
+      "id": "testProductRegistrationCancelAndBackDiscardInput",
+      "suite": "form-ui",
+      "name": "testProductRegistrationCancelAndBackDiscardInput",
+      "why": "画面を実際に操作し、登録・必須入力・取消の導線の回帰を検出する。実行状況はPRのCI結果を参照。",
+      "given": "テスト専用の新しいディスクストアで商品一覧を開く。同一テストの再起動では同じストアを使う。",
+      "when": "テスト名に対応する登録・キャンセル・戻る・保存操作を行う。",
+      "then": "テスト本文の画面表示・入力値・一覧の有無を検証する。",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 26,
+        "end": 55,
+        "text": "    func testProductRegistrationCancelAndBackDiscardInput() throws {\n        let app = makeApplication()\n        app.launch()\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        let cancelledName = \"Cancel-\\(UUID().uuidString)\"\n        let backName = \"Back-\\(UUID().uuidString)\"\n        let type = \"!UI-\\(UUID().uuidString)\"\n\n        openRegistration(in: app)\n        enterProduct(name: cancelledName, type: type, in: app)\n        app.buttons[\"product-form-cancel\"].tap()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(productRow(name: cancelledName, type: type, in: app).exists)\n        openRegistration(in: app)\n        try assertBlankForm(in: app)\n        enterProduct(name: backName, type: type, in: app)\n\n        // キャンセルとは別に、標準の戻る操作でも入力だけを捨てる。\n        let backButton = app.navigationBars[\"商品登録\"].buttons[\"商品一覧\"]\n        XCTAssertTrue(backButton.isHittable)\n        backButton.tap()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(productRow(name: backName, type: type, in: app).exists)\n        openRegistration(in: app)\n        try assertBlankForm(in: app)\n        app.buttons[\"product-form-cancel\"].tap()"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+        "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift"
+      ],
+      "covers": [
+        "open-form",
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    },
+    {
+      "id": "testProductRegistrationSavesAndSurvivesRelaunch",
+      "suite": "form-ui",
+      "name": "testProductRegistrationSavesAndSurvivesRelaunch",
+      "why": "画面を実際に操作し、登録・必須入力・取消の導線の回帰を検出する。実行状況はPRのCI結果を参照。",
+      "given": "テスト専用の新しいディスクストアで商品一覧を開く。同一テストの再起動では同じストアを使う。",
+      "when": "テスト名に対応する登録・キャンセル・戻る・保存操作を行う。",
+      "then": "テスト本文の画面表示・入力値・一覧の有無を検証する。",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 66,
+        "end": 95,
+        "text": "    func testProductRegistrationSavesAndSurvivesRelaunch() throws {\n        let app = makeApplication()\n        app.launch()\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        let name = \"Product-\\(UUID().uuidString)\"\n        let type = \"!UI-\\(UUID().uuidString)\"\n\n        openRegistration(in: app)\n        enterProduct(name: \"  \\(name)  \", type: \"  \\(type)  \", in: app)\n        app.buttons[\"product-form-save\"].tap()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(productRow(name: name, type: type, in: app).waitForExistence(timeout: 5))\n\n        app.terminate()\n        app.launch()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(productRow(name: name, type: type, in: app).waitForExistence(timeout: 5))\n    }\n\n    @MainActor\n    func testProductRegistrationShowsRequiredErrorAndPreservesInput() throws {\n        let app = makeApplication()\n        app.launch()\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        let type = \"!UI-\\(UUID().uuidString)\"\n\n        openRegistration(in: app)\n        enterProduct(name: \"   \", type: type, in: app)"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+        "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift"
+      ],
+      "covers": [
+        "open-form",
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    },
+    {
+      "id": "testProductRegistrationShowsRequiredErrorAndPreservesInput",
+      "suite": "form-ui",
+      "name": "testProductRegistrationShowsRequiredErrorAndPreservesInput",
+      "why": "画面を実際に操作し、登録・必須入力・取消の導線の回帰を検出する。実行状況はPRのCI結果を参照。",
+      "given": "テスト専用の新しいディスクストアで商品一覧を開く。同一テストの再起動では同じストアを使う。",
+      "when": "テスト名に対応する登録・キャンセル・戻る・保存操作を行う。",
+      "then": "テスト本文の画面表示・入力値・一覧の有無を検証する。",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 88,
+        "end": 117,
+        "text": "    func testProductRegistrationShowsRequiredErrorAndPreservesInput() throws {\n        let app = makeApplication()\n        app.launch()\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        let type = \"!UI-\\(UUID().uuidString)\"\n\n        openRegistration(in: app)\n        enterProduct(name: \"   \", type: type, in: app)\n        app.buttons[\"product-form-save\"].tap()\n\n        XCTAssertTrue(app.staticTexts[\"product-form-name-error\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.navigationBars[\"商品登録\"].exists)\n        XCTAssertEqual(app.textFields[\"product-form-name\"].value as? String, \"   \")\n        XCTAssertEqual(app.textFields[\"product-form-type\"].value as? String, type)\n\n        app.buttons[\"product-form-cancel\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n    }\n\n    @MainActor\n    private func makeApplication() -> XCUIApplication {\n        let app = XCUIApplication()\n        app.launchArguments = [\"--ui-test-store-id\", UUID().uuidString]\n        return app\n    }\n\n    @MainActor\n    private func openRegistration(in app: XCUIApplication) {\n        let productList = app.navigationBars[\"商品一覧\"]"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+        "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift"
+      ],
+      "covers": [
+        "open-form",
+        "save-product"
+      ],
+      "commit": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447"
+    }
+  ],
+  "impact": {
+    "title": "商品の名前と種類を登録できる",
+    "lead": "商品一覧の登録操作から、名前と種類を自由に入力できます。価格・栄養素・写真などの入力は今回の対象外です。",
+    "changed": {
+      "before": [
+        {
+          "text": "登録操作では準備中の案内が表示され、入力できませんでした。"
+        }
+      ],
+      "after": [
+        {
+          "text": "名前と種類を入力して保存すると、一覧に商品が追加されます。"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "必須項目が空の場合",
+        "before": [],
+        "after": [
+          {
+            "text": "入力が必要な欄に理由を表示し、商品を保存せず入力を残します。"
+          }
+        ],
+        "tests": [
+          "blankNameRemainsInFormWithoutSaving",
+          "blankTypeRemainsInFormWithoutSaving"
+        ]
+      },
+      {
+        "label": "キャンセルして戻る場合",
+        "before": [],
+        "after": [
+          {
+            "text": "入力途中の商品は追加されません。次に登録画面を開くと空欄から始められます。"
+          }
+        ]
+      },
+      {
+        "label": "保存に失敗した場合",
+        "before": [],
+        "after": [
+          {
+            "text": "入力と失敗の理由を表示したまま画面に残り、もう一度保存できます。"
+          }
+        ],
+        "tests": [
+          "persistenceFailurePreservesDraftAndRetryClearsError"
+        ]
+      }
+    ],
+    "kept": [
+      {
+        "text": "他の未保存変更を勝手に保存したり取り消したりしません。",
+        "tests": [
+          "unrelatedUnsavedChangesSurviveInputAndRejectedSave"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "state-binding",
+      "kind": "language",
+      "category": "Swift と画面の基礎",
+      "label": "@State と Binding",
+      "gist": "画面に入力中の値を保持し、入力欄と双方向につなぐ仕組みです。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftUIの画面は `View` に従う型で表します。`body` は画面に何を表示するかを記述し、状態が変わると再評価されます。画面の構造体は作り直されるため、単なるプロパティだけでは入力を保持する場所になりません。`@State` は、画面の同一性が続く間、SwiftUIが値を保持するためのプロパティラッパーです。`@` はここでは通常のプロパティに特別な保存・更新の仕組みを付ける記法です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+            "start": 58,
+            "end": 70,
+            "text": "    @State private var state = ProductFormState()\n\n    var body: some View {\n        Form {\n            Section {\n                TextField(\"名前\", text: $state.draft.name)\n                    .accessibilityLabel(\"名前、必須\")\n                    .accessibilityHint(state.validationMessage(for: .name) ?? \"商品の名前を入力してください。\")\n                    .accessibilityIdentifier(\"product-form-name\")\n\n                if let message = state.validationMessage(for: .name) {\n                    Text(message)\n                        .foregroundStyle(.red)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`@State private var state` は、この画面が入力状態を所有する宣言です。`TextField` の `text:` には現在の文字列だけでなく、読み取りと書き込みを行う `Binding<String>` が必要です。`$state.draft.name` の `$` は、状態から双方向の受け口を取り出します。入力欄で文字を変えるとドラフトが変わり、その値が次の表示にも使われます。入力文字列は保存済みモデルとは別の値なので、キーを打っただけでは商品を保存しません。"
+        },
+        {
+          "kind": "text",
+          "text": "このPRでは画面を閉じるまで同じドラフトを保ちます。保存失敗も画面を閉じないので入力が残ります。取消後に新しい登録画面へ遷移すると新しい空の状態を使います。`@State` 自体が永続化や取消処理を行うわけではありません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "lineRange": {
+            "start": 58,
+            "end": 65
+          },
+          "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ]
+    },
+    {
+      "id": "environment",
+      "kind": "language",
+      "category": "Swift と画面の基礎",
+      "label": "@Environment と画面の終了",
+      "gist": "親から渡された保存先と、現在の画面を閉じる操作を取り出します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "Environmentは、親の画面やアプリが子へ渡す値の仕組みです。`@Environment` は必要な値を名前付きのキーで読み取ります。`\\.modelContext` の `\\.` はキーパスという、プロパティへの参照を表すSwiftの記法です。この宣言は保存処理を呼んでいるのではなく、環境にある保存先を受け取っています。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+            "start": 56,
+            "end": 58,
+            "text": "    @Environment(\\.modelContext) private var modelContext\n    @Environment(\\.dismiss) private var dismiss\n    @State private var state = ProductFormState()"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "アプリが設定したコンテナから、一覧と登録画面へ同じ保存用のコンテキストが渡されます。`dismiss` は現在の画面を閉じるための値で、関数のように `dismiss()` と呼び出せます。この操作自体は商品を保存したり削除したりしません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+            "start": 105,
+            "end": 109,
+            "text": "                Button(\"キャンセル\") {\n                    dismiss()\n                }\n                .accessibilityIdentifier(\"product-form-cancel\")\n            }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "取消ボタンは画面を閉じるだけです。入力中は保存モデルを作っていないため、取消用の削除や巻き戻しは要りません。保存ボタン側では保存成功の条件を確かめたあとだけ同じ終了操作を呼びます。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "lineRange": {
+            "start": 56,
+            "end": 63
+          },
+          "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ]
+    },
+    {
+      "id": "main-actor",
+      "kind": "language",
+      "category": "Swift と画面の基礎",
+      "label": "@MainActor と状態の更新",
+      "gist": "画面に関係する状態や保存操作へ、どこからアクセスできるかの規則を付けます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "actorは、共有する可変の状態へ同時に複数の処理が触ることを防ぐためのSwiftの仕組みです。actorに隔離された操作は、そのactorの実行場所で行う必要があります。MainActorは画面の更新に使う特別なactorで、メインスレッド上で実行されます。actorというアクセス規則とスレッドという実行資源は同じ概念ではありません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+            "start": 6,
+            "end": 20,
+            "text": "@MainActor\nstruct ProductFormState {\n    var draft = ProductDraft()\n    private(set) var error: ProductActions.ActionError?\n\n    mutating func save(using actions: ProductActions) -> Bool {\n        switch actions.create(from: draft) {\n        case .success:\n            error = nil\n            return true\n        case .failure(let failure):\n            error = failure\n            return false\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`@MainActor` の `@` は宣言へ属性を付ける記法です。ここでは直後の型をメインactorへ隔離します。`@State` のようなプロパティラッパーとは役割が異なります。保存操作の型も同じactorに隔離されているため、画面の保存状態から同じ境界内で呼び出せます。このプロジェクトには既定のactor隔離設定もありますが、入力状態では注釈によって契約を読み取れる形にしています。"
+        },
+        {
+          "kind": "text",
+          "text": "`mutating` は構造体自身のプロパティを書き換えるメソッドに必要な指定です。成功・失敗に応じて `error` を書き換えるため付いています。この注釈だけで重い処理をバックグラウンドへ移すことはできません。今回の保存処理は同期的に実行して結果を返します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "lineRange": {
+            "start": 6,
+            "end": 13
+          },
+          "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ]
+    },
+    {
+      "id": "result",
+      "kind": "language",
+      "category": "Swift と画面の基礎",
+      "label": "Result と switch",
+      "gist": "成功時の値と失敗時の理由を、呼び出し側が分けて扱います。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`Result<Success, Failure>` は成功か失敗のどちらか一方を持つ列挙型です。成功は `.success`、失敗は `.failure` で表します。商品保存の結果なら成功側に商品、失敗側に入力や保存のエラーが入ります。`switch` はその種類を取り出して分岐する構文です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+            "start": 11,
+            "end": 20,
+            "text": "    mutating func save(using actions: ProductActions) -> Bool {\n        switch actions.create(from: draft) {\n        case .success:\n            error = nil\n            return true\n        case .failure(let failure):\n            error = failure\n            return false\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`actions.create(from: draft)` に入力を渡し、`.failure(let failure)` で失敗の中身を名前付きの値として受け取ります。成功時だけエラーを消して `true` を返し、失敗時はエラーを状態へ残して `false` を返します。この真偽値は画面を閉じてよいかを表すUI用の判断であり、保存エラーを捨てているわけではありません。ドラフトには代入しないので、失敗しても元の空白を含む入力が残ります。"
+        },
+        {
+          "kind": "text",
+          "text": "入力エラーは項目の近くへ、保存処理の失敗は画面の保存エラー欄へ表示します。成功したときだけ画面側が終了します。未設定や失敗を空文字・0へ置き換える処理は追加していません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "lineRange": {
+            "start": 11,
+            "end": 18
+          },
+          "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ]
+    },
+    {
+      "id": "model-context",
+      "kind": "language",
+      "category": "Swift と画面の基礎",
+      "label": "ModelContext と保存・巻き戻し",
+      "gist": "保存前の変更をまとめて管理し、保存に失敗した変更を取り消します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftDataはモデルを保存するAppleの仕組みです。`ModelContainer` はモデルの構成と保存先を持ち、`ModelContext` は読み出したモデルや保存前の変更を管理します。`insert` は管理対象へ加える操作であり、保存の成功そのものではありません。`save()` が失敗する可能性を扱う必要があります。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+            "start": 30,
+            "end": 55,
+            "text": "    func create(from draft: ProductDraft, image: Data? = nil, now: Date = Date()) -> Result<Product, ActionError> {\n        let values: ProductDraft.ValidatedValues\n        switch draft.validated() {\n        case .success(let validated):\n            values = validated\n        case .failure(let error):\n            return .failure(.validation(error))\n        }\n\n        if case .failure(let error) = requireCleanContext() {\n            return .failure(error)\n        }\n\n        let product = Product(name: values.name, type: values.type, updatedAt: now)\n        apply(values, image: image, now: now, to: product)\n        context.insert(product)\n\n        return saveOrRollback().map { product }\n    }\n\n    /// 同じcontextの保存済み商品を編集する。imageのnilは画像の削除を表す。\n    func update(\n        _ product: Product, from draft: ProductDraft, image: Data?, now: Date = Date()\n    ) -> Result<Void, ActionError> {\n        let values: ProductDraft.ValidatedValues\n        switch draft.validated() {"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "既存の保存処理は、まずドラフト全体を検証します。有効な場合でもコンテキストに他の未保存変更があれば拒否します。そのあとで商品を作り、追加して保存します。フォームでモデルを先に作らないため、入力中の自動保存や取消のための削除を避けられます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+            "start": 130,
+            "end": 139,
+            "text": "    private func saveOrRollback() -> Result<Void, ActionError> {\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))\n        }\n    }\n}"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`rollback()` はコンテキスト全体の未保存変更を戻す操作です。保存前に他の変更がないことを確認しているため、ここでは失敗した新規商品の追加を戻せます。フォームの入力文字列はコンテキストの外にあるので消えません。取消で無条件に巻き戻す設計にすると他の画面の編集も巻き込むため、このPRでは取消時に呼びません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+          "lineRange": {
+            "start": 30,
+            "end": 37
+          },
+          "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ]
+    },
+    {
+      "id": "registration-flow",
+      "kind": "codebase",
+      "category": "登録の組み立て",
+      "label": "商品一覧から登録する流れ",
+      "gist": "2つの入口を同じフォームへつなぎ、保存できた結果を一覧へ反映します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "商品一覧には、商品がないときのボタンとツールバーの登録ボタンがあります。片方だけ変更すると入口によって準備中画面へ進むため、両方を同じフォームに置き換えました。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+            "start": 18,
+            "end": 22,
+            "text": "                    NavigationLink(\"商品を登録\") {\n                        ProductFormView()\n                    }\n                    .buttonStyle(.borderedProminent)\n                }"
+          }
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+            "start": 112,
+            "end": 118,
+            "text": "                Button(\"保存\") {\n                    if state.save(using: ProductActions(context: modelContext)) {\n                        dismiss()\n                    }\n                }\n                .accessibilityIdentifier(\"product-form-save\")\n            }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "保存時は入力状態へ既存の保存操作を渡し、成功結果を受けた場合だけ画面を閉じます。一覧と同じ環境のコンテキストを使うことで、別の保存先や別の編集状態を管理する必要を増やしていません。実装範囲は名前と種類の新規登録です。商品選択後の個体追加や価格・栄養素などは後続の作業として残しています。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+          "lineRange": {
+            "start": 18,
+            "end": 25
+          },
+          "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ],
+      "status": "added",
+      "flows": [
+        "register"
+      ],
+      "tests": [
+        "savingCreatesOneNormalizedProduct",
+        "testProductRegistrationCancelAndBackDiscardInput",
+        "testProductRegistrationSavesAndSurvivesRelaunch",
+        "testProductRegistrationShowsRequiredErrorAndPreservesInput"
+      ]
+    },
+    {
+      "id": "retry-design",
+      "kind": "codebase",
+      "category": "登録の組み立て",
+      "label": "入力を保って保存し直す設計",
+      "gist": "保存の失敗だけを差し替え、実際の保存先で入力保持と巻き戻しを検証します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "保存失敗を再現するためにストレージの故障を待つテストは不安定です。既存の保存操作には、保存する部分だけを渡せるクロージャがあります。クロージャはその場で定義する関数の値です。今回のテストは実際のメモリ内コンテナとコンテキストを使い、この部分に失敗結果を返す関数を渡します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+            "start": 59,
+            "end": 73,
+            "text": "    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　再試行する商品 \"\n        state.draft.type = \" しょうゆ\\t\"\n        let failing = ProductActions(context: context) { _ in\n            .failure(StoreError.unavailable)\n        }\n\n        #expect(!state.save(using: failing))\n\n        guard case .persistence(let underlying) = state.error else {\n            Issue.record(\"保存失敗が画面の状態に保持されなかった\")\n            return"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`{ _ in .failure(...) }` の `_` は受け取るコンテキストを使わないという意味です。保存以外の入力検証・追加・巻き戻しは本番と同じ処理が動きます。失敗後は元の文字列と理由、保存件数0を確かめ、同じ状態で通常の保存操作へ戻して再試行します。成功した商品が1件だけなら、失敗した追加が残って重複する不具合も検出できます。"
+        },
+        {
+          "kind": "text",
+          "text": "これらは追加したテストの設計を説明しています。LinuxではSwiftとXcodeがないため、iOSテストの実行成功は主張していません。配置検査・Swift整形・単体テスト・UIテストの結果はPR本文と検証コメントで区別します。保存失敗メッセージの実際の画面表示、VoiceOver、拡大文字の見え方は端末での確認が残ります。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+          "lineRange": {
+            "start": 59,
+            "end": 66
+          },
+          "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ],
+      "status": "added",
+      "flows": [
+        "retry"
+      ],
+      "tests": [
+        "persistenceFailurePreservesDraftAndRetryClearsError",
+        "unrelatedUnsavedChangesSurviveInputAndRejectedSave"
+      ]
+    },
+    {
+      "id": "test-store",
+      "kind": "language",
+      "category": "Swift と画面の基礎",
+      "label": "#if DEBUG とテスト用の保存先",
+      "gist": "テストの起動引数はDebugビルドだけで読み、再起動後も同じ専用ストアを開きます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`#if DEBUG` は実行中の条件分岐ではなく、ビルド時にコードを含めるかを決める条件付きコンパイルです。Debug構成で定義される `DEBUG` が有効なときだけ、この内側のコードが組み込まれます。Releaseでは引数を解釈する部分自体を含みません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+            "start": 29,
+            "end": 40,
+            "text": "        #if DEBUG\n            let arguments = ProcessInfo.processInfo.arguments\n            if let optionIndex = arguments.firstIndex(of: \"--ui-test-store-id\"),\n                arguments.indices.contains(optionIndex + 1),\n                let storeID = UUID(uuidString: arguments[optionIndex + 1])\n            {\n                // テストごとに分離し、同じテスト内の再起動では同じストアを読む。\n                let url = FileManager.default.temporaryDirectory\n                    .appendingPathComponent(\"SeasoningManagerUITests-\\(storeID.uuidString).store\")\n                return ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)\n            }\n        #endif"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`ProcessInfo.processInfo.arguments` はアプリの起動引数です。指定名の直後に値があるかを範囲チェックし、`UUID(uuidString:)` が成功する値だけを使います。`if let` はOptionalに値がある場合だけ中身へ名前を付ける構文で、この条件をすべて満たしたときだけ専用のURLを作ります。正規化されたUUIDから固定のファイル名を組み立てるため、引数を任意のパスとしては扱いません。条件に合わなければ通常の設定を返します。"
+        },
+        {
+          "kind": "text",
+          "text": "UIテストはテストごとに別のUUIDを作り、同じアプリインスタンスを再起動するときは引数を保持します。メモリ内ストアでは終了時にデータを失うため、ここでは端末の一時ディレクトリにあるディスクストアを使います。初回は空、保存後の再起動では同じ商品が残るという両方を確認できます。既存の商品を削除して初期化する仕組みはありません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+          "lineRange": {
+            "start": 29,
+            "end": 36
+          },
+          "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ]
+    }
+  ]
+}
