@@ -1,0 +1,188 @@
+{
+  "version": 2,
+  "pr": 123,
+  "headBranch": "feat/34-product-registration",
+  "baseBranch": "master",
+  "mergeBase": "8bd3463bf1485586f76703585a05d203fab879f2",
+  "head": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447",
+  "groups": [
+    {
+      "label": "画面・起動",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 24,
+          "deletions": 6,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "単体テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 168,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 117,
+          "deletions": 16,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "アプリ(その他)",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 121,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 13,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "name": "blankNameRemainsInFormWithoutSaving"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "name": "blankTypeRemainsInFormWithoutSaving"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "name": "enteringDraftDoesNotChangeContext"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "name": "persistenceFailurePreservesDraftAndRetryClearsError"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "name": "savingCreatesOneNormalizedProduct"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "name": "unrelatedUnsavedChangesSurviveInputAndRejectedSave"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testProductRegistrationCancelAndBackDiscardInput"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testProductRegistrationSavesAndSurvivesRelaunch"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testProductRegistrationShowsRequiredErrorAndPreservesInput"
+      }
+    ],
+    "removed": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testProductRegistrationNavigationAndBack"
+      }
+    ],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "38e40b3d1ad2e25f8a2494e357fa32d5f1409447",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-10-19T23:13:07+09:00",
+      "subject": "feat: 名前と種類から商品を登録する",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 121,
+          "deletions": 0,
+          "patch": "@@ -0,0 +1,121 @@\n+import Foundation\n+import SwiftData\n+import SwiftUI\n+\n+/// 入力中は値だけを持ち、保存操作の結果を画面へ返す。\n+@MainActor\n+struct ProductFormState {\n+    var draft = ProductDraft()\n+    private(set) var error: ProductActions.ActionError?\n+\n+    mutating func save(using actions: ProductActions) -> Bool {\n+        switch actions.create(from: draft) {\n+        case .success:\n+            error = nil\n+            return true\n+        case .failure(let failure):\n+            error = failure\n+            return false\n+        }\n+    }\n+\n+    func validationMessage(for field: ProductDraft.Field) -> String? {\n+        guard case .validation(let validation) = error, validation.field == field else {\n+            return nil\n+        }\n+\n+        switch field {\n+        case .name:\n+            return \"名前を入力してください。\"\n+        case .type:\n+            return \"種類を入力してください。\"\n+        default:\n+            return \"入力内容を確認してください。\"\n+        }\n+    }\n+\n+    var saveErrorMessage: String? {\n+        guard let error else {\n+            return nil\n+        }\n+\n+        switch error {\n+        case .validation:\n+            return nil\n+        case .pendingChanges:\n+            return \"ほかの変更が保存されていません。変更が保存されてから、もう一度「保存」を押してください。\"\n+        case .persistence(let underlying):\n+            return \"商品を保存できませんでした。\\(underlying.localizedDescription) もう一度「保存」を押してください。\"\n+        case .productNotInContext, .productHasItems, .deletionNotConfirmed:\n+            return \"商品を保存できませんでした。入力内容を確認し、もう一度「保存」を押してください。\"\n+        }\n+    }\n+}\n+\n+struct ProductFormView: View {\n+    @Environment(\\.modelContext) private var modelContext\n+    @Environment(\\.dismiss) private var dismiss\n+    @State private var state = ProductFormState()\n+\n+    var body: some View {\n+        Form {\n+            Section {\n+                TextField(\"名前\", text: $state.draft.name)\n+                    .accessibilityLabel(\"名前、必須\")\n+                    .accessibilityHint(state.validationMessage(for: .name) ?? \"商品の名前を入力してください。\")\n+                    .accessibilityIdentifier(\"product-form-name\")\n+\n+                if let message = state.validationMessage(for: .name) {\n+                    Text(message)\n+                        .foregroundStyle(.red)\n+                        .accessibilityLabel(\"名前のエラー、\\(message)\")\n+                        .accessibilityIdentifier(\"product-form-name-error\")\n+                }\n+\n+                TextField(\"種類\", text: $state.draft.type)\n+                    .accessibilityLabel(\"種類、必須\")\n+                    .accessibilityHint(state.validationMessage(for: .type) ?? \"しょうゆ、みそなど、種類を自由に入力してください。\")\n+                    .accessibilityIdentifier(\"product-form-type\")\n+\n+                if let message = state.validationMessage(for: .type) {\n+                    Text(message)\n+                        .foregroundStyle(.red)\n+                        .accessibilityLabel(\"種類のエラー、\\(message)\")\n+                        .accessibilityIdentifier(\"product-form-type-error\")\n+                }\n+            } header: {\n+                Text(\"基本情報\")\n+            } footer: {\n+                Text(\"名前と種類は必須です。\")\n+            }\n+\n+            if let message = state.saveErrorMessage {\n+                Section {\n+                    Text(message)\n+                        .foregroundStyle(.red)\n+                        .accessibilityLabel(\"保存エラー、\\(message)\")\n+                        .accessibilityIdentifier(\"product-form-save-error\")\n+                }\n+            }\n+        }\n+        .navigationTitle(\"商品登録\")\n+        .navigationBarTitleDisplayMode(.inline)\n+        .toolbar {\n+            ToolbarItem(placement: .topBarLeading) {\n+                Button(\"キャンセル\") {\n+                    dismiss()\n+                }\n+                .accessibilityIdentifier(\"product-form-cancel\")\n+            }\n+\n+            ToolbarItem(placement: .topBarTrailing) {\n+                Button(\"保存\") {\n+                    if state.save(using: ProductActions(context: modelContext)) {\n+                        dismiss()\n+                    }\n+                }\n+                .accessibilityIdentifier(\"product-form-save\")\n+            }\n+        }\n+    }\n+}",
+          "patchLines": 122,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 13,
+          "patch": "@@ -16,7 +16,7 @@ struct ProductListView: View {\n                     Text(\"商品を登録すると、名前と種類をここで確認できます。\")\n                 } actions: {\n                     NavigationLink(\"商品を登録\") {\n-                        ProductRegistrationPlaceholderView()\n+                        ProductFormView()\n                     }\n                     .buttonStyle(.borderedProminent)\n                 }\n@@ -30,7 +30,7 @@ struct ProductListView: View {\n         .toolbar {\n             ToolbarItem(placement: .topBarTrailing) {\n                 NavigationLink {\n-                    ProductRegistrationPlaceholderView()\n+                    ProductFormView()\n                 } label: {\n                     Label(\"商品を登録\", systemImage: \"plus\")\n                 }\n@@ -107,17 +107,6 @@ private struct ProductListRow: View {\n     }\n }\n \n-private struct ProductRegistrationPlaceholderView: View {\n-    var body: some View {\n-        ContentUnavailableView(\n-            \"商品登録機能は準備中です\",\n-            systemImage: \"square.and.pencil\",\n-            description: Text(\"商品一覧に戻るには、画面上部の戻るボタンを使ってください。\")\n-        )\n-        .navigationTitle(\"商品登録\")\n-    }\n-}\n-\n private struct ProductListPreview: View {\n     private let containerResult: Result<ModelContainer, Error>\n ",
+          "patchLines": 36,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 24,
+          "deletions": 6,
+          "patch": "@@ -5,8 +5,9 @@\n //  Created by DIO on 2026/09/28.\n //\n \n-import SwiftUI\n+import Foundation\n import SwiftData\n+import SwiftUI\n \n @main\n struct SeasoningManagerApp: App {\n@@ -15,11 +16,7 @@ struct SeasoningManagerApp: App {\n             Item.self,\n             Product.self,\n         ])\n-        let modelConfiguration = ModelConfiguration(\n-            schema: schema,\n-            isStoredInMemoryOnly: false,\n-            cloudKitDatabase: .none\n-        )\n+        let modelConfiguration = SeasoningManagerApp.makeConfiguration(for: schema)\n \n         do {\n             return try ModelContainer(for: schema, configurations: [modelConfiguration])\n@@ -28,6 +25,27 @@ struct SeasoningManagerApp: App {\n         }\n     }()\n \n+    private static func makeConfiguration(for schema: Schema) -> ModelConfiguration {\n+        #if DEBUG\n+        let arguments = ProcessInfo.processInfo.arguments\n+        if let optionIndex = arguments.firstIndex(of: \"--ui-test-store-id\"),\n+            arguments.indices.contains(optionIndex + 1),\n+            let storeID = UUID(uuidString: arguments[optionIndex + 1])\n+        {\n+            // テストごとに分離し、同じテスト内の再起動では同じストアを読む。\n+            let url = FileManager.default.temporaryDirectory\n+                .appendingPathComponent(\"SeasoningManagerUITests-\\(storeID.uuidString).store\")\n+            return ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)\n+        }\n+        #endif\n+\n+        return ModelConfiguration(\n+            schema: schema,\n+            isStoredInMemoryOnly: false,\n+            cloudKitDatabase: .none\n+        )\n+    }\n+\n     var body: some Scene {\n         WindowGroup {\n             ContentView()",
+          "patchLines": 52,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 168,
+          "deletions": 0,
+          "patch": "@@ -0,0 +1,168 @@\n+import Foundation\n+import SwiftData\n+import Testing\n+@testable import SeasoningManager\n+\n+@MainActor\n+struct ProductFormStateTests {\n+    nonisolated private enum StoreError: LocalizedError, Equatable {\n+        case unavailable\n+\n+        var errorDescription: String? {\n+            \"保存先を利用できません。\"\n+        }\n+    }\n+\n+    @Test func enteringDraftDoesNotChangeContext() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        var state = ProductFormState()\n+\n+        state.draft.name = \"　登録前の商品 \"\n+        state.draft.type = \"　しょうゆ \"\n+\n+        #expect(!context.hasChanges)\n+        #expect(try context.fetchCount(FetchDescriptor<Product>()) == 0)\n+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)\n+        #expect(state.error == nil)\n+    }\n+\n+    @Test(arguments: [\"\", \" \\t\\n\", \"　\", \"\\u{00a0}\\u{2003}\\u{2028}\"])\n+    func blankNameRemainsInFormWithoutSaving(_ input: String) throws {\n+        try expectRejectedDraft(ProductDraft(name: input, type: \"しょうゆ\"), field: .name)\n+    }\n+\n+    @Test(arguments: [\"\", \" \\t\\n\", \"　\", \"\\u{00a0}\\u{2003}\\u{2028}\"])\n+    func blankTypeRemainsInFormWithoutSaving(_ input: String) throws {\n+        try expectRejectedDraft(ProductDraft(name: \"丸大豆しょうゆ\", type: input), field: .type)\n+    }\n+\n+    @Test func savingCreatesOneNormalizedProduct() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        var state = ProductFormState()\n+        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n+        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n+\n+        #expect(state.save(using: ProductActions(context: context)))\n+\n+        let reader = ModelContext(container)\n+        let products = try reader.fetch(FetchDescriptor<Product>())\n+        #expect(products.count == 1)\n+        let product = try #require(products.first)\n+        #expect(product.name == \"丸大豆 しょうゆ\")\n+        #expect(product.type == \"和風 調味料\")\n+        #expect(!context.hasChanges)\n+        #expect(state.error == nil)\n+    }\n+\n+    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        var state = ProductFormState()\n+        state.draft.name = \"　再試行する商品 \"\n+        state.draft.type = \" しょうゆ\\t\"\n+        let failing = ProductActions(context: context) { _ in\n+            .failure(StoreError.unavailable)\n+        }\n+\n+        #expect(!state.save(using: failing))\n+\n+        guard case .persistence(let underlying) = state.error else {\n+            Issue.record(\"保存失敗が画面の状態に保持されなかった\")\n+            return\n+        }\n+        #expect(underlying as? StoreError == .unavailable)\n+        #expect(state.saveErrorMessage?.contains(\"保存先を利用できません。\") == true)\n+        #expect(state.draft.name == \"　再試行する商品 \")\n+        #expect(state.draft.type == \" しょうゆ\\t\")\n+        #expect(!context.hasChanges)\n+        #expect(try context.fetchCount(FetchDescriptor<Product>()) == 0)\n+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)\n+\n+        // 同じ入力状態から保存し直しても、失敗した商品の重複は作らない。\n+        #expect(state.save(using: ProductActions(context: context)))\n+\n+        let reader = ModelContext(container)\n+        let products = try reader.fetch(FetchDescriptor<Product>())\n+        #expect(products.count == 1)\n+        #expect(products.first?.name == \"再試行する商品\")\n+        #expect(products.first?.type == \"しょうゆ\")\n+        #expect(state.error == nil)\n+        #expect(state.saveErrorMessage == nil)\n+    }\n+\n+    @Test func unrelatedUnsavedChangesSurviveInputAndRejectedSave() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let existing = Product(name: \"元の商品\", type: \"みそ\")\n+        context.insert(existing)\n+        try context.save()\n+        existing.name = \"ほかの画面で編集中\"\n+        var saveCalls = 0\n+        let actions = ProductActions(context: context) { context in\n+            saveCalls += 1\n+            return Result { try context.save() }\n+        }\n+        var state = ProductFormState()\n+        state.draft.name = \" 新しい商品 \"\n+        state.draft.type = \" しょうゆ \"\n+\n+        #expect(existing.name == \"ほかの画面で編集中\")\n+        #expect(context.hasChanges)\n+        #expect(!state.save(using: actions))\n+\n+        guard case .pendingChanges = state.error else {\n+            Issue.record(\"共有contextの未保存変更が検出されなかった\")\n+            return\n+        }\n+        #expect(saveCalls == 0)\n+        #expect(existing.name == \"ほかの画面で編集中\")\n+        #expect(context.hasChanges)\n+        #expect(state.draft.name == \" 新しい商品 \")\n+        #expect(state.draft.type == \" しょうゆ \")\n+        #expect(state.saveErrorMessage != nil)\n+        #expect(try context.fetchCount(FetchDescriptor<Product>()) == 1)\n+        let reader = ModelContext(container)\n+        let saved = try reader.fetch(FetchDescriptor<Product>())\n+        #expect(saved.count == 1)\n+        #expect(saved.first?.name == \"元の商品\")\n+    }\n+\n+    private func expectRejectedDraft(_ draft: ProductDraft, field: ProductDraft.Field) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        var saveCalls = 0\n+        let actions = ProductActions(context: context) { context in\n+            saveCalls += 1\n+            return Result { try context.save() }\n+        }\n+        var state = ProductFormState()\n+        state.draft = draft\n+\n+        #expect(!state.save(using: actions))\n+\n+        guard case .validation(let error) = state.error else {\n+            Issue.record(\"必須項目のエラーが画面の状態に保持されなかった\")\n+            return\n+        }\n+        #expect(error == ProductDraft.ValidationError(field: field, reason: .required))\n+        #expect((state.validationMessage(for: .name) != nil) == (field == .name))\n+        #expect((state.validationMessage(for: .type) != nil) == (field == .type))\n+        #expect(state.saveErrorMessage == nil)\n+        #expect(state.draft.name == draft.name)\n+        #expect(state.draft.type == draft.type)\n+        #expect(saveCalls == 0)\n+        #expect(!context.hasChanges)\n+        #expect(try context.fetchCount(FetchDescriptor<Product>()) == 0)\n+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)\n+    }\n+\n+    private func makeContainer() throws -> ModelContainer {\n+        let schema = Schema([Product.self, Item.self])\n+        let configuration = ModelConfiguration(\n+            schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none\n+        )\n+        return try ModelContainer(for: schema, configurations: [configuration])\n+    }\n+}",
+          "patchLines": 169,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 117,
+          "deletions": 16,
+          "patch": "@@ -23,38 +23,139 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    func testProductRegistrationNavigationAndBack() throws {\n-        let app = XCUIApplication()\n+    func testProductRegistrationCancelAndBackDiscardInput() throws {\n+        let app = makeApplication()\n+        app.launch()\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        let cancelledName = \"Cancel-\\(UUID().uuidString)\"\n+        let backName = \"Back-\\(UUID().uuidString)\"\n+        let type = \"!UI-\\(UUID().uuidString)\"\n+\n+        openRegistration(in: app)\n+        enterProduct(name: cancelledName, type: type, in: app)\n+        app.buttons[\"product-form-cancel\"].tap()\n+\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        XCTAssertFalse(productRow(name: cancelledName, type: type, in: app).exists)\n+        openRegistration(in: app)\n+        try assertBlankForm(in: app)\n+        enterProduct(name: backName, type: type, in: app)\n+\n+        // キャンセルとは別に、標準の戻る操作でも入力だけを捨てる。\n+        let backButton = app.navigationBars[\"商品登録\"].buttons[\"商品一覧\"]\n+        XCTAssertTrue(backButton.isHittable)\n+        backButton.tap()\n+\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        XCTAssertFalse(productRow(name: backName, type: type, in: app).exists)\n+        openRegistration(in: app)\n+        try assertBlankForm(in: app)\n+        app.buttons[\"product-form-cancel\"].tap()\n+\n+        app.terminate()\n+        app.launch()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        XCTAssertFalse(productRow(name: cancelledName, type: type, in: app).exists)\n+        XCTAssertFalse(productRow(name: backName, type: type, in: app).exists)\n+    }\n+\n+    @MainActor\n+    func testProductRegistrationSavesAndSurvivesRelaunch() throws {\n+        let app = makeApplication()\n+        app.launch()\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        let name = \"Product-\\(UUID().uuidString)\"\n+        let type = \"!UI-\\(UUID().uuidString)\"\n+\n+        openRegistration(in: app)\n+        enterProduct(name: \"  \\(name)  \", type: \"  \\(type)  \", in: app)\n+        app.buttons[\"product-form-save\"].tap()\n+\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(productRow(name: name, type: type, in: app).waitForExistence(timeout: 5))\n+\n+        app.terminate()\n+        app.launch()\n+\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(productRow(name: name, type: type, in: app).waitForExistence(timeout: 5))\n+    }\n+\n+    @MainActor\n+    func testProductRegistrationShowsRequiredErrorAndPreservesInput() throws {\n+        let app = makeApplication()\n         app.launch()\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        let type = \"!UI-\\(UUID().uuidString)\"\n \n-        // 保存済み商品の有無によらず、共通の登録操作から遷移できる。\n+        openRegistration(in: app)\n+        enterProduct(name: \"   \", type: type, in: app)\n+        app.buttons[\"product-form-save\"].tap()\n+\n+        XCTAssertTrue(app.staticTexts[\"product-form-name-error\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.navigationBars[\"商品登録\"].exists)\n+        XCTAssertEqual(app.textFields[\"product-form-name\"].value as? String, \"   \")\n+        XCTAssertEqual(app.textFields[\"product-form-type\"].value as? String, type)\n+\n+        app.buttons[\"product-form-cancel\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+    }\n+\n+    @MainActor\n+    private func makeApplication() -> XCUIApplication {\n+        let app = XCUIApplication()\n+        app.launchArguments = [\"--ui-test-store-id\", UUID().uuidString]\n+        return app\n+    }\n+\n+    @MainActor\n+    private func openRegistration(in app: XCUIApplication) {\n         let productList = app.navigationBars[\"商品一覧\"]\n         XCTAssertTrue(productList.waitForExistence(timeout: 5))\n-\n         let registerButton = productList.buttons[\"product-list-register\"]\n         XCTAssertTrue(registerButton.isHittable)\n         registerButton.tap()\n+        XCTAssertTrue(app.navigationBars[\"商品登録\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.textFields[\"product-form-name\"].waitForExistence(timeout: 5))\n+    }\n \n-        let registration = app.navigationBars[\"商品登録\"]\n-        XCTAssertTrue(registration.waitForExistence(timeout: 5))\n-        XCTAssertTrue(app.staticTexts[\"商品登録機能は準備中です\"].exists)\n-        XCTAssertFalse(app.buttons[\"保存\"].exists)\n-        XCTAssertFalse(app.textFields.firstMatch.exists)\n+    @MainActor\n+    private func enterProduct(name: String, type: String, in app: XCUIApplication) {\n+        let nameField = app.textFields[\"product-form-name\"]\n+        nameField.tap()\n+        nameField.typeText(name)\n+        let typeField = app.textFields[\"product-form-type\"]\n+        typeField.tap()\n+        typeField.typeText(type)\n+    }\n \n-        // 暫定画面の標準戻るボタンで一覧と登録操作に戻れる。\n-        let backButton = registration.buttons.element(boundBy: 0)\n-        XCTAssertTrue(backButton.isHittable)\n-        backButton.tap()\n+    @MainActor\n+    private func assertBlankForm(in app: XCUIApplication) throws {\n+        let name = try XCTUnwrap(app.textFields[\"product-form-name\"].value as? String)\n+        let type = try XCTUnwrap(app.textFields[\"product-form-type\"].value as? String)\n \n-        XCTAssertTrue(productList.waitForExistence(timeout: 5))\n-        XCTAssertTrue(registerButton.isHittable)\n+        // 未入力欄のvalueはOSにより空文字かプレースホルダーになる。\n+        XCTAssertTrue([\"\", \"名前\"].contains(name))\n+        XCTAssertTrue([\"\", \"種類\"].contains(type))\n+        XCTAssertFalse(app.staticTexts[\"product-form-name-error\"].exists)\n+    }\n+\n+    @MainActor\n+    private func productRow(name: String, type: String, in app: XCUIApplication) -> XCUIElement {\n+        let label = \"商品名、\\(name)、種類、\\(type)、未開封、0本、使用中、0本\"\n+        return app.descendants(matching: .any).matching(NSPredicate(format: \"label == %@\", label)).firstMatch\n     }\n \n     @MainActor\n     func testLaunchPerformance() throws {\n         // This measures how long it takes to launch your application.\n+        let app = makeApplication()\n         measure(metrics: [XCTApplicationLaunchMetric()]) {\n-            XCUIApplication().launch()\n+            app.launch()\n         }\n     }\n }",
+          "patchLines": 156,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
