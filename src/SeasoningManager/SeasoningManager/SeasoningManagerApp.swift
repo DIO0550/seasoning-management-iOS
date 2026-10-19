@@ -27,16 +27,16 @@ struct SeasoningManagerApp: App {
 
     private static func makeConfiguration(for schema: Schema) -> ModelConfiguration {
         #if DEBUG
-        let arguments = ProcessInfo.processInfo.arguments
-        if let optionIndex = arguments.firstIndex(of: "--ui-test-store-id"),
-            arguments.indices.contains(optionIndex + 1),
-            let storeID = UUID(uuidString: arguments[optionIndex + 1])
-        {
-            // テストごとに分離し、同じテスト内の再起動では同じストアを読む。
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent("SeasoningManagerUITests-\(storeID.uuidString).store")
-            return ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
-        }
+            let arguments = ProcessInfo.processInfo.arguments
+            if let optionIndex = arguments.firstIndex(of: "--ui-test-store-id"),
+                arguments.indices.contains(optionIndex + 1),
+                let storeID = UUID(uuidString: arguments[optionIndex + 1])
+            {
+                // テストごとに分離し、同じテスト内の再起動では同じストアを読む。
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SeasoningManagerUITests-\(storeID.uuidString).store")
+                return ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+            }
         #endif
 
         return ModelConfiguration(
