@@ -44,7 +44,8 @@ struct ProductFormStateTests {
         state.draft.name = "　丸大豆 しょうゆ\n"
         state.draft.type = "\u{2003}和風 調味料\t"
 
-        #expect(state.save(using: ProductActions(context: context)))
+        let saveSucceeded = state.save(using: ProductActions(context: context))
+        #expect(saveSucceeded)
 
         let reader = ModelContext(container)
         let products = try reader.fetch(FetchDescriptor<Product>())
@@ -66,7 +67,8 @@ struct ProductFormStateTests {
             .failure(StoreError.unavailable)
         }
 
-        #expect(!state.save(using: failing))
+        let firstSaveSucceeded = state.save(using: failing)
+        #expect(!firstSaveSucceeded)
 
         guard case .persistence(let underlying) = state.error else {
             Issue.record("保存失敗が画面の状態に保持されなかった")
@@ -81,7 +83,8 @@ struct ProductFormStateTests {
         #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)
 
         // 同じ入力状態から保存し直しても、失敗した商品の重複は作らない。
-        #expect(state.save(using: ProductActions(context: context)))
+        let retrySucceeded = state.save(using: ProductActions(context: context))
+        #expect(retrySucceeded)
 
         let reader = ModelContext(container)
         let products = try reader.fetch(FetchDescriptor<Product>())
@@ -110,7 +113,8 @@ struct ProductFormStateTests {
 
         #expect(existing.name == "ほかの画面で編集中")
         #expect(context.hasChanges)
-        #expect(!state.save(using: actions))
+        let saveSucceeded = state.save(using: actions)
+        #expect(!saveSucceeded)
 
         guard case .pendingChanges = state.error else {
             Issue.record("共有contextの未保存変更が検出されなかった")
@@ -140,7 +144,8 @@ struct ProductFormStateTests {
         var state = ProductFormState()
         state.draft = draft
 
-        #expect(!state.save(using: actions))
+        let saveSucceeded = state.save(using: actions)
+        #expect(!saveSucceeded)
 
         guard case .validation(let error) = state.error else {
             Issue.record("必須項目のエラーが画面の状態に保持されなかった")
