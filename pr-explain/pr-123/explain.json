@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 123,
-  "sha": "650fd1a99b748d9c0b57fc5a09473b0b3d7a3f5c",
+  "sha": "86f8d411826ce82dbd8621f6eec41f11caccbca5",
   "issue": 34,
   "overview": {
     "title": "名前と種類から商品を登録する",
@@ -160,6 +160,16 @@
       "review": [
         "条件付きコードの中身だけが4スペース深くなっていること。"
       ]
+    },
+    {
+      "sha": "86f8d411826ce82dbd8621f6eec41f11caccbca5",
+      "phase": "revise",
+      "role": "状態を更新する保存操作と、結果の検証を分ける。",
+      "why": "単体・UIのCIで、期待値マクロが保存操作の受け手を不変な引数へ展開し、テストのコンパイルを拒否した。保存結果を先に変数へ受けてから検証し、本番の値型と既存の状態検証を維持した。",
+      "review": [
+        "保存操作を各箇所で1回だけ呼び、成功・失敗・再試行の期待値が維持されていること。",
+        "修正後の単体・UIテストのCI結果を確認すること。"
+      ]
     }
   ],
   "suites": [
@@ -219,7 +229,7 @@
         "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
         "start": 31,
         "end": 50,
-        "text": "    func blankNameRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: input, type: \"しょうゆ\"), field: .name)\n    }\n\n    @Test(arguments: [\"\", \" \\t\\n\", \"　\", \"\\u{00a0}\\u{2003}\\u{2028}\"])\n    func blankTypeRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: \"丸大豆しょうゆ\", type: input), field: .type)\n    }\n\n    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        #expect(state.save(using: ProductActions(context: context)))\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())"
+        "text": "    func blankNameRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: input, type: \"しょうゆ\"), field: .name)\n    }\n\n    @Test(arguments: [\"\", \" \\t\\n\", \"　\", \"\\u{00a0}\\u{2003}\\u{2028}\"])\n    func blankTypeRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: \"丸大豆しょうゆ\", type: input), field: .type)\n    }\n\n    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        let saveSucceeded = state.save(using: ProductActions(context: context))\n        #expect(saveSucceeded)\n\n        let reader = ModelContext(container)"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
@@ -247,7 +257,7 @@
         "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
         "start": 36,
         "end": 55,
-        "text": "    func blankTypeRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: \"丸大豆しょうゆ\", type: input), field: .type)\n    }\n\n    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        #expect(state.save(using: ProductActions(context: context)))\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())\n        #expect(products.count == 1)\n        let product = try #require(products.first)\n        #expect(product.name == \"丸大豆 しょうゆ\")\n        #expect(product.type == \"和風 調味料\")\n        #expect(!context.hasChanges)"
+        "text": "    func blankTypeRemainsInFormWithoutSaving(_ input: String) throws {\n        try expectRejectedDraft(ProductDraft(name: \"丸大豆しょうゆ\", type: input), field: .type)\n    }\n\n    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        let saveSucceeded = state.save(using: ProductActions(context: context))\n        #expect(saveSucceeded)\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())\n        #expect(products.count == 1)\n        let product = try #require(products.first)\n        #expect(product.name == \"丸大豆 しょうゆ\")\n        #expect(product.type == \"和風 調味料\")"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
@@ -275,7 +285,7 @@
         "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
         "start": 40,
         "end": 59,
-        "text": "    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        #expect(state.save(using: ProductActions(context: context)))\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())\n        #expect(products.count == 1)\n        let product = try #require(products.first)\n        #expect(product.name == \"丸大豆 しょうゆ\")\n        #expect(product.type == \"和風 調味料\")\n        #expect(!context.hasChanges)\n        #expect(state.error == nil)\n    }\n\n    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {"
+        "text": "    @Test func savingCreatesOneNormalizedProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　丸大豆 しょうゆ\\n\"\n        state.draft.type = \"\\u{2003}和風 調味料\\t\"\n\n        let saveSucceeded = state.save(using: ProductActions(context: context))\n        #expect(saveSucceeded)\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())\n        #expect(products.count == 1)\n        let product = try #require(products.first)\n        #expect(product.name == \"丸大豆 しょうゆ\")\n        #expect(product.type == \"和風 調味料\")\n        #expect(!context.hasChanges)\n        #expect(state.error == nil)\n    }\n"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
@@ -302,9 +312,9 @@
       ],
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
-        "start": 59,
-        "end": 78,
-        "text": "    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　再試行する商品 \"\n        state.draft.type = \" しょうゆ\\t\"\n        let failing = ProductActions(context: context) { _ in\n            .failure(StoreError.unavailable)\n        }\n\n        #expect(!state.save(using: failing))\n\n        guard case .persistence(let underlying) = state.error else {\n            Issue.record(\"保存失敗が画面の状態に保持されなかった\")\n            return\n        }\n        #expect(underlying as? StoreError == .unavailable)\n        #expect(state.saveErrorMessage?.contains(\"保存先を利用できません。\") == true)\n        #expect(state.draft.name == \"　再試行する商品 \")\n        #expect(state.draft.type == \" しょうゆ\\t\")"
+        "start": 60,
+        "end": 79,
+        "text": "    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　再試行する商品 \"\n        state.draft.type = \" しょうゆ\\t\"\n        let failing = ProductActions(context: context) { _ in\n            .failure(StoreError.unavailable)\n        }\n\n        let firstSaveSucceeded = state.save(using: failing)\n        #expect(!firstSaveSucceeded)\n\n        guard case .persistence(let underlying) = state.error else {\n            Issue.record(\"保存失敗が画面の状態に保持されなかった\")\n            return\n        }\n        #expect(underlying as? StoreError == .unavailable)\n        #expect(state.saveErrorMessage?.contains(\"保存先を利用できません。\") == true)\n        #expect(state.draft.name == \"　再試行する商品 \")"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
@@ -330,9 +340,9 @@
       ],
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
-        "start": 95,
-        "end": 114,
-        "text": "    @Test func unrelatedUnsavedChangesSurviveInputAndRejectedSave() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let existing = Product(name: \"元の商品\", type: \"みそ\")\n        context.insert(existing)\n        try context.save()\n        existing.name = \"ほかの画面で編集中\"\n        var saveCalls = 0\n        let actions = ProductActions(context: context) { context in\n            saveCalls += 1\n            return Result { try context.save() }\n        }\n        var state = ProductFormState()\n        state.draft.name = \" 新しい商品 \"\n        state.draft.type = \" しょうゆ \"\n\n        #expect(existing.name == \"ほかの画面で編集中\")\n        #expect(context.hasChanges)\n        #expect(!state.save(using: actions))\n"
+        "start": 98,
+        "end": 117,
+        "text": "    @Test func unrelatedUnsavedChangesSurviveInputAndRejectedSave() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let existing = Product(name: \"元の商品\", type: \"みそ\")\n        context.insert(existing)\n        try context.save()\n        existing.name = \"ほかの画面で編集中\"\n        var saveCalls = 0\n        let actions = ProductActions(context: context) { context in\n            saveCalls += 1\n            return Result { try context.save() }\n        }\n        var state = ProductFormState()\n        state.draft.name = \" 新しい商品 \"\n        state.draft.type = \" しょうゆ \"\n\n        #expect(existing.name == \"ほかの画面で編集中\")\n        #expect(context.hasChanges)\n        let saveSucceeded = state.save(using: actions)\n        #expect(!saveSucceeded)"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
@@ -781,9 +791,9 @@
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
-            "start": 59,
-            "end": 73,
-            "text": "    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　再試行する商品 \"\n        state.draft.type = \" しょうゆ\\t\"\n        let failing = ProductActions(context: context) { _ in\n            .failure(StoreError.unavailable)\n        }\n\n        #expect(!state.save(using: failing))\n\n        guard case .persistence(let underlying) = state.error else {\n            Issue.record(\"保存失敗が画面の状態に保持されなかった\")\n            return"
+            "start": 60,
+            "end": 74,
+            "text": "    @Test func persistenceFailurePreservesDraftAndRetryClearsError() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft.name = \"　再試行する商品 \"\n        state.draft.type = \" しょうゆ\\t\"\n        let failing = ProductActions(context: context) { _ in\n            .failure(StoreError.unavailable)\n        }\n\n        let firstSaveSucceeded = state.save(using: failing)\n        #expect(!firstSaveSucceeded)\n\n        guard case .persistence(let underlying) = state.error else {\n            Issue.record(\"保存失敗が画面の状態に保持されなかった\")"
           }
         },
         {
@@ -799,8 +809,8 @@
         {
           "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
           "lineRange": {
-            "start": 59,
-            "end": 66
+            "start": 60,
+            "end": 67
           },
           "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
         }
@@ -851,6 +861,50 @@
             "end": 36
           },
           "text": "この節で説明する実装。抜粋は対象コミットから取得しています。"
+        }
+      ]
+    },
+    {
+      "id": "testing-macro-mutating",
+      "kind": "language",
+      "category": "Swift とテストの基礎",
+      "label": "#expect と mutating メソッドの検証",
+      "gist": "保存操作を先に実行し、マクロには実行結果だけを渡します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "マクロは、記述した構文から別のコードをコンパイル時に生成する仕組みです。Swift Testingの `#expect` は、条件が偽のときに値や式を詳しく報告できるよう、渡した式を検証用のコードへ展開します。通常の関数呼び出しと似た見た目でも、引数の式がそのままの形で実行されるとは限りません。"
+        },
+        {
+          "kind": "text",
+          "text": "今回のCIでは `#expect(state.save(using: ...))` が、受け手を不変な引数 `$0` として扱う呼び出しへ展開されました。一方、`save` は構造体自身のエラー状態を更新する `mutating` メソッドです。変更できない値からこのメソッドを呼ぶことは許されないため、単体・UI双方がテスト実行前のビルドで停止していました。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+            "start": 47,
+            "end": 53,
+            "text": "        let saveSucceeded = state.save(using: ProductActions(context: context))\n        #expect(saveSucceeded)\n\n        let reader = ModelContext(container)\n        let products = try reader.fetch(FetchDescriptor<Product>())\n        #expect(products.count == 1)\n        let product = try #require(products.first)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "修正後は、変更可能な `var state` に対して保存を1回実行し、返された真偽値を `let saveSucceeded` に保持します。`let` はその結果を再代入しないという指定で、保存状態そのものを不変にする指定ではありません。`#expect(saveSucceeded)` は成功結果を、`#expect(!saveSucceeded)` は失敗結果を検証します。再試行には別の結果変数を使うため、最初の失敗と再試行の成功を取り違えません。"
+        },
+        {
+          "kind": "text",
+          "text": "保存済み商品の件数、元の入力、エラーの内容、ほかの未保存変更を守る検証は残しています。本番の保存処理を変更したり、失敗したテストを削除したりする修正ではありません。コンパイルとテストの実行結果は、修正コミットのCIで確認します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+          "lineRange": {
+            "start": 47,
+            "end": 53
+          },
+          "text": "保存操作の実行と検証を分けた箇所。"
         }
       ]
     }
