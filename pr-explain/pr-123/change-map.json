@@ -4,7 +4,7 @@
   "headBranch": "feat/34-product-registration",
   "baseBranch": "master",
   "mergeBase": "8bd3463bf1485586f76703585a05d203fab879f2",
-  "head": "650fd1a99b748d9c0b57fc5a09473b0b3d7a3f5c",
+  "head": "86f8d411826ce82dbd8621f6eec41f11caccbca5",
   "groups": [
     {
       "label": "画面・起動",
@@ -27,7 +27,7 @@
           "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
           "status": "A",
           "oldPath": null,
-          "additions": 168,
+          "additions": 173,
           "deletions": 0,
           "changed": true,
           "target": null
@@ -199,6 +199,26 @@
           "deletions": 10,
           "patch": "@@ -27,16 +27,16 @@ struct SeasoningManagerApp: App {\n \n     private static func makeConfiguration(for schema: Schema) -> ModelConfiguration {\n         #if DEBUG\n-        let arguments = ProcessInfo.processInfo.arguments\n-        if let optionIndex = arguments.firstIndex(of: \"--ui-test-store-id\"),\n-            arguments.indices.contains(optionIndex + 1),\n-            let storeID = UUID(uuidString: arguments[optionIndex + 1])\n-        {\n-            // テストごとに分離し、同じテスト内の再起動では同じストアを読む。\n-            let url = FileManager.default.temporaryDirectory\n-                .appendingPathComponent(\"SeasoningManagerUITests-\\(storeID.uuidString).store\")\n-            return ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)\n-        }\n+            let arguments = ProcessInfo.processInfo.arguments\n+            if let optionIndex = arguments.firstIndex(of: \"--ui-test-store-id\"),\n+                arguments.indices.contains(optionIndex + 1),\n+                let storeID = UUID(uuidString: arguments[optionIndex + 1])\n+            {\n+                // テストごとに分離し、同じテスト内の再起動では同じストアを読む。\n+                let url = FileManager.default.temporaryDirectory\n+                    .appendingPathComponent(\"SeasoningManagerUITests-\\(storeID.uuidString).store\")\n+                return ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)\n+            }\n         #endif\n \n         return ModelConfiguration(",
           "patchLines": 27,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "86f8d411826ce82dbd8621f6eec41f11caccbca5",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-10-20T23:22:29+09:00",
+      "subject": "fix: 保存操作を実行してからテストの期待値を検証する",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 10,
+          "deletions": 5,
+          "patch": "@@ -44,7 +44,8 @@ struct ProductFormStateTests {\n         state.draft.name = \"　丸大豆 しょうゆ\\n\"\n         state.draft.type = \"\\u{2003}和風 調味料\\t\"\n \n-        #expect(state.save(using: ProductActions(context: context)))\n+        let saveSucceeded = state.save(using: ProductActions(context: context))\n+        #expect(saveSucceeded)\n \n         let reader = ModelContext(container)\n         let products = try reader.fetch(FetchDescriptor<Product>())\n@@ -66,7 +67,8 @@ struct ProductFormStateTests {\n             .failure(StoreError.unavailable)\n         }\n \n-        #expect(!state.save(using: failing))\n+        let firstSaveSucceeded = state.save(using: failing)\n+        #expect(!firstSaveSucceeded)\n \n         guard case .persistence(let underlying) = state.error else {\n             Issue.record(\"保存失敗が画面の状態に保持されなかった\")\n@@ -81,7 +83,8 @@ struct ProductFormStateTests {\n         #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)\n \n         // 同じ入力状態から保存し直しても、失敗した商品の重複は作らない。\n-        #expect(state.save(using: ProductActions(context: context)))\n+        let retrySucceeded = state.save(using: ProductActions(context: context))\n+        #expect(retrySucceeded)\n \n         let reader = ModelContext(container)\n         let products = try reader.fetch(FetchDescriptor<Product>())\n@@ -110,7 +113,8 @@ struct ProductFormStateTests {\n \n         #expect(existing.name == \"ほかの画面で編集中\")\n         #expect(context.hasChanges)\n-        #expect(!state.save(using: actions))\n+        let saveSucceeded = state.save(using: actions)\n+        #expect(!saveSucceeded)\n \n         guard case .pendingChanges = state.error else {\n             Issue.record(\"共有contextの未保存変更が検出されなかった\")\n@@ -140,7 +144,8 @@ struct ProductFormStateTests {\n         var state = ProductFormState()\n         state.draft = draft\n \n-        #expect(!state.save(using: actions))\n+        let saveSucceeded = state.save(using: actions)\n+        #expect(!saveSucceeded)\n \n         guard case .validation(let error) = state.error else {\n             Issue.record(\"必須項目のエラーが画面の状態に保持されなかった\")",
+          "patchLines": 50,
           "truncated": false
         }
       ]
