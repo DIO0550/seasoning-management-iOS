@@ -1440,6 +1440,76 @@ const cases = [
     expected: { numbers: [10, 11, 12, 13, 14], emphasized: [false, true, false, true, true], plain: [false, false, false, false, false] },
   },
   {
+    label: "色分け: .swift の宣言・制御・修飾の語はキーワードになる",
+    actual: () => ["import", "struct", "enum", "protocol", "extension", "func", "let", "var", "guard", "else", "return", "switch", "case", "private", "mutating", "nonisolated", "async", "await", "throws", "some"].map((word) => colorOf("ProductFormView.swift", [word], { word })),
+    expected: Array(20).fill("tok-kw"),
+  },
+  {
+    label: "色分け: Swift の型・変数・呼び出し・数値・nil・真偽値を区別する",
+    actual: () => {
+      const tokens = lineTokensOf("a.swift", ["let value: Product? = create(42, nil, true, false)"]);
+      return ["value", "Product", "create", "42", "nil", "true", "false"].map((word) => colorIn(tokens, 0, word));
+    },
+    expected: ["tok-var", "tok-type", "tok-fn", "tok-num", "tok-kw", "tok-kw", "tok-kw"],
+  },
+  {
+    label: "色分け: Swift の属性・マクロ・条件付きコンパイルは @ と # を含めてキーワードになる",
+    actual: () => ["@State", "@MainActor", "@Environment", "@Test", "#expect", "#Preview", "#if", "#elseif", "#else", "#endif"].map((word) => colorOf("a.swift", [`${word}(value)`], { word })),
+    expected: Array(10).fill("tok-kw"),
+  },
+  {
+    label: "色分け: Swift の通常文字列では属性・マクロ・コメント記号を読まない",
+    actual: () => lineTokensOf("a.swift", ['"@State #expect // nil"'])[0].map((token) => [token.cls, token.value]),
+    expected: [["tok-str", '"@State #expect // nil"']],
+  },
+  {
+    label: "色分け: Swift の行コメントでは属性・マクロ・文字列を読まない",
+    actual: () => lineTokensOf("a.swift", ['// @State #expect "nil"'])[0].map((token) => [token.cls, token.value]),
+    expected: [["tok-com", '// @State #expect "nil"']],
+  },
+  {
+    label: "色分け: Swift のブロックコメントは行をまたぎ、閉じた後はコードへ戻る",
+    actual: () => {
+      const tokens = lineTokensOf("a.swift", ["/* @State", "#expect(true)", "*/ let value = false"]);
+      return [tokens[1].map((token) => [token.cls, token.value]), colorIn(tokens, 2, "let"), colorIn(tokens, 2, "false")];
+    },
+    expected: [[["tok-com", "#expect(true)"]], "tok-kw", "tok-kw"],
+  },
+  {
+    label: "色分け: Swift の三重引用符は行をまたぎ、閉じた後はコードへ戻る",
+    actual: () => {
+      const tokens = lineTokensOf("a.swift", ['let text = """', "@State #expect // nil", '""" let value = true']);
+      return [tokens[1].map((token) => [token.cls, token.value]), colorIn(tokens, 2, "let"), colorIn(tokens, 2, "true")];
+    },
+    expected: [[["tok-str", "@State #expect // nil"]], "tok-kw", "tok-kw"],
+  },
+  {
+    label: "色分け: Swift の抜粋も属性・修飾・宣言・型を色分けする",
+    actual: () => {
+      const rows = ExcerptRows.create({ path: "ProductFormView.swift", start: 10, end: 10, text: "@State private var draft: ProductDraft" });
+      return ["@State", "private", "var", "draft", "ProductDraft"].map((word) => colorIn(rows.map((row) => row.tokens), 0, word));
+    },
+    expected: ["tok-kw", "tok-kw", "tok-kw", "tok-var", "tok-type"],
+  },
+  {
+    label: "色分け: Swift のコミット差分は削除行と追加行の両方に色が付く",
+    actual: () => {
+      const patch = linesOf(["@@ -1,1 +1,1 @@", "-@MainActor let old: Bool = true", "+@State var count = 42"]);
+      const [file] = diffOf([diffFile("a.swift", { patch })], []).files;
+      const tokens = CommitDiff.lineTokensOf(file.body.hunks[0], Tokenizer.grammarOf(file.path));
+      return [["@MainActor", "let", "Bool", "true"].map((word) => colorIn(tokens, 0, word)), ["@State", "var", "count", "42"].map((word) => colorIn(tokens, 1, word))];
+    },
+    expected: [["tok-kw", "tok-kw", "tok-type", "tok-kw"], ["tok-kw", "tok-kw", "tok-var", "tok-num"]],
+  },
+  {
+    label: "色分け: Swift 専用の語と記号の規則は JS・TS・Python へ漏れない",
+    actual: () => {
+      const ts = lineTokensOf("a.ts", ["@State #expect(value); let nil = 1;"]);
+      return [colorIn(ts, 0, "nil"), ts[0].some((token) => token.value === "@State" || token.value === "#expect"), colorOf("a.js", ["const guard = 1;"], { word: "guard" }), lineTokensOf("a.py", ["#expect(value)"])[0].map((token) => [token.cls, token.value])];
+    },
+    expected: ["tok-var", false, "tok-var", [["tok-com", "#expect(value)"]]],
+  },
+  {
     label: "色分け: .ts では TS の語(satisfies)もキーワードになる",
     actual: () => colorOf("a.ts", ["const a = b satisfies C;"], { word: "satisfies" }),
     expected: "tok-kw",
