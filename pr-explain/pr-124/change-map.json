@@ -4,11 +4,29 @@
   "headBranch": "fix/pr-explain-swift-highlighting",
   "baseBranch": "master",
   "mergeBase": "8bd3463bf1485586f76703585a05d203fab879f2",
-  "head": "feedf925fa1fb926bbf142bac249bf5196fa0551",
+  "head": "d1c70b5d9614552867a0981737e7c3d73db94990",
   "groups": [
     {
       "label": "ハーネス",
       "files": [
+        {
+          "path": ".claude/skills/implementation-flow/SKILL.md",
+          "status": "M",
+          "oldPath": null,
+          "additions": 1,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": ".claude/skills/pr-explain/SKILL.md",
+          "status": "M",
+          "oldPath": null,
+          "additions": 28,
+          "deletions": 2,
+          "changed": true,
+          "target": null
+        },
         {
           "path": ".claude/skills/pr-explain/templates/explain.json",
           "changed": false
@@ -57,6 +75,10 @@
         },
         {
           "path": ".github/workflows/pr-explain.yml",
+          "changed": false
+        },
+        {
+          "path": "harness/tests/test_harness.py",
           "changed": false
         }
       ]
@@ -125,6 +147,36 @@
           ]
         }
       ]
+    },
+    {
+      "sha": "d1c70b5d9614552867a0981737e7c3d73db94990",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-10-21T23:58:53+09:00",
+      "subject": "docs: 解説Skillに配色確認と公開枠の修復手順を追加",
+      "body": "",
+      "files": [
+        {
+          "path": ".claude/skills/implementation-flow/SKILL.md",
+          "status": "M",
+          "oldPath": null,
+          "additions": 1,
+          "deletions": 0,
+          "patch": "@@ -33,6 +33,7 @@ description: このリポジトリのIssueや直接の実装依頼を、小さ\n 7. 親は PR に変更の目的、結果、実行した検証と未実施の理由を記す。\n    PR 作成直後・振る舞いが変わる push の後・reopen 後に [pr-explain](../pr-explain/SKILL.md) を実行し、\n    変更の経緯と根拠を検査済みの解説へ反映する。公開条件が未成立ならローカル生成で確認し、未公開の理由を記す。\n+   同スキルのコード表示・色分けと公開後の確認まで行い、確認できなかった項目は未確認として報告する。\n    CI とレビューの状態を確認し、届いた指摘も根拠を確認して implementer へ渡す。\n    未完了・環境待ちのチェックがあれば、状態を明示して引き渡す。\n 8. 親はマージを確認した後の記録依頼で [harness-record](../harness-record/SKILL.md) を使う。",
+          "patchLines": 8,
+          "truncated": false
+        },
+        {
+          "path": ".claude/skills/pr-explain/SKILL.md",
+          "status": "M",
+          "oldPath": null,
+          "additions": 28,
+          "deletions": 2,
+          "patch": "@@ -1,6 +1,6 @@\n ---\n name: pr-explain\n-description: \"PR ごとの解説ページ(構造マップ・変更の経緯・テスト・振る舞い・技術の手引きの 5 画面)の材料になる解説 explain.json を書き、検査して gh-pages の pr-explain/pr-N/ へ置く。implementation-flow のフェーズ 7 で PR を出した直後と、振る舞いが変わる push の後に使用する。「PR の解説を書いて」「解説ページを更新して」といった依頼でも使用する。変更の地図(変更ファイル・依存・テスト名の増減・コミットと差分)とページの枠は Actions が置くので書かない。\"\n+description: \"PR ごとの解説ページ(構造マップ・変更の経緯・テスト・振る舞い・技術の手引きの 5 画面)の材料になる解説 explain.json を書き、検査して gh-pages の pr-explain/pr-N/ へ置く。implementation-flow のフェーズ 7 で PR を出した直後と、振る舞いが変わる push の後に使用する。「PR の解説を書いて」「解説ページを更新して」といった依頼でも使用する。通常の解説作成では変更の地図とページの枠は Actions に任せ、表示不具合の修復は下記手順で行う。\"\n ---\n \n # PR の解説ページ\n@@ -90,6 +90,7 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123\n    対象 sha のソース・テスト・差分を実際に読み、各主張と対応する根拠を確認する。\n    テストの宣言とテスト成功は別に記す。Note の行番号は、そのコミット時点のファイルを開いて合わせる。\n    公開前に上のローカル生成を行い、画面または DOM で技術の各節にコード本文と対応する説明が出ていることを確認する。\n+   抜粋とコミット差分の代表構文の色分けも、下の[コード表示の確認と修復](#コード表示の確認と修復)に従って確認する。\n    検査成功は本文の存在などの確認であり、説明の質の保証として扱わない\n 5. **置く**\n \n@@ -110,7 +111,32 @@ python3 -m http.server 8000 --directory /tmp/seasoning-pr-123\n      他のフォルダ・他のブランチは触らない\n 6. **`PR Explain Deploy` の公開成功と固定 PR コメントを確認して、URL をユーザーに伝える**。\n    コメントには閲覧リンク・対象 SHA・公開 CI のリンクが出る。公開失敗や古い head の場合は新しいリンクを投稿しない。\n-   公開ページでも技術の各節を開き、コード本文が表示されることを確認する。\n+   公開ページでも技術の各節を開き、コード本文と対応する説明、抜粋とコミット差分の代表構文の色分けを同じ基準で確認する。\n+   画面・配色を確認できなかった項目は「未確認」と理由を報告し、公開や検査の成功だけで確認済みにしない。\n+\n+## コード表示の確認と修復\n+\n+対象 PR の実コードから、抜粋とコミット差分に含まれる代表構文を選ぶ。キーワードは `tok-kw`、型注釈の `Bool` などは `tok-type`、\n+`ProductDraft()` のように呼び出しとして読む型名は `tok-fn`、文字列は `tok-str`、コメントは `tok-com`、\n+Swift の `@State`・`#expect` などは記号を含めて `tok-kw` になることを、\n+実際に含まれる構文だけで確かめる。綴りと期待するクラスを照合し、実画面または `computedStyle` で配色が反映されていることも見る。\n+属性とマクロが同じキーワード色でもよい。CSS の定義があることや、任意の `tok-*` の総数だけを成功条件にしない。\n+\n+未対応の拡張子が原因なら、[`templates/index.html`](templates/index.html) の共通 `Tokenizer` の文法と拡張子登録を直し、\n+`.github/scripts/pr-explain-core-cases.sh` に抜粋・差分の回帰ケースを足す。固定スクリプトを変えたら CSP ハッシュも更新し、\n+`check-pr-explain-template.py` で検査する。解説 JSON に HTML や色を埋めて回避しない。\n+\n+自動配置は `.github/workflows/pr-explain.yml` が checkout した信頼する base の枠を使うため、\n+PR の head で枠を直しただけでは公開ページに反映されない。公開済みの枠を修復するときは、呼び出し側が公開直前に対象 PR の番号・\n+open 状態・現在の head と、使う地図の `pr`・`head` の一致を確認する。`put-map` 自体はこの照合を行わない。\n+照合済みの地図と検査済みの枠を、既存の publisher へ渡す。\n+\n+```bash\n+bash .github/scripts/pr-explain-pages.sh put-map <PR番号> <照合済みchange-map.json> <検査済みindex.html>\n+```\n+\n+`put-map` は既存の `explain.json` を保持する。公開後は手順 6 と同様に Deploy 成功・現在の head を示す固定コメント・実画面を確認する。\n+未マージの枠を手動で公開した場合、後の自動配置で base の版へ戻り得ることも報告する。\n \n ## explain.json の形\n ",
+          "patchLines": 50,
+          "truncated": false
+        }
+      ]
     }
   ],
   "dependencies": [
@@ -176,6 +228,11 @@
     {
       "from": ".github/workflows/pr-explain.yml",
       "to": ".claude/skills/pr-explain/templates/index.html",
+      "status": "kept"
+    },
+    {
+      "from": "harness/tests/test_harness.py",
+      "to": ".claude/skills/implementation-flow/SKILL.md",
       "status": "kept"
     }
   ]
