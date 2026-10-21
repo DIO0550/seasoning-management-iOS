@@ -1,0 +1,182 @@
+{
+  "version": 2,
+  "pr": 124,
+  "headBranch": "fix/pr-explain-swift-highlighting",
+  "baseBranch": "master",
+  "mergeBase": "8bd3463bf1485586f76703585a05d203fab879f2",
+  "head": "feedf925fa1fb926bbf142bac249bf5196fa0551",
+  "groups": [
+    {
+      "label": "ハーネス",
+      "files": [
+        {
+          "path": ".claude/skills/pr-explain/templates/explain.json",
+          "changed": false
+        },
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "status": "M",
+          "oldPath": null,
+          "additions": 10,
+          "deletions": 3,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": ".github/scripts/build-pr-explain-cases.sh",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/build-pr-explain-local.py",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/build-pr-explain.py",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/check-pr-explain-template-cases.sh",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/lib/cases-report.sh",
+          "changed": false
+        },
+        {
+          "path": ".github/scripts/pr-explain-core-cases.sh",
+          "status": "M",
+          "oldPath": null,
+          "additions": 70,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": ".github/scripts/pr-explain-pages-cases.sh",
+          "changed": false
+        },
+        {
+          "path": ".github/workflows/pr-explain.yml",
+          "changed": false
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [],
+    "removed": [],
+    "files": []
+  },
+  "commits": [
+    {
+      "sha": "feedf925fa1fb926bbf142bac249bf5196fa0551",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-10-21T23:37:45+09:00",
+      "subject": "fix: PR解説のSwiftコードを色分けする",
+      "body": "",
+      "files": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "status": "M",
+          "oldPath": null,
+          "additions": 10,
+          "deletions": 3,
+          "patch": "@@ -2,7 +2,7 @@\n <html lang=\"ja\">\n <head>\n <meta charset=\"utf-8\">\n-<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'sha256-ZjkdG9LeITvZZR5RoVYki9FDcNJSeg5bkwQk+Xd4HW4='; style-src 'unsafe-inline'; font-src 'none'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'\">\n+<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'sha256-bnCq6qqp+0JM4thCtQARt1P6d/0/FJLh9gLNPNgh2do='; style-src 'unsafe-inline'; font-src 'none'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'\">\n <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n <title>PR 解説</title>\n <style>\n@@ -785,7 +785,8 @@ button.change-item:hover { background: var(--track); }\n   \"use strict\";\n \n   /**\n-   * コードの色分け。キーワード・文字列・コメント・数値・関数呼び出しに加え、JS / TS / Python は型と変数、YAML はキー、シェルは変数、\n+   * コードの色分け。キーワード・文字列・コメント・数値・関数呼び出しに加え、JS / TS / Python / Swift は型と変数、YAML はキー、シェルは変数、\n+   * Swift は属性・マクロ・条件付きコンパイルの @ と # を含む名前、\n    * HTML はタグと属性名、CSS は at ルール・プロパティ・カスタムプロパティに色を付ける簡易なもの。HTML の script / style 要素と、\n    * シェルの JS・TS・PY・JSON のヒアドキュメントの中は、その言語で読む。HTML と `.tsx` / `.jsx` の JSX は、タグ(JSX のフラグメントを\n    * 含む)をキーワード、属性名を値の有無によらずキー、属性の値の文字列を文字列にする。JSX の本文は色なしで、`{…}` の中は JS / TS で\n@@ -795,6 +796,7 @@ button.change-item:hover { background: var(--track); }\n     const words = (list) => new Set(list.split(\" \").filter((word) => word !== \"\"));\n     const JsWords = \"const let var function return if else for while do of in new class extends import export from default switch case break continue try catch finally throw typeof instanceof null undefined true false this async await yield delete void super\";\n     const TsWords = \"type interface enum implements satisfies as is keyof readonly declare namespace abstract private public protected infer unique never unknown any boolean string number symbol bigint object asserts override\";\n+    const SwiftWords = \"actor any as associatedtype async await borrowing break case catch class consuming continue convenience copy default defer deinit didSet distributed do dynamic each else enum extension fallthrough false fileprivate final for func get guard if import indirect infix init in inout internal is isolated lazy let macro mutating nil nonisolated nonmutating open operator optional override package postfix precedencegroup prefix private protocol public repeat required rethrows return self Self sending set some static struct subscript super switch throw throws true try typealias unowned var weak where while willSet\";\n     const Identifier = /[A-Za-z_]\\w*/y;\n     const JsIdentifier = /[A-Za-z_$][\\w$]*/y;\n     const JsGrammar = { comment: \"//\", block: [\"/*\", \"*/\"], strings: ['\"', \"'\", \"`\"], keywords: words(JsWords), identifier: JsIdentifier, identifiers: true, objectKeys: true };\n@@ -805,12 +807,13 @@ button.change-item:hover { background: var(--track); }\n       jsx: { ...JsGrammar, jsx: true },\n       ts: TsGrammar,\n       tsx: { ...TsGrammar, jsx: true },\n+      swift: { comment: \"//\", block: [\"/*\", \"*/\"], strings: ['\"\"\"', '\"'], keywords: words(SwiftWords), identifiers: true, sigils: /[@#][A-Za-z_]\\w*/y },\n       shell: { comment: \"#\", strings: ['\"', \"'\"], variables: true, heredocs: true, keywords: words(\"if then else elif fi for in do done while until case esac function return local export set exit trap source echo readonly shift\") },\n       yaml: { comment: \"#\", strings: ['\"', \"'\"], keys: true, keywords: words(\"true false null\") },\n       html: { block: [\"<!--\", \"-->\"], strings: ['\"', \"'\"], tags: true, keywords: words(\"\") },\n       css: { block: [\"/*\", \"*/\"], strings: ['\"', \"'\"], css: true, keywords: words(\"\") },\n     };\n-    const LanguageByExtension = { py: \"python\", js: \"js\", mjs: \"js\", jsx: \"jsx\", ts: \"ts\", tsx: \"tsx\", json: \"js\", sh: \"shell\", bash: \"shell\", yml: \"yaml\", yaml: \"yaml\", html: \"html\", css: \"css\" };\n+    const LanguageByExtension = { py: \"python\", js: \"js\", mjs: \"js\", jsx: \"jsx\", ts: \"ts\", tsx: \"tsx\", swift: \"swift\", json: \"js\", sh: \"shell\", bash: \"shell\", yml: \"yaml\", yaml: \"yaml\", html: \"html\", css: \"css\" };\n     /** 中を別の言語で読む埋め込み。HTML の要素名(小文字)とシェルのヒアドキュメントの区切りの語から、中の言語を引く。 */\n     const Embeddings = Object.freeze({ elements: Object.freeze({ script: \"js\", style: \"css\" }), heredocs: Object.freeze({ JS: \"js\", TS: \"ts\", PY: \"python\", JSON: \"js\" }) });\n     const NumberLiteral = /\\d+(?:\\.\\d+)?/y;\n@@ -1090,6 +1093,10 @@ button.change-item:hover { background: var(--track); }\n       if (key) return Token(\"tok-key\", key);\n       const quoted = quotedAt(cursor, grammar);\n       if (quoted) return quoted;\n+      const sigil = grammar.sigils === undefined ? null : matchAt(grammar.sigils, cursor);\n+      if (sigil) {\n+        return Token(\"tok-kw\", sigil);\n+      }\n       if (grammar.css === true) return cssTokenAt(cursor);\n       const variable = grammar.variables === true ? matchAt(ShellVariable, cursor) : null;\n       if (variable) return Token(\"tok-var\", variable);",
+          "patchLines": 53,
+          "truncated": false,
+          "hunkOpeningLines": [
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": "<script>",
+              "new": "<script>"
+            },
+            {
+              "old": "<script>",
+              "new": "<script>"
+            },
+            {
+              "old": "<script>",
+              "new": "<script>"
+            },
+            {
+              "old": "<script>",
+              "new": "<script>"
+            }
+          ]
+        },
+        {
+          "path": ".github/scripts/pr-explain-core-cases.sh",
+          "status": "M",
+          "oldPath": null,
+          "additions": 70,
+          "deletions": 0,
+          "patch": "@@ -1439,6 +1439,76 @@ const cases = [\n     },\n     expected: { numbers: [10, 11, 12, 13, 14], emphasized: [false, true, false, true, true], plain: [false, false, false, false, false] },\n   },\n+  {\n+    label: \"色分け: .swift の宣言・制御・修飾の語はキーワードになる\",\n+    actual: () => [\"import\", \"struct\", \"enum\", \"protocol\", \"extension\", \"func\", \"let\", \"var\", \"guard\", \"else\", \"return\", \"switch\", \"case\", \"private\", \"mutating\", \"nonisolated\", \"async\", \"await\", \"throws\", \"some\"].map((word) => colorOf(\"ProductFormView.swift\", [word], { word })),\n+    expected: Array(20).fill(\"tok-kw\"),\n+  },\n+  {\n+    label: \"色分け: Swift の型・変数・呼び出し・数値・nil・真偽値を区別する\",\n+    actual: () => {\n+      const tokens = lineTokensOf(\"a.swift\", [\"let value: Product? = create(42, nil, true, false)\"]);\n+      return [\"value\", \"Product\", \"create\", \"42\", \"nil\", \"true\", \"false\"].map((word) => colorIn(tokens, 0, word));\n+    },\n+    expected: [\"tok-var\", \"tok-type\", \"tok-fn\", \"tok-num\", \"tok-kw\", \"tok-kw\", \"tok-kw\"],\n+  },\n+  {\n+    label: \"色分け: Swift の属性・マクロ・条件付きコンパイルは @ と # を含めてキーワードになる\",\n+    actual: () => [\"@State\", \"@MainActor\", \"@Environment\", \"@Test\", \"#expect\", \"#Preview\", \"#if\", \"#elseif\", \"#else\", \"#endif\"].map((word) => colorOf(\"a.swift\", [`${word}(value)`], { word })),\n+    expected: Array(10).fill(\"tok-kw\"),\n+  },\n+  {\n+    label: \"色分け: Swift の通常文字列では属性・マクロ・コメント記号を読まない\",\n+    actual: () => lineTokensOf(\"a.swift\", ['\"@State #expect // nil\"'])[0].map((token) => [token.cls, token.value]),\n+    expected: [[\"tok-str\", '\"@State #expect // nil\"']],\n+  },\n+  {\n+    label: \"色分け: Swift の行コメントでは属性・マクロ・文字列を読まない\",\n+    actual: () => lineTokensOf(\"a.swift\", ['// @State #expect \"nil\"'])[0].map((token) => [token.cls, token.value]),\n+    expected: [[\"tok-com\", '// @State #expect \"nil\"']],\n+  },\n+  {\n+    label: \"色分け: Swift のブロックコメントは行をまたぎ、閉じた後はコードへ戻る\",\n+    actual: () => {\n+      const tokens = lineTokensOf(\"a.swift\", [\"/* @State\", \"#expect(true)\", \"*/ let value = false\"]);\n+      return [tokens[1].map((token) => [token.cls, token.value]), colorIn(tokens, 2, \"let\"), colorIn(tokens, 2, \"false\")];\n+    },\n+    expected: [[[\"tok-com\", \"#expect(true)\"]], \"tok-kw\", \"tok-kw\"],\n+  },\n+  {\n+    label: \"色分け: Swift の三重引用符は行をまたぎ、閉じた後はコードへ戻る\",\n+    actual: () => {\n+      const tokens = lineTokensOf(\"a.swift\", ['let text = \"\"\"', \"@State #expect // nil\", '\"\"\" let value = true']);\n+      return [tokens[1].map((token) => [token.cls, token.value]), colorIn(tokens, 2, \"let\"), colorIn(tokens, 2, \"true\")];\n+    },\n+    expected: [[[\"tok-str\", \"@State #expect // nil\"]], \"tok-kw\", \"tok-kw\"],\n+  },\n+  {\n+    label: \"色分け: Swift の抜粋も属性・修飾・宣言・型を色分けする\",\n+    actual: () => {\n+      const rows = ExcerptRows.create({ path: \"ProductFormView.swift\", start: 10, end: 10, text: \"@State private var draft: ProductDraft\" });\n+      return [\"@State\", \"private\", \"var\", \"draft\", \"ProductDraft\"].map((word) => colorIn(rows.map((row) => row.tokens), 0, word));\n+    },\n+    expected: [\"tok-kw\", \"tok-kw\", \"tok-kw\", \"tok-var\", \"tok-type\"],\n+  },\n+  {\n+    label: \"色分け: Swift のコミット差分は削除行と追加行の両方に色が付く\",\n+    actual: () => {\n+      const patch = linesOf([\"@@ -1,1 +1,1 @@\", \"-@MainActor let old: Bool = true\", \"+@State var count = 42\"]);\n+      const [file] = diffOf([diffFile(\"a.swift\", { patch })], []).files;\n+      const tokens = CommitDiff.lineTokensOf(file.body.hunks[0], Tokenizer.grammarOf(file.path));\n+      return [[\"@MainActor\", \"let\", \"Bool\", \"true\"].map((word) => colorIn(tokens, 0, word)), [\"@State\", \"var\", \"count\", \"42\"].map((word) => colorIn(tokens, 1, word))];\n+    },\n+    expected: [[\"tok-kw\", \"tok-kw\", \"tok-type\", \"tok-kw\"], [\"tok-kw\", \"tok-kw\", \"tok-var\", \"tok-num\"]],\n+  },\n+  {\n+    label: \"色分け: Swift 専用の語と記号の規則は JS・TS・Python へ漏れない\",\n+    actual: () => {\n+      const ts = lineTokensOf(\"a.ts\", [\"@State #expect(value); let nil = 1;\"]);\n+      return [colorIn(ts, 0, \"nil\"), ts[0].some((token) => token.value === \"@State\" || token.value === \"#expect\"), colorOf(\"a.js\", [\"const guard = 1;\"], { word: \"guard\" }), lineTokensOf(\"a.py\", [\"#expect(value)\"])[0].map((token) => [token.cls, token.value])];\n+    },\n+    expected: [\"tok-var\", false, \"tok-var\", [[\"tok-com\", \"#expect(value)\"]]],\n+  },\n   {\n     label: \"色分け: .ts では TS の語(satisfies)もキーワードになる\",\n     actual: () => colorOf(\"a.ts\", [\"const a = b satisfies C;\"], { word: \"satisfies\" }),",
+          "patchLines": 77,
+          "truncated": false,
+          "hunkOpeningLines": [
+            {
+              "old": "results=\"$(node - \"$template\" \"$checker\" \"$work/embeddings.json\" <<'JS'",
+              "new": "results=\"$(node - \"$template\" \"$checker\" \"$work/embeddings.json\" <<'JS'"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "from": ".claude/skills/pr-explain/templates/index.html",
+      "to": ".claude/skills/pr-explain/templates/explain.json",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/build-pr-explain-local.py",
+      "to": ".claude/skills/pr-explain/templates/index.html",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/check-pr-explain-template-cases.sh",
+      "to": ".claude/skills/pr-explain/templates/index.html",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-core-cases.sh",
+      "to": ".claude/skills/pr-explain/templates/index.html",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-core-cases.sh",
+      "to": ".github/scripts/build-pr-explain-cases.sh",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-core-cases.sh",
+      "to": ".github/scripts/build-pr-explain.py",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-core-cases.sh",
+      "to": ".github/scripts/check-pr-explain-template-cases.sh",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-core-cases.sh",
+      "to": ".github/scripts/lib/cases-report.sh",
+      "status": "kept"
+    },
+    {
+      "from": ".github/scripts/pr-explain-pages-cases.sh",
+      "to": ".claude/skills/pr-explain/templates/index.html",
+      "status": "kept"
+    },
+    {
+      "from": ".github/workflows/pr-explain.yml",
+      "to": ".claude/skills/pr-explain/templates/index.html",
+      "status": "kept"
+    }
+  ]
+}
