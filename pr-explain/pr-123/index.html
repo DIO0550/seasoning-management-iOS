@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZjkdG9LeITvZZR5RoVYki9FDcNJSeg5bkwQk+Xd4HW4='; style-src 'unsafe-inline'; font-src 'none'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bnCq6qqp+0JM4thCtQARt1P6d/0/FJLh9gLNPNgh2do='; style-src 'unsafe-inline'; font-src 'none'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PR 解説</title>
 <style>
@@ -785,7 +785,8 @@ button.change-item:hover { background: var(--track); }
   "use strict";
 
   /**
-   * コードの色分け。キーワード・文字列・コメント・数値・関数呼び出しに加え、JS / TS / Python は型と変数、YAML はキー、シェルは変数、
+   * コードの色分け。キーワード・文字列・コメント・数値・関数呼び出しに加え、JS / TS / Python / Swift は型と変数、YAML はキー、シェルは変数、
+   * Swift は属性・マクロ・条件付きコンパイルの @ と # を含む名前、
    * HTML はタグと属性名、CSS は at ルール・プロパティ・カスタムプロパティに色を付ける簡易なもの。HTML の script / style 要素と、
    * シェルの JS・TS・PY・JSON のヒアドキュメントの中は、その言語で読む。HTML と `.tsx` / `.jsx` の JSX は、タグ(JSX のフラグメントを
    * 含む)をキーワード、属性名を値の有無によらずキー、属性の値の文字列を文字列にする。JSX の本文は色なしで、`{…}` の中は JS / TS で
@@ -795,6 +796,7 @@ button.change-item:hover { background: var(--track); }
     const words = (list) => new Set(list.split(" ").filter((word) => word !== ""));
     const JsWords = "const let var function return if else for while do of in new class extends import export from default switch case break continue try catch finally throw typeof instanceof null undefined true false this async await yield delete void super";
     const TsWords = "type interface enum implements satisfies as is keyof readonly declare namespace abstract private public protected infer unique never unknown any boolean string number symbol bigint object asserts override";
+    const SwiftWords = "actor any as associatedtype async await borrowing break case catch class consuming continue convenience copy default defer deinit didSet distributed do dynamic each else enum extension fallthrough false fileprivate final for func get guard if import indirect infix init in inout internal is isolated lazy let macro mutating nil nonisolated nonmutating open operator optional override package postfix precedencegroup prefix private protocol public repeat required rethrows return self Self sending set some static struct subscript super switch throw throws true try typealias unowned var weak where while willSet";
     const Identifier = /[A-Za-z_]\w*/y;
     const JsIdentifier = /[A-Za-z_$][\w$]*/y;
     const JsGrammar = { comment: "//", block: ["/*", "*/"], strings: ['"', "'", "`"], keywords: words(JsWords), identifier: JsIdentifier, identifiers: true, objectKeys: true };
@@ -805,12 +807,13 @@ button.change-item:hover { background: var(--track); }
       jsx: { ...JsGrammar, jsx: true },
       ts: TsGrammar,
       tsx: { ...TsGrammar, jsx: true },
+      swift: { comment: "//", block: ["/*", "*/"], strings: ['"""', '"'], keywords: words(SwiftWords), identifiers: true, sigils: /[@#][A-Za-z_]\w*/y },
       shell: { comment: "#", strings: ['"', "'"], variables: true, heredocs: true, keywords: words("if then else elif fi for in do done while until case esac function return local export set exit trap source echo readonly shift") },
       yaml: { comment: "#", strings: ['"', "'"], keys: true, keywords: words("true false null") },
       html: { block: ["<!--", "-->"], strings: ['"', "'"], tags: true, keywords: words("") },
       css: { block: ["/*", "*/"], strings: ['"', "'"], css: true, keywords: words("") },
     };
-    const LanguageByExtension = { py: "python", js: "js", mjs: "js", jsx: "jsx", ts: "ts", tsx: "tsx", json: "js", sh: "shell", bash: "shell", yml: "yaml", yaml: "yaml", html: "html", css: "css" };
+    const LanguageByExtension = { py: "python", js: "js", mjs: "js", jsx: "jsx", ts: "ts", tsx: "tsx", swift: "swift", json: "js", sh: "shell", bash: "shell", yml: "yaml", yaml: "yaml", html: "html", css: "css" };
     /** 中を別の言語で読む埋め込み。HTML の要素名(小文字)とシェルのヒアドキュメントの区切りの語から、中の言語を引く。 */
     const Embeddings = Object.freeze({ elements: Object.freeze({ script: "js", style: "css" }), heredocs: Object.freeze({ JS: "js", TS: "ts", PY: "python", JSON: "js" }) });
     const NumberLiteral = /\d+(?:\.\d+)?/y;
@@ -1090,6 +1093,10 @@ button.change-item:hover { background: var(--track); }
       if (key) return Token("tok-key", key);
       const quoted = quotedAt(cursor, grammar);
       if (quoted) return quoted;
+      const sigil = grammar.sigils === undefined ? null : matchAt(grammar.sigils, cursor);
+      if (sigil) {
+        return Token("tok-kw", sigil);
+      }
       if (grammar.css === true) return cssTokenAt(cursor);
       const variable = grammar.variables === true ? matchAt(ShellVariable, cursor) : null;
       if (variable) return Token("tok-var", variable);

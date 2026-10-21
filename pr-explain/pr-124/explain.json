@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "pr": 124,
+  "sha": "feedf925fa1fb926bbf142bac249bf5196fa0551",
+  "overview": {
+    "title": "Swift のコードを構文ごとに色分けする",
+    "lead": "解説の技術の抜粋とコミット差分で、Swiftのキーワード・型・文字列・コメント・属性やマクロを見分けられるようにします。",
+    "before": [
+      {
+        "text": "Swiftの拡張子に文法が無いため、コード全体が単色で表示されていた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "Swiftの文法を登録し、共通の色分け処理から抜粋と差分へ色を付ける。"
+      }
+    ]
+  },
+  "concepts": [
+    {
+      "path": ".claude/skills/pr-explain/templates/index.html",
+      "name": "解説ページ",
+      "role": "コードの行を字句に分けて、種類ごとの色で表示する。",
+      "change": "Swiftの文法と拡張子、属性・マクロの認識を追加する。"
+    },
+    {
+      "path": ".github/scripts/pr-explain-core-cases.sh",
+      "name": "色分けの判定表",
+      "role": "入力したコードに対して、期待する色の種類が返ることを確かめる。",
+      "change": "Swiftの代表コードと抜粋・差分を通る回帰ケースを追加する。"
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "feedf925fa1fb926bbf142bac249bf5196fa0551",
+      "phase": "revise",
+      "role": "Swift の表示を共通の色分けへ接続する",
+      "why": "配色の定義は既にありましたが、Swiftの拡張子から文法を引けず、色の無い行を返していました。既存の字句処理と表示経路を再利用し、Swiftだけに必要な規則を追加しました。",
+      "review": [
+        "文字列とコメントを先に読み、その中の属性やマクロを構文として取り出さない。",
+        "技術の抜粋とコミット差分の両方でSwiftの色が付き、コードの文字列を保持する。",
+        "既存言語の規則とCSPの許可範囲を維持する。"
+      ],
+      "notes": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "start": 810,
+          "end": 816,
+          "text": "Swiftの文法と拡張子を対応させます。登録が無いと文法を取得できず単色になります。"
+        },
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "start": 1094,
+          "end": 1099,
+          "text": "引用符とコメントを先に読んだ後、Swiftだけの @ と # を含む名前をキーワードにします。"
+        }
+      ]
+    }
+  ],
+  "impact": {
+    "title": "Swift のコードを読み分けやすくする",
+    "lead": "解説の中で、宣言や条件分岐、文字列、コメントを色から見分けられます。",
+    "changed": {
+      "before": [
+        {
+          "text": "Swiftのコードがすべて同じ文字色で表示されていた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "技術の手引きと変更の経緯で、コードの構文ごとに色が付く。"
+        }
+      ]
+    },
+    "kept": [
+      {
+        "text": "表示するコードの内容と行番号、説明文は変わりません。"
+      },
+      {
+        "text": "商品を登録するアプリの操作と保存動作は変わりません。"
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "grammar",
+      "kind": "language",
+      "category": "JavaScript の基礎",
+      "label": "Set と字句の分類",
+      "gist": "コードを小さな語や文字列に分け、語の集合を使って色の種類を決めます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "字句とは、キーワードや名前、文字列、コメントなど、コードを読むときの小さなまとまりです。ここではコンパイラを作る代わりに、表示に必要な種類だけを判別します。JavaScriptの `Set` は重複しない値の集合で、ある語がキーワードかを `has` で確かめられます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 795,
+            "end": 816,
+            "text": "  const Tokenizer = (() => {\n    const words = (list) => new Set(list.split(\" \").filter((word) => word !== \"\"));\n    const JsWords = \"const let var function return if else for while do of in new class extends import export from default switch case break continue try catch finally throw typeof instanceof null undefined true false this async await yield delete void super\";\n    const TsWords = \"type interface enum implements satisfies as is keyof readonly declare namespace abstract private public protected infer unique never unknown any boolean string number symbol bigint object asserts override\";\n    const SwiftWords = \"actor any as associatedtype async await borrowing break case catch class consuming continue convenience copy default defer deinit didSet distributed do dynamic each else enum extension fallthrough false fileprivate final for func get guard if import indirect infix init in inout internal is isolated lazy let macro mutating nil nonisolated nonmutating open operator optional override package postfix precedencegroup prefix private protocol public repeat required rethrows return self Self sending set some static struct subscript super switch throw throws true try typealias unowned var weak where while willSet\";\n    const Identifier = /[A-Za-z_]\\w*/y;\n    const JsIdentifier = /[A-Za-z_$][\\w$]*/y;\n    const JsGrammar = { comment: \"//\", block: [\"/*\", \"*/\"], strings: ['\"', \"'\", \"`\"], keywords: words(JsWords), identifier: JsIdentifier, identifiers: true, objectKeys: true };\n    const TsGrammar = { ...JsGrammar, keywords: words(`${JsWords} ${TsWords}`) };\n    const Grammars = {\n      python: { comment: \"#\", hashAnywhere: true, strings: ['\"\"\"', \"'''\", '\"', \"'\"], keywords: words(\"def class return if elif else for while in not and or is None True False import from as with try except finally raise lambda yield pass continue break assert del async await global nonlocal\"), identifiers: true, prefixes: /[rRbBfFuU]{1,2}(?=[\"'])/y, types: words(\"dict list tuple set frozenset str int float bool bytes object\") },\n      js: JsGrammar,\n      jsx: { ...JsGrammar, jsx: true },\n      ts: TsGrammar,\n      tsx: { ...TsGrammar, jsx: true },\n      swift: { comment: \"//\", block: [\"/*\", \"*/\"], strings: ['\"\"\"', '\"'], keywords: words(SwiftWords), identifiers: true, sigils: /[@#][A-Za-z_]\\w*/y },\n      shell: { comment: \"#\", strings: ['\"', \"'\"], variables: true, heredocs: true, keywords: words(\"if then else elif fi for in do done while until case esac function return local export set exit trap source echo readonly shift\") },\n      yaml: { comment: \"#\", strings: ['\"', \"'\"], keys: true, keywords: words(\"true false null\") },\n      html: { block: [\"<!--\", \"-->\"], strings: ['\"', \"'\"], tags: true, keywords: words(\"\") },\n      css: { block: [\"/*\", \"*/\"], strings: ['\"', \"'\"], css: true, keywords: words(\"\") },\n    };\n    const LanguageByExtension = { py: \"python\", js: \"js\", mjs: \"js\", jsx: \"jsx\", ts: \"ts\", tsx: \"tsx\", swift: \"swift\", json: \"js\", sh: \"shell\", bash: \"shell\", yml: \"yaml\", yaml: \"yaml\", html: \"html\", css: \"css\" };",
+            "openingLine": "<script>"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`words` は空白で区切った語を集合にします。Swift用の文法にはキーワード集合、文字列の区切り、コメントの記号を持たせ、拡張子 `swift` と結び付けます。同じ色分けの流れが、渡された文法を使って行を読みます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 1089,
+            "end": 1108,
+            "text": "     */\n    const tokenAt = (cursor, grammar) => {\n      const isYamlKeyPosition = grammar.keys === true && cursor.lineStart;\n      const key = isYamlKeyPosition ? matchAt(YamlKey, cursor) : null;\n      if (key) return Token(\"tok-key\", key);\n      const quoted = quotedAt(cursor, grammar);\n      if (quoted) return quoted;\n      const sigil = grammar.sigils === undefined ? null : matchAt(grammar.sigils, cursor);\n      if (sigil) {\n        return Token(\"tok-kw\", sigil);\n      }\n      if (grammar.css === true) return cssTokenAt(cursor);\n      const variable = grammar.variables === true ? matchAt(ShellVariable, cursor) : null;\n      if (variable) return Token(\"tok-var\", variable);\n      const jsx = grammar.jsx === true ? jsxTagInExpressionAt(cursor) : null;\n      if (jsx) return jsx;\n      return wordAt(cursor, grammar);\n    };\n\n    /** 持ち越しの続き(前の行で閉じなかった文字列・コメント)を、閉じ記号まで 1 字句にする。 */",
+            "openingLine": "<script>"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "末尾に `y` を付けた正規表現は、現在の読取位置から一致する文字だけを読みます。`matchAt` はその位置を設定します。Swiftの属性・マクロの規則は `@` または `#` に続く名前を一まとまりにします。文字列とコメントの処理が先なので、その中にある同じ記号は構文として扱いません。"
+        },
+        {
+          "kind": "caution",
+          "text": "表示用の簡易な分類です。raw文字列、入れ子コメント、複雑な文字列補間の内部までSwiftの文法を解析する処理は含みません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "lineRange": {
+            "start": 795,
+            "end": 816
+          },
+          "text": "文法の登録と拡張子からの選択。",
+          "shas": [
+            "feedf925fa1fb926bbf142bac249bf5196fa0551"
+          ]
+        },
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "lineRange": {
+            "start": 1089,
+            "end": 1108
+          },
+          "text": "文字列・コメントを先に処理する字句の選択。",
+          "shas": [
+            "feedf925fa1fb926bbf142bac249bf5196fa0551"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shared-rendering",
+      "kind": "codebase",
+      "category": "この PR の表示処理",
+      "label": "抜粋と差分で同じ規則を使う",
+      "gist": "表示ごとにSwift対応を分けず、ファイルの拡張子から共通の文法を選びます。",
+      "status": "changed",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "技術の手引きの抜粋は、パスから文法を選んで各行を字句へ変換します。行番号と強調範囲は既存の処理が付けるため、色を追加しても本文の内容は変わりません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 1843,
+            "end": 1855,
+            "text": "    create: (excerpt) => {\n      const emphasis = listOf(excerpt.emphasis);\n      const grammar = Tokenizer.grammarOf(excerpt.path);\n      const texts = excerpt.text.split(\"\\n\");\n      const read = Tokenizer.tokenizeLines(texts, grammar, Tokenizer.startAfter(isString(excerpt.openingLine) ? excerpt.openingLine : null, grammar));\n      return texts.map((text, index) => {\n        const number = excerpt.start + index;\n        return { number, text, isEmphasized: emphasis.some((span) => isWithin(number, span)), tokens: read[index].tokens };\n      });\n    },\n  });\n\n  /**",
+            "openingLine": "<script>"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "コミット差分も同じ色分けを使います。回帰ケースでは抜粋を通した結果と、削除行・追加行の両方の結果を確かめます。色分けの規則だけでなく、ページが使う経路への接続漏れを検出するためです。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".github/scripts/pr-explain-core-cases.sh",
+            "start": 1485,
+            "end": 1511,
+            "text": "  },\n  {\n    label: \"色分け: Swift の抜粋も属性・修飾・宣言・型を色分けする\",\n    actual: () => {\n      const rows = ExcerptRows.create({ path: \"ProductFormView.swift\", start: 10, end: 10, text: \"@State private var draft: ProductDraft\" });\n      return [\"@State\", \"private\", \"var\", \"draft\", \"ProductDraft\"].map((word) => colorIn(rows.map((row) => row.tokens), 0, word));\n    },\n    expected: [\"tok-kw\", \"tok-kw\", \"tok-kw\", \"tok-var\", \"tok-type\"],\n  },\n  {\n    label: \"色分け: Swift のコミット差分は削除行と追加行の両方に色が付く\",\n    actual: () => {\n      const patch = linesOf([\"@@ -1,1 +1,1 @@\", \"-@MainActor let old: Bool = true\", \"+@State var count = 42\"]);\n      const [file] = diffOf([diffFile(\"a.swift\", { patch })], []).files;\n      const tokens = CommitDiff.lineTokensOf(file.body.hunks[0], Tokenizer.grammarOf(file.path));\n      return [[\"@MainActor\", \"let\", \"Bool\", \"true\"].map((word) => colorIn(tokens, 0, word)), [\"@State\", \"var\", \"count\", \"42\"].map((word) => colorIn(tokens, 1, word))];\n    },\n    expected: [[\"tok-kw\", \"tok-kw\", \"tok-type\", \"tok-kw\"], [\"tok-kw\", \"tok-kw\", \"tok-var\", \"tok-num\"]],\n  },\n  {\n    label: \"色分け: Swift 専用の語と記号の規則は JS・TS・Python へ漏れない\",\n    actual: () => {\n      const ts = lineTokensOf(\"a.ts\", [\"@State #expect(value); let nil = 1;\"]);\n      return [colorIn(ts, 0, \"nil\"), ts[0].some((token) => token.value === \"@State\" || token.value === \"#expect\"), colorOf(\"a.js\", [\"const guard = 1;\"], { word: \"guard\" }), lineTokensOf(\"a.py\", [\"#expect(value)\"])[0].map((token) => [token.cls, token.value])];\n    },\n    expected: [\"tok-var\", false, \"tok-var\", [[\"tok-com\", \"#expect(value)\"]]],\n  },",
+            "openingLine": "results=\"$(node - \"$template\" \"$checker\" \"$work/embeddings.json\" <<'JS'"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "今回追加した10ケースのうち9ケースは旧テンプレートで失敗しました。修正後は判定331件と解説関連テスト13件が成功しています。これは字句と組み立ての検証で、公開ページの見た目は実ブラウザでも確認します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "lineRange": {
+            "start": 1843,
+            "end": 1855
+          },
+          "text": "抜粋の行を文法に沿った字句へ変換する箇所。",
+          "shas": [
+            "feedf925fa1fb926bbf142bac249bf5196fa0551"
+          ]
+        },
+        {
+          "path": ".github/scripts/pr-explain-core-cases.sh",
+          "lineRange": {
+            "start": 1485,
+            "end": 1511
+          },
+          "text": "抜粋と差分の両経路を確認する回帰ケース。",
+          "shas": [
+            "feedf925fa1fb926bbf142bac249bf5196fa0551"
+          ]
+        }
+      ]
+    }
+  ]
+}
