@@ -16,7 +16,7 @@ struct ProductListView: View {
                     Text("商品を登録すると、名前と種類をここで確認できます。")
                 } actions: {
                     NavigationLink("商品を登録") {
-                        ProductRegistrationPlaceholderView()
+                        ProductFormView()
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -30,7 +30,7 @@ struct ProductListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
-                    ProductRegistrationPlaceholderView()
+                    ProductFormView()
                 } label: {
                     Label("商品を登録", systemImage: "plus")
                 }
@@ -104,17 +104,6 @@ private struct ProductListRow: View {
         .frame(width: 64, height: 64)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityHidden(true)
-    }
-}
-
-private struct ProductRegistrationPlaceholderView: View {
-    var body: some View {
-        ContentUnavailableView(
-            "商品登録機能は準備中です",
-            systemImage: "square.and.pencil",
-            description: Text("商品一覧に戻るには、画面上部の戻るボタンを使ってください。")
-        )
-        .navigationTitle("商品登録")
     }
 }
 
