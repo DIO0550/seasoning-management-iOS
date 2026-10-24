@@ -177,7 +177,7 @@ if (core === undefined) {
   console.error("document の無い評価で prExplainCore が置かれていない");
   process.exit(2);
 }
-const { ExplainedMap, ExplainShape, ImpactTopics, PrimerTopics, CodeSpans, TermMarks, ExcerptRows, TopicScroll, ReviewCheck, ScreenChoice, Tokenizer, CommitDiff, GraphLayout, ConnectionSentences, SelectionHistory, Vocabulary, Target } = core;
+const { ExplainedMap, ExplainShape, ImpactTopics, PrimerTopics, CodeSpans, TermMarks, ExcerptRows, TopicScroll, ReviewCheck, ScreenChoice, TextScale, Tokenizer, CommitDiff, GraphLayout, ConnectionSentences, SelectionHistory, Vocabulary, Target } = core;
 
 const Pr = 7;
 const shaOf = (digit) => String(digit).repeat(40);
@@ -767,6 +767,48 @@ const cases = [
     label: "確認の印の鍵は、sha が変われば別",
     actual: () => ReviewCheck.keyOf(shaOf(1), "見るところ") === ReviewCheck.keyOf(shaOf(2), "見るところ"),
     expected: false,
+  },
+  {
+    label: "文字サイズが保存されていなければ100%で開く",
+    actual: () => [TextScale.choose(null), TextScale.choose(undefined)],
+    expected: [100, 100],
+  },
+  {
+    label: "文字サイズは上下限を含む保存値をそのまま再利用する",
+    actual: () => [200, 80, 150, 90].map(TextScale.choose),
+    expected: [200, 80, 150, 90],
+  },
+  {
+    label: "不正な型・範囲外・10%刻みでない保存値は100%へ戻す",
+    actual: () => ["120", true, {}, [], 70, 210, 85, 120.5, NaN, Infinity, -Infinity].map(TextScale.choose),
+    expected: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+  },
+  {
+    label: "文字を連続で拡大しても200%を越えず、縮小しても80%を下回らない",
+    actual: () => {
+      let value = TextScale.choose(180);
+      const enlarged = Array.from({ length: 4 }, () => {
+        value = TextScale.increase(value);
+        return value;
+      });
+      value = TextScale.choose(100);
+      const reduced = Array.from({ length: 4 }, () => {
+        value = TextScale.decrease(value);
+        return value;
+      });
+      return { enlarged, reduced };
+    },
+    expected: { enlarged: [190, 200, 200, 200], reduced: [90, 80, 80, 80] },
+  },
+  {
+    label: "拡大後に縮小すると直前の文字サイズへ戻り、リセット後は100%から操作できる",
+    actual: () => {
+      const enlarged = TextScale.increase(130);
+      const reduced = TextScale.decrease(enlarged);
+      const reset = TextScale.reset();
+      return [enlarged, reduced, reset, TextScale.increase(reset), TextScale.decrease(reset)];
+    },
+    expected: [140, 130, 100, 110, 90],
   },
   {
     label: "開く画面は、ハッシュが画面を指していれば保存値より優先する",
