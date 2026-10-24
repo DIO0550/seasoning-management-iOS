@@ -25,6 +25,7 @@ struct ProductFormStateTests {
         #expect(try context.fetchCount(FetchDescriptor<Product>()) == 0)
         #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)
         #expect(state.error == nil)
+        #expect(state.savedProductID == nil)
     }
 
     @Test(arguments: ["", " \t\n", "　", "\u{00a0}\u{2003}\u{2028}"])
@@ -40,19 +41,54 @@ struct ProductFormStateTests {
     @Test func savingCreatesOneNormalizedProduct() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
+        var saveCalls = 0
+        let actions = ProductActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+        var selectedIDs: [UUID] = []
         var state = ProductFormState()
         state.draft.name = "　丸大豆 しょうゆ\n"
         state.draft.type = "\u{2003}和風 調味料\t"
 
-        let saveSucceeded = state.save(using: ProductActions(context: context))
-        #expect(saveSucceeded)
+        let productID = try state.save(using: actions) { selectedIDs.append($0) }.get()
 
         let reader = ModelContext(container)
         let products = try reader.fetch(FetchDescriptor<Product>())
         #expect(products.count == 1)
         let product = try #require(products.first)
+        #expect(productID == product.id)
+        #expect(selectedIDs == [product.id])
+        #expect(saveCalls == 1)
         #expect(product.name == "丸大豆 しょうゆ")
         #expect(product.type == "和風 調味料")
+        #expect(!context.hasChanges)
+        #expect(state.error == nil)
+        #expect(state.savedProductID == product.id)
+    }
+
+    @Test func repeatedSaveReturnsSameProductWithoutSavingOrNotifyingAgain() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        var saveCalls = 0
+        let actions = ProductActions(context: context) { context in
+            saveCalls += 1
+            return Result { try context.save() }
+        }
+        var selectedIDs: [UUID] = []
+        var state = ProductFormState()
+        state.draft = ProductDraft(name: "丸大豆しょうゆ", type: "しょうゆ")
+
+        let firstID = try state.save(using: actions) { selectedIDs.append($0) }.get()
+        let repeatedID = try state.save(using: actions) { selectedIDs.append($0) }.get()
+
+        let products = try ModelContext(container).fetch(FetchDescriptor<Product>())
+        #expect(products.count == 1)
+        let product = try #require(products.first)
+        #expect(firstID == product.id)
+        #expect(repeatedID == product.id)
+        #expect(selectedIDs == [product.id])
+        #expect(saveCalls == 1)
         #expect(!context.hasChanges)
         #expect(state.error == nil)
     }
@@ -66,9 +102,16 @@ struct ProductFormStateTests {
         let failing = ProductActions(context: context) { _ in
             .failure(StoreError.unavailable)
         }
+        var selectedIDs: [UUID] = []
 
-        let firstSaveSucceeded = state.save(using: failing)
-        #expect(!firstSaveSucceeded)
+        let firstResult = state.save(using: failing) { selectedIDs.append($0) }
+        guard case .failure(.persistence(let returnedError)) = firstResult else {
+            Issue.record("保存失敗が呼び出し元へ返されなかった")
+            return
+        }
+        #expect(returnedError as? StoreError == .unavailable)
+        #expect(selectedIDs.isEmpty)
+        #expect(state.savedProductID == nil)
 
         guard case .persistence(let underlying) = state.error else {
             Issue.record("保存失敗が画面の状態に保持されなかった")
@@ -83,12 +126,14 @@ struct ProductFormStateTests {
         #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)
 
         // 同じ入力状態から保存し直しても、失敗した商品の重複は作らない。
-        let retrySucceeded = state.save(using: ProductActions(context: context))
-        #expect(retrySucceeded)
+        let productID = try state.save(using: ProductActions(context: context)) { selectedIDs.append($0) }.get()
 
         let reader = ModelContext(container)
         let products = try reader.fetch(FetchDescriptor<Product>())
         #expect(products.count == 1)
+        let product = try #require(products.first)
+        #expect(productID == product.id)
+        #expect(selectedIDs == [product.id])
         #expect(products.first?.name == "再試行する商品")
         #expect(products.first?.type == "しょうゆ")
         #expect(state.error == nil)
@@ -110,11 +155,17 @@ struct ProductFormStateTests {
         var state = ProductFormState()
         state.draft.name = " 新しい商品 "
         state.draft.type = " しょうゆ "
+        var selectedIDs: [UUID] = []
 
         #expect(existing.name == "ほかの画面で編集中")
         #expect(context.hasChanges)
-        let saveSucceeded = state.save(using: actions)
-        #expect(!saveSucceeded)
+        let result = state.save(using: actions) { selectedIDs.append($0) }
+        guard case .failure(.pendingChanges) = result else {
+            Issue.record("共有contextの未保存変更が呼び出し元へ返されなかった")
+            return
+        }
+        #expect(selectedIDs.isEmpty)
+        #expect(state.savedProductID == nil)
 
         guard case .pendingChanges = state.error else {
             Issue.record("共有contextの未保存変更が検出されなかった")
@@ -143,9 +194,16 @@ struct ProductFormStateTests {
         }
         var state = ProductFormState()
         state.draft = draft
+        var selectedIDs: [UUID] = []
 
-        let saveSucceeded = state.save(using: actions)
-        #expect(!saveSucceeded)
+        let result = state.save(using: actions) { selectedIDs.append($0) }
+        guard case .failure(.validation(let returnedError)) = result else {
+            Issue.record("必須項目のエラーが呼び出し元へ返されなかった")
+            return
+        }
+        #expect(returnedError == ProductDraft.ValidationError(field: field, reason: .required))
+        #expect(selectedIDs.isEmpty)
+        #expect(state.savedProductID == nil)
 
         guard case .validation(let error) = state.error else {
             Issue.record("必須項目のエラーが画面の状態に保持されなかった")

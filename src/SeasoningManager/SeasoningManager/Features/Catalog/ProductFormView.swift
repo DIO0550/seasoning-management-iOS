@@ -7,15 +7,26 @@ import SwiftUI
 struct ProductFormState {
     var draft = ProductDraft()
     private(set) var error: ProductActions.ActionError?
+    private(set) var savedProductID: UUID?
 
-    mutating func save(using actions: ProductActions) -> Bool {
+    /// 保存成功後は完了状態とし、別の商品登録には新しいフォーム状態を使う。
+    mutating func save(
+        using actions: ProductActions, onSave: @MainActor (UUID) -> Void
+    ) -> Result<UUID, ProductActions.ActionError> {
+        if let savedProductID {
+            return .success(savedProductID)
+        }
+
         switch actions.create(from: draft) {
-        case .success:
+        case .success(let product):
+            let productID = product.id
+            savedProductID = productID
             error = nil
-            return true
+            onSave(productID)
+            return .success(productID)
         case .failure(let failure):
             error = failure
-            return false
+            return .failure(failure)
         }
     }
 
@@ -56,6 +67,12 @@ struct ProductFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var state = ProductFormState()
+
+    private let onSave: @MainActor (UUID) -> Void
+
+    init(onSave: @escaping @MainActor (UUID) -> Void = { _ in }) {
+        self.onSave = onSave
+    }
 
     var body: some View {
         Form {
@@ -110,10 +127,11 @@ struct ProductFormView: View {
 
             ToolbarItem(placement: .topBarTrailing) {
                 Button("保存") {
-                    if state.save(using: ProductActions(context: modelContext)) {
+                    if case .success = state.save(using: ProductActions(context: modelContext), onSave: onSave) {
                         dismiss()
                     }
                 }
+                .disabled(state.savedProductID != nil)
                 .accessibilityIdentifier("product-form-save")
             }
         }
