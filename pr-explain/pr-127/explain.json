@@ -17,8 +17,7 @@
         "message": "open-detail"
       },
       {
-        "text": "取得エラーと対象なしを分け、未設定と0を区別して表示する。",
-        "message": "read-detail"
+        "text": "取得エラーと対象なしを分け、未設定と0を区別して表示する。"
       }
     ],
     "highlights": [
@@ -63,9 +62,15 @@
       "change": "空状態、取得エラー、任意情報の表示を追加する。"
     },
     {
-      "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
-      "name": "商品の保存モデル",
-      "role": "商品固有のIDと登録情報を保持する。",
+      "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+      "name": "商品の取得境界と表示値",
+      "role": "商品詳細の回帰を検出する。",
+      "feature": "catalog"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "商品詳細への往復",
+      "role": "商品詳細の回帰を検出する。",
       "feature": "catalog"
     }
   ],
@@ -81,18 +86,6 @@
       "payload": "商品固有のUUID",
       "returns": "商品詳細の画面",
       "status": "added"
-    },
-    {
-      "id": "read-detail",
-      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
-      "to": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
-      "kind": "qry",
-      "name": "保存済み商品の登録内容を読む",
-      "code": "Query(Self.descriptor(for: productID)); ProductDetailContent(product: product)",
-      "via": "state",
-      "payload": "商品IDと取得した候補の保存状態",
-      "returns": "登録内容、対象なし、または取得エラー",
-      "status": "added"
     }
   ],
   "flows": [
@@ -100,8 +93,7 @@
       "id": "open",
       "label": "一覧から商品を確認する",
       "steps": [
-        "open-detail",
-        "read-detail"
+        "open-detail"
       ]
     }
   ],
@@ -179,9 +171,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "uninserted",
@@ -204,9 +194,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "unsaved",
@@ -230,9 +218,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "deleted",
@@ -256,9 +242,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "unset",
@@ -282,9 +266,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "fields",
@@ -308,9 +290,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "precision",
@@ -333,9 +313,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "basis-amount",
@@ -358,9 +336,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "basis-unit",
@@ -383,9 +359,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "image",
@@ -408,9 +382,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     },
     {
       "id": "navigation",
@@ -436,8 +408,7 @@
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
       "covers": [
-        "open-detail",
-        "read-detail"
+        "open-detail"
       ]
     },
     {
@@ -455,9 +426,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
-      "covers": [
-        "read-detail"
-      ]
+      "covers": []
     }
   ],
   "impact": {
