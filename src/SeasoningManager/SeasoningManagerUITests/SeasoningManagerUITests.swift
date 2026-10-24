@@ -85,6 +85,38 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
+    func testProductListOpensDetailsAndReturnsToList() throws {
+        let app = makeApplication()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["商品はまだありません"].waitForExistence(timeout: 5))
+        let name = "Detail-\(UUID().uuidString)"
+        let type = "!UI-\(UUID().uuidString)"
+
+        openRegistration(in: app)
+        enterProduct(name: name, type: type, in: app)
+        app.buttons["product-form-save"].tap()
+        let row = productRow(name: name, type: type, in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+
+        let navigationBar = app.navigationBars["商品詳細"]
+        XCTAssertTrue(navigationBar.waitForExistence(timeout: 5))
+        let nameRow = app.descendants(matching: .any)["product-detail-name"]
+        let typeRow = app.descendants(matching: .any)["product-detail-type"]
+        let priceRow = app.descendants(matching: .any)["product-detail-price"]
+        XCTAssertTrue(nameRow.waitForExistence(timeout: 5))
+        XCTAssertEqual(nameRow.label, "名前、\(name)")
+        XCTAssertEqual(typeRow.label, "種類、\(type)")
+        XCTAssertEqual(priceRow.label, "価格、未設定")
+        XCTAssertTrue(app.staticTexts["画像なし"].exists)
+
+        // 標準の戻る操作で一覧へ戻り、選択した商品が残ることを確かめる。
+        navigationBar.buttons["商品一覧"].tap()
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        XCTAssertTrue(productRow(name: name, type: type, in: app).exists)
+    }
+
+    @MainActor
     func testProductRegistrationShowsRequiredErrorAndPreservesInput() throws {
         let app = makeApplication()
         app.launch()

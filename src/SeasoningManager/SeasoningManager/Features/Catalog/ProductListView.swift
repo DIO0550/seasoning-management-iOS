@@ -22,7 +22,13 @@ struct ProductListView: View {
                 }
             } else {
                 List(products, id: \.persistentModelID) { product in
-                    ProductListRow(product: product)
+                    let productID = product.id
+
+                    NavigationLink {
+                        ProductDetailView(productID: productID)
+                    } label: {
+                        ProductListRow(product: product)
+                    }
                 }
             }
         }
