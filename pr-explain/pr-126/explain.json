@@ -1,0 +1,438 @@
+{
+  "version": 1,
+  "pr": 126,
+  "sha": "cba5bcc3d692f0e6a5399d110478e0e9f1fc2038",
+  "overview": {
+    "title": "解説の文字を読みやすい大きさにする",
+    "lead": "共通ヘッダーから文字を80〜200%に調整できるようにする。本文とコードの行高・行番号も合わせて変え、選んだ倍率を次に開いたPRでも使う。",
+    "before": [
+      {
+        "text": "本文やコードが小さくても、ページ内で文字サイズを変更する操作がなかった。"
+      }
+    ],
+    "after": [
+      {
+        "text": "縮小・拡大・現在倍率・100%リセットを5画面共通で使える。"
+      },
+      {
+        "text": "再読込と別PRでも保存した有効な倍率を使い、不正な値なら100%に戻す。"
+      }
+    ]
+  },
+  "concepts": [
+    {
+      "path": ".claude/skills/pr-explain/templates/index.html",
+      "name": "解説ページ",
+      "role": "画面と文字サイズの操作を組み立てる。",
+      "change": "文字倍率を保存し、本文・コード・操作の大きさへ適用する。"
+    },
+    {
+      "path": ".github/scripts/pr-explain-core-cases.sh",
+      "name": "表示規則の検証",
+      "role": "表示の核となる判定を実行して期待結果と比較する。",
+      "change": "文字倍率の既定値・境界・不正値・連続操作を追加する。"
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "cba5bcc3d692f0e6a5399d110478e0e9f1fc2038",
+      "phase": "core",
+      "role": "文字サイズの操作と保存、対応する表示寸法を一緒に追加する。",
+      "why": "CSS変数で既存の文字の比率を保ち、コード行高と番号の幅も追随させる。図は固定座標で配置しているため、その内側の倍率を保つ。",
+      "review": [
+        "本文とコードが選択倍率に合わせて大きくなること。",
+        "再読込・画面切替で倍率が維持され、80〜200%の外へ進まないこと。"
+      ],
+      "before": [
+        {
+          "text": "文字サイズは固定px指定だった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "共通ヘッダーから倍率を選び、保存・復元できる。"
+        }
+      ],
+      "notes": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "start": 1426,
+          "end": 1449,
+          "text": "受け付ける保存値と、増減の上下限を1か所に置く。"
+        },
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "start": 2862,
+          "end": 2888,
+          "text": "DOM更新を先に行うため、保存できない環境でもページ内の文字は変わる。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "sizes",
+      "label": "文字サイズの規則",
+      "file": ".github/scripts/pr-explain-core-cases.sh"
+    }
+  ],
+  "tests": [
+    {
+      "id": "default",
+      "suite": "sizes",
+      "name": "文字サイズが保存されていなければ100%で開く",
+      "techniques": [
+        "state"
+      ],
+      "why": "保存した表示設定から倍率を正しく選び、操作で範囲を外れないことを守る。",
+      "given": "保存した倍率がない。",
+      "when": "初期値を選ぶ。",
+      "then": "100%になる。",
+      "excerpt": {
+        "path": ".github/scripts/pr-explain-core-cases.sh",
+        "start": 771,
+        "end": 775,
+        "text": "  {\n    label: \"文字サイズが保存されていなければ100%で開く\",\n    actual: () => [TextScale.choose(null), TextScale.choose(undefined)],\n    expected: [100, 100],\n  },",
+        "openingLine": "results=\"$(node - \"$template\" \"$checker\" \"$work/embeddings.json\" <<'JS'"
+      },
+      "targets": [
+        ".claude/skills/pr-explain/templates/index.html"
+      ]
+    },
+    {
+      "id": "saved",
+      "suite": "sizes",
+      "name": "文字サイズは上下限を含む保存値をそのまま再利用する",
+      "techniques": [
+        "boundary",
+        "state"
+      ],
+      "why": "保存した表示設定から倍率を正しく選び、操作で範囲を外れないことを守る。",
+      "given": "80・90・150・200%が保存されている。",
+      "when": "初期値を選ぶ。",
+      "then": "保存されている有効な倍率を使う。",
+      "excerpt": {
+        "path": ".github/scripts/pr-explain-core-cases.sh",
+        "start": 776,
+        "end": 780,
+        "text": "  {\n    label: \"文字サイズは上下限を含む保存値をそのまま再利用する\",\n    actual: () => [200, 80, 150, 90].map(TextScale.choose),\n    expected: [200, 80, 150, 90],\n  },",
+        "openingLine": "results=\"$(node - \"$template\" \"$checker\" \"$work/embeddings.json\" <<'JS'"
+      },
+      "targets": [
+        ".claude/skills/pr-explain/templates/index.html"
+      ]
+    },
+    {
+      "id": "invalid",
+      "suite": "sizes",
+      "name": "不正な型・範囲外・10%刻みでない保存値は100%へ戻す",
+      "techniques": [
+        "boundary",
+        "error"
+      ],
+      "why": "保存した表示設定から倍率を正しく選び、操作で範囲を外れないことを守る。",
+      "given": "文字列・真偽値・範囲外・刻み違い・有限でない数。",
+      "when": "保存値を読み取った後の初期値を選ぶ。",
+      "then": "100%へ戻す。",
+      "excerpt": {
+        "path": ".github/scripts/pr-explain-core-cases.sh",
+        "start": 781,
+        "end": 785,
+        "text": "  {\n    label: \"不正な型・範囲外・10%刻みでない保存値は100%へ戻す\",\n    actual: () => [\"120\", true, {}, [], 70, 210, 85, 120.5, NaN, Infinity, -Infinity].map(TextScale.choose),\n    expected: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],\n  },",
+        "openingLine": "results=\"$(node - \"$template\" \"$checker\" \"$work/embeddings.json\" <<'JS'"
+      },
+      "targets": [
+        ".claude/skills/pr-explain/templates/index.html"
+      ]
+    },
+    {
+      "id": "limits",
+      "suite": "sizes",
+      "name": "文字を連続で拡大しても200%を越えず、縮小しても80%を下回らない",
+      "techniques": [
+        "boundary",
+        "state"
+      ],
+      "why": "保存した表示設定から倍率を正しく選び、操作で範囲を外れないことを守る。",
+      "given": "180%または100%から開始。",
+      "when": "拡大・縮小をそれぞれ4回行う。",
+      "then": "200%と80%で止まる。",
+      "excerpt": {
+        "path": ".github/scripts/pr-explain-core-cases.sh",
+        "start": 786,
+        "end": 802,
+        "text": "  {\n    label: \"文字を連続で拡大しても200%を越えず、縮小しても80%を下回らない\",\n    actual: () => {\n      let value = TextScale.choose(180);\n      const enlarged = Array.from({ length: 4 }, () => {\n        value = TextScale.increase(value);\n        return value;\n      });\n      value = TextScale.choose(100);\n      const reduced = Array.from({ length: 4 }, () => {\n        value = TextScale.decrease(value);\n        return value;\n      });\n      return { enlarged, reduced };\n    },\n    expected: { enlarged: [190, 200, 200, 200], reduced: [90, 80, 80, 80] },\n  },",
+        "openingLine": "results=\"$(node - \"$template\" \"$checker\" \"$work/embeddings.json\" <<'JS'"
+      },
+      "targets": [
+        ".claude/skills/pr-explain/templates/index.html"
+      ]
+    },
+    {
+      "id": "reset",
+      "suite": "sizes",
+      "name": "拡大後に縮小すると直前の文字サイズへ戻り、リセット後は100%から操作できる",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "保存した表示設定から倍率を正しく選び、操作で範囲を外れないことを守る。",
+      "given": "130%から開始。",
+      "when": "拡大・縮小・リセット後に再び増減する。",
+      "then": "往復で130%、リセットで100%、次は110%または90%。",
+      "excerpt": {
+        "path": ".github/scripts/pr-explain-core-cases.sh",
+        "start": 803,
+        "end": 812,
+        "text": "  {\n    label: \"拡大後に縮小すると直前の文字サイズへ戻り、リセット後は100%から操作できる\",\n    actual: () => {\n      const enlarged = TextScale.increase(130);\n      const reduced = TextScale.decrease(enlarged);\n      const reset = TextScale.reset();\n      return [enlarged, reduced, reset, TextScale.increase(reset), TextScale.decrease(reset)];\n    },\n    expected: [140, 130, 100, 110, 90],\n  },",
+        "openingLine": "results=\"$(node - \"$template\" \"$checker\" \"$work/embeddings.json\" <<'JS'"
+      },
+      "targets": [
+        ".claude/skills/pr-explain/templates/index.html"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "読みやすい文字サイズを選ぶ",
+    "lead": "上部の文字サイズ操作で解説本文やコードを拡大・縮小できます。",
+    "changed": {
+      "before": [
+        {
+          "text": "解説の文字サイズをページ内で変更できませんでした。"
+        }
+      ],
+      "after": [
+        {
+          "text": "縮小・拡大ボタンで80〜200%を選べます。現在の倍率を確認し、100%へ戻せます。"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "次に開いた解説でも使う",
+        "before": [],
+        "after": [
+          {
+            "text": "選んだ倍率を同じブラウザに保存し、再読み込みや別の解説にも使います。"
+          }
+        ],
+        "tests": [
+          "saved",
+          "invalid"
+        ]
+      }
+    ],
+    "kept": [
+      {
+        "text": "構造マップややりとりの図は、従来の図の倍率と配置を保ちます。"
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "css",
+      "kind": "language",
+      "category": "HTML・CSS・JavaScript",
+      "label": "CSS カスタムプロパティ・`var()`・`calc()`",
+      "gist": "倍率を1つのCSS変数に置き、個々の文字サイズから参照する。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "CSSはHTML要素の見た目を指定する言語です。`--` で始まる名前はカスタムプロパティという、独自の値を置く変数です。`var(--text-scale)` でその値を読みます。`:root` はHTML全体の根にあたり、ここで定義した値は子の要素へ引き継がれます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 9,
+            "end": 12,
+            "text": ":root {\n  --text-scale: 1;\n  --bg: #F6F5F1;\n  --panel: #FBFAF7;",
+            "openingLine": "<style>"
+          }
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 49,
+            "end": 59,
+            "text": "html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: calc(16px * var(--text-scale)); -webkit-font-smoothing: antialiased; }\nbutton { font-family: inherit; }\na { color: var(--accent); text-decoration: none; }\na:hover { color: var(--accent-hover); text-decoration: underline; }\n.mono { font-family: var(--mono); }\n.app { height: 100vh; display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); }\n.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px; min-height: 52px; min-width: 0; border-bottom: 1px solid var(--line); background: var(--panel); position: relative; z-index: 20; white-space: nowrap; }\n.repo { max-width: 100%; overflow-wrap: anywhere; white-space: normal; font-family: var(--mono); font-weight: 600; font-size: calc(14px * var(--text-scale)); flex: none; }\n.segmented { display: flex; flex-wrap: wrap; min-width: 0; max-width: 100%; gap: 2px; padding: 2px; background: var(--track); border-radius: 8px; flex: 0 1 auto; }\n/* タブの横の余白は 10px。12px だと、1280px でテストの画面の操作が 2 段目に落ちる。 */\n.segmented a { padding: 5px 10px; border-radius: 6px; font-size: calc(12px * var(--text-scale)); font-weight: 500; color: var(--ink-2); text-decoration: none; }",
+            "openingLine": "<style>"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`calc(14px * var(--text-scale))` は、14pxへ倍率を掛けた文字サイズです。倍率が1なら14px、1.5なら21pxになります。既存の見出しと本文の大きさの比率を保ちながら調整できます。`em` は親の文字サイズに対する比率なので、その指定へさらに倍率を掛けません。"
+        },
+        {
+          "kind": "text",
+          "text": "文字だけ大きくして行高を固定したままだと、コードの上下が重なります。コード行高や行番号の幅も同じ変数で計算します。図の内側では変数を1に上書きし、固定座標の配置を保っています。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "lineRange": {
+            "start": 49,
+            "end": 59
+          },
+          "text": "文字サイズを扱う実装",
+          "shas": [
+            "cba5bcc3d692f0e6a5399d110478e0e9f1fc2038"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "browser",
+      "kind": "language",
+      "category": "HTML・CSS・JavaScript",
+      "label": "DOM・クリックイベント・ブラウザ内の保存",
+      "gist": "ボタン操作から表示を更新し、倍率だけをブラウザへ残す。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "DOMは、HTMLの要素をJavaScriptから扱うための構造です。`document.documentElement` は根のHTML要素を指します。`style.setProperty` でCSSの変数を更新すると、その変数を参照している文字の見た目が変わります。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 2862,
+            "end": 2888,
+            "text": "  const textSizeControls = () => {\n    const storeKey = \"prExplain.textScale\";\n    let percentage = TextScale.choose(BrowserStore.read(storeKey));\n    const smaller = el(\"button\", { type: \"button\", text: \"A−\", \"aria-label\": \"文字を縮小\", \"data-text-scale\": \"decrease\" });\n    const larger = el(\"button\", { type: \"button\", text: \"A＋\", \"aria-label\": \"文字を拡大\", \"data-text-scale\": \"increase\" });\n    const reset = el(\"button\", { type: \"button\", text: \"100%に戻す\", \"aria-label\": \"文字サイズを100%に戻す\", \"data-text-scale\": \"reset\" });\n    const current = el(\"output\", { class: \"text-size-value\", \"aria-live\": \"polite\", \"aria-atomic\": \"true\", \"aria-label\": \"現在の文字サイズ\", \"data-text-scale\": \"value\" });\n    const render = () => {\n      document.documentElement.style.setProperty(\"--text-scale\", String(percentage / 100));\n      current.textContent = `${percentage}%`;\n      smaller.disabled = TextScale.decrease(percentage) === percentage;\n      larger.disabled = TextScale.increase(percentage) === percentage;\n      reset.disabled = percentage === TextScale.reset();\n    };\n    const update = (next) => {\n      percentage = next;\n      render();\n      BrowserStore.write(storeKey, percentage);\n    };\n    smaller.addEventListener(\"click\", () => update(TextScale.decrease(percentage)));\n    larger.addEventListener(\"click\", () => update(TextScale.increase(percentage)));\n    reset.addEventListener(\"click\", () => update(TextScale.reset()));\n    render();\n    return el(\"div\", { class: \"text-size-controls\", role: \"group\", \"aria-label\": \"文字サイズ\" }, [\n      el(\"span\", { class: \"text-size-label\", text: \"文字サイズ\" }), smaller, current, larger, reset,\n    ]);\n  };",
+            "openingLine": "<script>"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`addEventListener(\"click\", ...)` は、ボタンを押したときに処理を呼ぶ登録です。拡大・縮小・リセットは同じ更新処理を通り、現在倍率とボタンの無効状態も更新します。ネイティブのbuttonを使うため、キーボードでも操作できます。`aria-label` は操作名、`aria-live` は変わった倍率を読み上げるための属性です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 2842,
+            "end": 2863,
+            "text": "  const BrowserStore = Object.freeze({\n    /** @returns 保存してある値。無い・読めないときは null */\n    read: (key) => {\n      try {\n        const raw = localStorage.getItem(key);\n        return raw === null ? null : JSON.parse(raw);\n      } catch {\n        return null;\n      }\n    },\n    write: (key, value) => {\n      try {\n        localStorage.setItem(key, JSON.stringify(value));\n      } catch {\n        // 残せないだけで、いま開いているページでは効いている。\n      }\n    },\n  });\n\n  /** 全 PR で共通の文字サイズ。保存できなくても、開いているページの操作は反映する。 */\n  const textSizeControls = () => {\n    const storeKey = \"prExplain.textScale\";",
+            "openingLine": "<script>"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "localStorageは、ブラウザに同じサイトの小さな値を保存する仕組みです。文字列で保存するためJSONへ変換して書き、読み取り時に元の値へ戻します。保存が禁止されている場合やJSONが壊れている場合に備え、既存の保存処理は例外を受け止めます。ページでは先に表示を更新するので、保存できなくても操作が効きます。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "lineRange": {
+            "start": 2862,
+            "end": 2888
+          },
+          "text": "文字サイズを扱う実装",
+          "shas": [
+            "cba5bcc3d692f0e6a5399d110478e0e9f1fc2038"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scale-rule",
+      "kind": "codebase",
+      "category": "文字サイズの操作",
+      "label": "保存値と上下限の判定",
+      "gist": "有効な倍率だけを復元し、操作では80〜200%の範囲を保つ。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "保存されていない値、数値以外、整数でない値、範囲外、10刻みでない値は100%へ戻します。読み取れた値をそのままCSSに入れず、この判定を通すため表示が極端な大きさになりません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 1426,
+            "end": 1449,
+            "text": "  const TextScale = (() => {\n    const Default = 100;\n    const Minimum = 80;\n    const Maximum = 200;\n    const Step = 10;\n    const choose = (value) => {\n      if (!Number.isInteger(value)) {\n        return Default;\n      }\n      if (value < Minimum || value > Maximum) {\n        return Default;\n      }\n      if (value % Step !== 0) {\n        return Default;\n      }\n      return value;\n    };\n    return Object.freeze({\n      choose,\n      increase: (value) => Math.min(Maximum, choose(value) + Step),\n      decrease: (value) => Math.max(Minimum, choose(value) - Step),\n      reset: () => Default,\n    });\n  })();",
+            "openingLine": "<script>"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "増減は10%単位です。拡大は200%で、縮小は80%で止まります。これ以上変わらない側のボタンを画面で無効にします。テストは上下限付近から続けて操作し、止まった後も範囲を超えない結果を確認します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "lineRange": {
+            "start": 1426,
+            "end": 1449
+          },
+          "text": "文字サイズを扱う実装",
+          "shas": [
+            "cba5bcc3d692f0e6a5399d110478e0e9f1fc2038"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "default",
+        "saved",
+        "invalid",
+        "limits",
+        "reset"
+      ]
+    },
+    {
+      "id": "controls",
+      "kind": "codebase",
+      "category": "文字サイズの操作",
+      "label": "共通ヘッダーから文字を調整する",
+      "gist": "5画面で同じ操作を使い、画面を切り替えても倍率を保つ。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "文字操作は画面ごとに置き直す操作群の外に置きます。画面切替で作り直されないため、表示中の倍率がそのまま残ります。保存キーは全PR共通で、画面の種類・パネル幅・レビュー確認印の保存とは独立しています。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".claude/skills/pr-explain/templates/index.html",
+            "start": 2862,
+            "end": 2888,
+            "text": "  const textSizeControls = () => {\n    const storeKey = \"prExplain.textScale\";\n    let percentage = TextScale.choose(BrowserStore.read(storeKey));\n    const smaller = el(\"button\", { type: \"button\", text: \"A−\", \"aria-label\": \"文字を縮小\", \"data-text-scale\": \"decrease\" });\n    const larger = el(\"button\", { type: \"button\", text: \"A＋\", \"aria-label\": \"文字を拡大\", \"data-text-scale\": \"increase\" });\n    const reset = el(\"button\", { type: \"button\", text: \"100%に戻す\", \"aria-label\": \"文字サイズを100%に戻す\", \"data-text-scale\": \"reset\" });\n    const current = el(\"output\", { class: \"text-size-value\", \"aria-live\": \"polite\", \"aria-atomic\": \"true\", \"aria-label\": \"現在の文字サイズ\", \"data-text-scale\": \"value\" });\n    const render = () => {\n      document.documentElement.style.setProperty(\"--text-scale\", String(percentage / 100));\n      current.textContent = `${percentage}%`;\n      smaller.disabled = TextScale.decrease(percentage) === percentage;\n      larger.disabled = TextScale.increase(percentage) === percentage;\n      reset.disabled = percentage === TextScale.reset();\n    };\n    const update = (next) => {\n      percentage = next;\n      render();\n      BrowserStore.write(storeKey, percentage);\n    };\n    smaller.addEventListener(\"click\", () => update(TextScale.decrease(percentage)));\n    larger.addEventListener(\"click\", () => update(TextScale.increase(percentage)));\n    reset.addEventListener(\"click\", () => update(TextScale.reset()));\n    render();\n    return el(\"div\", { class: \"text-size-controls\", role: \"group\", \"aria-label\": \"文字サイズ\" }, [\n      el(\"span\", { class: \"text-size-label\", text: \"文字サイズ\" }), smaller, current, larger, reset,\n    ]);\n  };",
+            "openingLine": "<script>"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "本文だけでなく、コード、行番号、注釈、サイドバーも倍率を共有します。ヘッダーの操作群は横幅に応じて折り返し、狭い画面の技術タブの高さも文字に追随させます。図の中は既存の図ズームで拡大します。"
+        },
+        {
+          "kind": "caution",
+          "text": "コアの判定表はブラウザの描画や実クリックを通しません。表示寸法、読み込み直し、図の操作は公開画面で別に確認します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".claude/skills/pr-explain/templates/index.html",
+          "lineRange": {
+            "start": 2862,
+            "end": 2888
+          },
+          "text": "文字サイズを扱う実装",
+          "shas": [
+            "cba5bcc3d692f0e6a5399d110478e0e9f1fc2038"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "limits",
+        "reset"
+      ]
+    }
+  ]
+}
