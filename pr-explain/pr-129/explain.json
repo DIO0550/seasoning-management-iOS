@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 129,
-  "sha": "fee8b91f8607992c67bc0a6eee1466ff12d539b6",
+  "sha": "279bdccfed81be6081505641a37c89d50d16ec4a",
   "issue": 48,
   "overview": {
     "title": "価格と栄養素を任意で入力・編集できるようにする",
@@ -137,6 +137,31 @@
       "after": [
         {
           "text": "表示した全数値を編集draftとして保存し、画像だけは保存直前の値を保持する。"
+        }
+      ]
+    },
+    {
+      "sha": "279bdccfed81be6081505641a37c89d50d16ec4a",
+      "phase": "revise",
+      "role": "読み上げラベルと画面操作の回帰を修正する",
+      "why": "レビューで空の単位が余分な区切りとして読み上げられる点を指摘された。また最初のCIでは、入力欄の探索・フォーカス・入力の確定でUIテスト3件が失敗した。画面の入力規則は保ち、テストの操作領域と待機を修正した。起動計測のアプリ終了制御失敗は別原因として扱い、既存の計測を維持して再実行する。",
+      "flows": [
+        "editing",
+        "failure"
+      ],
+      "review": [
+        "基準量の読み上げに余分な区切りがなく、価格の単位は残っているか。",
+        "キーボードを避けた領域に欄全体を収め、入力の完全一致を待っているか。",
+        "失敗後に入力を続けず、元の保存・取消・再起動の期待を保っているか。"
+      ],
+      "before": [
+        {
+          "text": "単位のない基準量で読み上げ区切りが重複し、UIテストでは画面端の入力欄にフォーカスできない場合があった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "空の単位を省き、UIテストは欄全体の操作可能な位置と入力値の確定を確認して進む。"
         }
       ]
     }
@@ -321,7 +346,7 @@
       "why": "文字列の入力欄から保存、再起動、再編集までの接続を確認するため。",
       "given": "価格0、カロリー12.34、脂質0、糖質4.56、基準15mLを入力する。",
       "when": "保存してアプリを再起動し、編集を開く。",
-      "then": "同じ数値が各欄へ戻り、未入力のタンパク質・炭水化物は空欄のまま。",
+      "then": "同じ数値が各欄へ戻り、未入力のタンパク質・炭水化物は空欄のまま。 価格の単位と、空の単位を省いた基準量の読み上げラベルも完全一致する。",
       "techniques": [
         "state",
         "regression"
@@ -329,8 +354,8 @@
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
         "start": 222,
-        "end": 250,
-        "text": "    func testOptionalInputsSaveAndReopenAfterRelaunch() throws {\n        let app = makeApplication()\n        app.launch()\n        openRegistration(in: app)\n        enterProduct(name: \"Extras\", type: \"Type\", in: app)\n        try replaceFormValue(\"0\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"12.34\", field: \"product-form-calories\", in: app)\n        try replaceFormValue(\"0\", field: \"product-form-fat\", in: app)\n        try replaceFormValue(\"4.56\", field: \"product-form-sugar\", in: app)\n        try replaceFormValue(\"15\", field: \"product-form-basis-amount\", in: app)\n        try replaceFormValue(\"mL\", field: \"product-form-basis-unit\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(productRow(name: \"Extras\", type: \"Type\", in: app).waitForExistence(timeout: 5))\n        app.terminate()\n        app.launch()\n        let row = productRow(name: \"Extras\", type: \"Type\", in: app)\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        row.tap()\n        openEditing(in: app)\n\n        XCTAssertEqual(formField(\"product-form-price\", in: app).value as? String, \"0\")\n        XCTAssertEqual(formField(\"product-form-calories\", in: app).value as? String, \"12.34\")\n        try assertBlankOptionalField(\"product-form-protein\", in: app)\n        XCTAssertEqual(formField(\"product-form-fat\", in: app).value as? String, \"0\")\n        XCTAssertEqual(formField(\"product-form-sugar\", in: app).value as? String, \"4.56\")\n        try assertBlankOptionalField(\"product-form-carbohydrates\", in: app)\n        XCTAssertEqual(formField(\"product-form-basis-amount\", in: app).value as? String, \"15\")\n        XCTAssertEqual(formField(\"product-form-basis-unit\", in: app).value as? String, \"mL\")\n    }"
+        "end": 254,
+        "text": "    func testOptionalInputsSaveAndReopenAfterRelaunch() throws {\n        let app = makeApplication()\n        app.launch()\n        openRegistration(in: app)\n        try enterProduct(name: \"Extras\", type: \"Type\", in: app)\n        try replaceFormValue(\"0\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"12.34\", field: \"product-form-calories\", in: app)\n        try replaceFormValue(\"0\", field: \"product-form-fat\", in: app)\n        try replaceFormValue(\"4.56\", field: \"product-form-sugar\", in: app)\n        try replaceFormValue(\"15\", field: \"product-form-basis-amount\", in: app)\n        try replaceFormValue(\"mL\", field: \"product-form-basis-unit\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(productRow(name: \"Extras\", type: \"Type\", in: app).waitForExistence(timeout: 5))\n        app.terminate()\n        app.launch()\n        let row = productRow(name: \"Extras\", type: \"Type\", in: app)\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        row.tap()\n        openEditing(in: app)\n\n        let price = try formField(\"product-form-price\", in: app)\n        XCTAssertEqual(price.value as? String, \"0\")\n        XCTAssertEqual(price.label, \"価格、円、任意\")\n        XCTAssertEqual(try formField(\"product-form-calories\", in: app).value as? String, \"12.34\")\n        try assertBlankOptionalField(\"product-form-protein\", in: app)\n        XCTAssertEqual(try formField(\"product-form-fat\", in: app).value as? String, \"0\")\n        XCTAssertEqual(try formField(\"product-form-sugar\", in: app).value as? String, \"4.56\")\n        try assertBlankOptionalField(\"product-form-carbohydrates\", in: app)\n        let basisAmount = try formField(\"product-form-basis-amount\", in: app)\n        XCTAssertEqual(basisAmount.value as? String, \"15\")\n        XCTAssertEqual(basisAmount.label, \"基準量、栄養素を入力した場合は必須\")\n        XCTAssertEqual(try formField(\"product-form-basis-unit\", in: app).value as? String, \"mL\")\n    }"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
@@ -354,9 +379,9 @@
       ],
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
-        "start": 253,
-        "end": 289,
-        "text": "    func testOptionalInputErrorsKeepValuesAndAllowCorrection() throws {\n        let app = makeApplication()\n        app.launch()\n        openRegistration(in: app)\n        enterProduct(name: \"Corrected\", type: \"Type\", in: app)\n        try replaceFormValue(\"-1\", field: \"product-form-price\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n\n        XCTAssertTrue(app.staticTexts[\"product-form-price-error\"].waitForExistence(timeout: 5))\n        XCTAssertEqual(formField(\"product-form-price\", in: app).value as? String, \"-1\")\n        try replaceFormValue(\"0\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"1.234\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(app.staticTexts[\"product-form-calories-error\"].waitForExistence(timeout: 5))\n        XCTAssertEqual(formField(\"product-form-calories\", in: app).value as? String, \"1.234\")\n        try replaceFormValue(\"0\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        let amount = formField(\"product-form-basis-amount\", in: app)\n        XCTAssertTrue(amount.isHittable)\n        XCTAssertTrue(app.staticTexts[\"product-form-basis-amount-error\"].exists)\n        try replaceFormValue(\"0\", field: \"product-form-basis-amount\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(app.staticTexts[\"product-form-basis-amount-error\"].label.contains(\"0より大きい\"))\n        try replaceFormValue(\"100\", field: \"product-form-basis-amount\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(formField(\"product-form-basis-unit\", in: app).isHittable)\n        XCTAssertTrue(app.staticTexts[\"product-form-basis-unit-error\"].waitForExistence(timeout: 5))\n        try replaceFormValue(\"g\", field: \"product-form-basis-unit\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n\n        let row = productRow(name: \"Corrected\", type: \"Type\", in: app)\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        row.tap()\n        openEditing(in: app)\n        XCTAssertEqual(formField(\"product-form-price\", in: app).value as? String, \"0\")\n        XCTAssertEqual(formField(\"product-form-calories\", in: app).value as? String, \"0\")\n    }"
+        "start": 257,
+        "end": 293,
+        "text": "    func testOptionalInputErrorsKeepValuesAndAllowCorrection() throws {\n        let app = makeApplication()\n        app.launch()\n        openRegistration(in: app)\n        try enterProduct(name: \"Corrected\", type: \"Type\", in: app)\n        try replaceFormValue(\"-1\", field: \"product-form-price\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n\n        XCTAssertTrue(app.staticTexts[\"product-form-price-error\"].waitForExistence(timeout: 5))\n        XCTAssertEqual(try formField(\"product-form-price\", in: app).value as? String, \"-1\")\n        try replaceFormValue(\"0\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"1.234\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(app.staticTexts[\"product-form-calories-error\"].waitForExistence(timeout: 5))\n        XCTAssertEqual(try formField(\"product-form-calories\", in: app).value as? String, \"1.234\")\n        try replaceFormValue(\"0\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        let amount = try formField(\"product-form-basis-amount\", in: app)\n        XCTAssertTrue(amount.isHittable)\n        XCTAssertTrue(app.staticTexts[\"product-form-basis-amount-error\"].exists)\n        try replaceFormValue(\"0\", field: \"product-form-basis-amount\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(app.staticTexts[\"product-form-basis-amount-error\"].label.contains(\"0より大きい\"))\n        try replaceFormValue(\"100\", field: \"product-form-basis-amount\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(try formField(\"product-form-basis-unit\", in: app).isHittable)\n        XCTAssertTrue(app.staticTexts[\"product-form-basis-unit-error\"].waitForExistence(timeout: 5))\n        try replaceFormValue(\"g\", field: \"product-form-basis-unit\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n\n        let row = productRow(name: \"Corrected\", type: \"Type\", in: app)\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        row.tap()\n        openEditing(in: app)\n        XCTAssertEqual(try formField(\"product-form-price\", in: app).value as? String, \"0\")\n        XCTAssertEqual(try formField(\"product-form-calories\", in: app).value as? String, \"0\")\n    }"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
@@ -381,9 +406,9 @@
       ],
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
-        "start": 292,
-        "end": 319,
-        "text": "    func testOptionalEditingCancelAndClearLastNutrient() throws {\n        let app = makeApplication()\n        app.launch()\n        registerAndOpenDetail(name: \"Clear\", type: \"Type\", in: app)\n        openEditing(in: app)\n        try replaceFormValue(\"0\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"0\", field: \"product-form-calories\", in: app)\n        try replaceFormValue(\"100\", field: \"product-form-basis-amount\", in: app)\n        try replaceFormValue(\"g\", field: \"product-form-basis-unit\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        openEditing(in: app)\n        try replaceFormValue(\"398\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"1.23\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-cancel\"].tap()\n        openEditing(in: app)\n        XCTAssertEqual(formField(\"product-form-price\", in: app).value as? String, \"0\")\n        XCTAssertEqual(formField(\"product-form-calories\", in: app).value as? String, \"0\")\n\n        // 最後の栄養素だけ消し、欄に残った基準が保存されないことを再編集で確かめる。\n        try replaceFormValue(\"\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        openEditing(in: app)\n        try assertBlankOptionalField(\"product-form-price\", in: app)\n        try assertBlankOptionalField(\"product-form-calories\", in: app)\n        try assertBlankOptionalField(\"product-form-basis-amount\", in: app)\n        try assertBlankOptionalField(\"product-form-basis-unit\", in: app)\n    }"
+        "start": 296,
+        "end": 323,
+        "text": "    func testOptionalEditingCancelAndClearLastNutrient() throws {\n        let app = makeApplication()\n        app.launch()\n        try registerAndOpenDetail(name: \"Clear\", type: \"Type\", in: app)\n        openEditing(in: app)\n        try replaceFormValue(\"0\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"0\", field: \"product-form-calories\", in: app)\n        try replaceFormValue(\"100\", field: \"product-form-basis-amount\", in: app)\n        try replaceFormValue(\"g\", field: \"product-form-basis-unit\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        openEditing(in: app)\n        try replaceFormValue(\"398\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"1.23\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-cancel\"].tap()\n        openEditing(in: app)\n        XCTAssertEqual(try formField(\"product-form-price\", in: app).value as? String, \"0\")\n        XCTAssertEqual(try formField(\"product-form-calories\", in: app).value as? String, \"0\")\n\n        // 最後の栄養素だけ消し、欄に残った基準が保存されないことを再編集で確かめる。\n        try replaceFormValue(\"\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        openEditing(in: app)\n        try assertBlankOptionalField(\"product-form-price\", in: app)\n        try assertBlankOptionalField(\"product-form-calories\", in: app)\n        try assertBlankOptionalField(\"product-form-basis-amount\", in: app)\n        try assertBlankOptionalField(\"product-form-basis-unit\", in: app)\n    }"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
@@ -619,7 +644,7 @@
             "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductExtraFieldsView.swift",
             "start": 58,
             "end": 74,
-            "text": "    private func numberField(\n        _ title: String, text: Binding<String>, unit: String, field: ProductDraft.Field, id: String,\n        requirement: String = \"任意\"\n    ) -> some View {\n        VStack(alignment: .leading, spacing: 4) {\n            Text(unit.isEmpty ? title : \"\\(title)（\\(unit)）\")\n                .font(.subheadline)\n            TextField(\"未設定\", text: text)\n                .keyboardType(.numbersAndPunctuation)\n                .textInputAutocapitalization(.never)\n                .autocorrectionDisabled()\n                .accessibilityLabel(\"\\(title)、\\(unit)、\\(requirement)\")\n                .accessibilityHint(validationMessage(field) ?? \"空欄は未設定です。\")\n                .accessibilityIdentifier(\"product-form-\\(id)\")\n            fieldError(field, title: title, id: id)\n        }\n    }"
+            "text": "    private func numberField(\n        _ title: String, text: Binding<String>, unit: String, field: ProductDraft.Field, id: String,\n        requirement: String = \"任意\"\n    ) -> some View {\n        VStack(alignment: .leading, spacing: 4) {\n            Text(unit.isEmpty ? title : \"\\(title)（\\(unit)）\")\n                .font(.subheadline)\n            TextField(\"未設定\", text: text)\n                .keyboardType(.numbersAndPunctuation)\n                .textInputAutocapitalization(.never)\n                .autocorrectionDisabled()\n                .accessibilityLabel([title, unit, requirement].filter { !$0.isEmpty }.joined(separator: \"、\"))\n                .accessibilityHint(validationMessage(field) ?? \"空欄は未設定です。\")\n                .accessibilityIdentifier(\"product-form-\\(id)\")\n            fieldError(field, title: title, id: id)\n        }\n    }"
           }
         },
         {
@@ -869,6 +894,90 @@
       ],
       "flows": [
         "failure"
+      ]
+    },
+    {
+      "id": "review-codebase",
+      "kind": "codebase",
+      "category": "Swift・画面と保存",
+      "label": "読み上げと画面操作の確認",
+      "gist": "読み上げる項目を整理し、テストの操作と値の確認を実画面の状態に合わせる。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "VoiceOverは画面を読み上げて操作するiOSの機能です。`accessibilityLabel`は入力欄が何を表すかを読み上げる名前です。基準量には固定の単位がなく、単位の空文字も一緒に区切ると「基準量、、必須条件」になっていました。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductExtraFieldsView.swift",
+            "start": 58,
+            "end": 74,
+            "text": "    private func numberField(\n        _ title: String, text: Binding<String>, unit: String, field: ProductDraft.Field, id: String,\n        requirement: String = \"任意\"\n    ) -> some View {\n        VStack(alignment: .leading, spacing: 4) {\n            Text(unit.isEmpty ? title : \"\\(title)（\\(unit)）\")\n                .font(.subheadline)\n            TextField(\"未設定\", text: text)\n                .keyboardType(.numbersAndPunctuation)\n                .textInputAutocapitalization(.never)\n                .autocorrectionDisabled()\n                .accessibilityLabel([title, unit, requirement].filter { !$0.isEmpty }.joined(separator: \"、\"))\n                .accessibilityHint(validationMessage(field) ?? \"空欄は未設定です。\")\n                .accessibilityIdentifier(\"product-form-\\(id)\")\n            fieldError(field, title: title, id: id)\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`filter`は条件を満たす要素だけを残し、`joined(separator:)`は残った文字列の間へ区切りを入れます。空でない項目だけを連結し、価格の円や栄養素のgは残します。UIテストで価格と基準量のラベルを完全一致確認します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 330,
+            "end": 360,
+            "text": "    private func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n        let field = app.textFields[identifier]\n        // 未生成のセルは、上端へ戻してから下へ探す。各操作の前に領域を取り直す。\n        if !field.exists {\n            for _ in 0..<12 {\n                if field.exists {\n                    break\n                }\n\n                try scrollForm(towardTop: true, in: app)\n            }\n        }\n\n        for _ in 0..<24 {\n            let safeFrame = try formInteractionFrame(in: app)\n            if field.exists {\n                let frame = field.frame\n                if !frame.isEmpty, safeFrame.contains(frame), field.isHittable {\n                    return field\n                }\n\n                try scrollForm(towardTop: frame.minY < safeFrame.minY, in: app)\n            } else {\n                try scrollForm(towardTop: false, in: app)\n            }\n        }\n\n        let safeFrame = try formInteractionFrame(in: app)\n        XCTFail(\"入力欄を操作できない: \\(identifier)、欄: \\(field.frame)、操作領域: \\(safeFrame)\")\n        throw FormInputFailure.unavailable\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "操作できると判定された入力欄でも、一部だけが見えていたりキーボードの境界にある場合があります。テストではナビゲーションバーとキーボードを除いた領域を毎回計算し、欄全体がその中に入ってからタップします。スクロールは文字列を選択しにくい右側の余白から短く行います。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 441,
+            "end": 474,
+            "text": "    private func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {\n        var focusedField: XCUIElement?\n        let keyboard = app.keyboards.firstMatch\n        // タップ後に現れるキーボードで領域が変わるため、改めて欄全体を確認する。\n        for _ in 0..<3 {\n            let candidate = try formField(field, in: app)\n            candidate.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()\n            guard keyboard.waitForExistence(timeout: 5) else {\n                XCTFail(\"キーボードが表示されない: \\(field)\")\n                throw FormInputFailure.unavailable\n            }\n\n            let safeFrame = try formInteractionFrame(in: app)\n            if safeFrame.contains(candidate.frame), candidate.isHittable {\n                focusedField = candidate\n                break\n            }\n        }\n\n        let textField = try XCTUnwrap(focusedField, \"キーボード表示後に入力欄全体を操作できない: \\(field)\")\n        let current = try XCTUnwrap(textField.value as? String)\n        let content = current == textField.placeholderValue ? \"\" : current\n        if !content.isEmpty {\n            textField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: content.count))\n        }\n        try waitForFormValue(\"\", field: textField)\n\n        if value.isEmpty {\n            return\n        }\n\n        textField.typeText(value)\n        try waitForFormValue(value, field: textField)\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "キーボードが出ると欄の配置が変わるため、出現後も位置を確認します。既存文字の削除と新規入力を別の操作とし、それぞれの完了を確認して次へ進みます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 477,
+            "end": 486,
+            "text": "    private func waitForFormValue(_ value: String, field: XCUIElement) throws {\n        let expected = value.isEmpty ? [\"\", field.placeholderValue ?? \"\"] : [value]\n        let expectation = XCTNSPredicateExpectation(\n            predicate: NSPredicate(format: \"value IN %@\", expected as NSArray), object: field\n        )\n        guard XCTWaiter.wait(for: [expectation], timeout: 5) == .completed else {\n            XCTFail(\"入力値が反映されない: \\(field.identifier)、期待: \\(value)、実際: \\(String(describing: field.value))\")\n            throw FormInputFailure.unavailable\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "predicateは対象の状態が条件に一致するかを判定する式です。固定秒数のsleepではなく、入力値が期待する値と一致するまで上限付きで待ちます。待機に失敗したらテストを失敗させ、入力の再送や一部分の一致で成功扱いにはしません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductExtraFieldsView.swift",
+          "lineRange": {
+            "start": 58,
+            "end": 74
+          },
+          "text": "このコードを使う場所。抜粋は解説対象のコミットから抽出しています。"
+        }
+      ],
+      "status": "changed",
+      "tests": [
+        "ui-restore",
+        "ui-errors",
+        "ui-clear"
+      ],
+      "flows": [
+        "editing"
       ]
     }
   ]
