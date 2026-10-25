@@ -8,8 +8,28 @@ struct ProductFormState {
     var draft = ProductDraft()
     private(set) var error: ProductActions.ActionError?
     private(set) var savedProductID: UUID?
+    private let product: Product?
 
-    /// 保存成功後は完了状態とし、別の商品登録には新しいフォーム状態を使う。
+    init(product: Product? = nil) {
+        self.product = product
+        guard let product else {
+            return
+        }
+
+        guard !product.isDeleted, product.modelContext != nil else {
+            error = .productNotInContext
+            return
+        }
+
+        draft.name = product.name
+        draft.type = product.type
+    }
+
+    var isEditing: Bool {
+        product != nil
+    }
+
+    /// 保存成功後は完了状態とし、別の登録・編集には新しいフォーム状態を使う。
     mutating func save(
         using actions: ProductActions, onSave: @MainActor (UUID) -> Void
     ) -> Result<UUID, ProductActions.ActionError> {
@@ -17,9 +37,8 @@ struct ProductFormState {
             return .success(savedProductID)
         }
 
-        switch actions.create(from: draft) {
-        case .success(let product):
-            let productID = product.id
+        switch persist(using: actions) {
+        case .success(let productID):
             savedProductID = productID
             error = nil
             onSave(productID)
@@ -28,6 +47,49 @@ struct ProductFormState {
             error = failure
             return .failure(failure)
         }
+    }
+
+    private func persist(using actions: ProductActions) -> Result<UUID, ProductActions.ActionError> {
+        guard let product else {
+            return actions.create(from: draft).map { $0.id }
+        }
+
+        guard !product.isDeleted, product.modelContext != nil else {
+            return .failure(.productNotInContext)
+        }
+
+        // 入力欄のない情報は保存直前の値を引き継ぎ、基本情報の編集で消さない。
+        let values = ProductDraft(
+            name: draft.name,
+            type: draft.type,
+            priceYen: product.priceYen.map { String($0) } ?? "",
+            calories: Self.decimal(product.calories),
+            protein: Self.decimal(product.protein),
+            fat: Self.decimal(product.fat),
+            sugar: Self.decimal(product.sugar),
+            carbohydrates: Self.decimal(product.carbohydrates),
+            nutrientBasisAmount: Self.decimal(product.nutrientBasisAmount),
+            nutrientBasisUnit: product.nutrientBasisUnit ?? ""
+        )
+        let productID = product.id
+        return actions.update(product, from: values, image: product.image).map { productID }
+    }
+
+    private static func decimal(_ value: Int64?) -> String {
+        guard let value else {
+            return ""
+        }
+
+        // 100倍整数から正確に戻す。Doubleへの変換・丸めは行わない。
+        let whole = value.magnitude / 100
+        let fraction = value.magnitude % 100
+        let sign = value < 0 ? "-" : ""
+        guard fraction != 0 else {
+            return "\(sign)\(whole)"
+        }
+
+        let digits = fraction < 10 ? "0\(fraction)" : "\(fraction)"
+        return "\(sign)\(whole).\(digits)"
     }
 
     func validationMessage(for field: ProductDraft.Field) -> String? {
@@ -51,13 +113,20 @@ struct ProductFormState {
         }
 
         switch error {
-        case .validation:
-            return nil
+        case .validation(let validation):
+            switch validation.field {
+            case .name, .type:
+                return nil
+            default:
+                return "登録済みの価格・栄養素の内容を確認できないため、商品を保存できませんでした。入力内容は保持されています。"
+            }
         case .pendingChanges:
             return "ほかの変更が保存されていません。変更が保存されてから、もう一度「保存」を押してください。"
         case .persistence(let underlying):
             return "商品を保存できませんでした。\(underlying.localizedDescription) もう一度「保存」を押してください。"
-        case .productNotInContext, .productHasItems, .deletionNotConfirmed:
+        case .productNotInContext:
+            return "編集する商品が見つかりません。一覧に戻って、もう一度商品を選んでください。"
+        case .productHasItems, .deletionNotConfirmed:
             return "商品を保存できませんでした。入力内容を確認し、もう一度「保存」を押してください。"
         }
     }
@@ -66,11 +135,12 @@ struct ProductFormState {
 struct ProductFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @State private var state = ProductFormState()
+    @State private var state: ProductFormState
 
     private let onSave: @MainActor (UUID) -> Void
 
-    init(onSave: @escaping @MainActor (UUID) -> Void = { _ in }) {
+    init(product: Product? = nil, onSave: @escaping @MainActor (UUID) -> Void = { _ in }) {
+        _state = State(initialValue: ProductFormState(product: product))
         self.onSave = onSave
     }
 
@@ -115,7 +185,7 @@ struct ProductFormView: View {
                 }
             }
         }
-        .navigationTitle("商品登録")
+        .navigationTitle(state.isEditing ? "商品編集" : "商品登録")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {

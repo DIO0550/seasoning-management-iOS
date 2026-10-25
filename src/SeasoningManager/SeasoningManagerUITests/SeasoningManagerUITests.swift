@@ -138,6 +138,133 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
+    func testProductEditingSavesToDetailsAndSurvivesRelaunch() throws {
+        let app = makeApplication()
+        app.launch()
+        registerAndOpenDetail(name: "Before", type: "Type", in: app)
+        openEditing(in: app)
+        assertForm(name: "Before", type: "Type", in: app)
+
+        try replaceFormValue("After", field: "product-form-name", in: app)
+        try replaceFormValue("Edited", field: "product-form-type", in: app)
+        app.buttons["product-form-save"].tap()
+
+        assertDetail(name: "After", type: "Edited", in: app)
+        app.navigationBars["商品詳細"].buttons["商品一覧"].tap()
+        XCTAssertTrue(productRow(name: "After", type: "Edited", in: app).waitForExistence(timeout: 5))
+        XCTAssertFalse(productRow(name: "Before", type: "Type", in: app).exists)
+
+        app.terminate()
+        app.launch()
+
+        let row = productRow(name: "After", type: "Edited", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertFalse(productRow(name: "Before", type: "Type", in: app).exists)
+        row.tap()
+        assertDetail(name: "After", type: "Edited", in: app)
+        openEditing(in: app)
+        assertForm(name: "After", type: "Edited", in: app)
+    }
+
+    @MainActor
+    func testProductEditingCancelAndBackKeepSavedValues() throws {
+        let app = makeApplication()
+        app.launch()
+        registerAndOpenDetail(name: "Before", type: "Type", in: app)
+        openEditing(in: app)
+        try replaceFormValue("Cancelled", field: "product-form-name", in: app)
+        try replaceFormValue("Changed", field: "product-form-type", in: app)
+
+        app.buttons["product-form-cancel"].tap()
+
+        assertDetail(name: "Before", type: "Type", in: app)
+        openEditing(in: app)
+        assertForm(name: "Before", type: "Type", in: app)
+        try replaceFormValue("Discarded", field: "product-form-name", in: app)
+        try replaceFormValue("Changed", field: "product-form-type", in: app)
+
+        // 標準の戻る操作でも、編集途中の内容を保存しない。
+        app.navigationBars["商品編集"].buttons["商品詳細"].tap()
+
+        assertDetail(name: "Before", type: "Type", in: app)
+        openEditing(in: app)
+        assertForm(name: "Before", type: "Type", in: app)
+        app.buttons["product-form-cancel"].tap()
+        app.terminate()
+        app.launch()
+
+        XCTAssertTrue(productRow(name: "Before", type: "Type", in: app).waitForExistence(timeout: 5))
+        XCTAssertFalse(productRow(name: "Cancelled", type: "Changed", in: app).exists)
+        XCTAssertFalse(productRow(name: "Discarded", type: "Changed", in: app).exists)
+    }
+
+    @MainActor
+    func testProductEditingRequiredErrorKeepsInputAndAllowsCorrection() throws {
+        let app = makeApplication()
+        app.launch()
+        registerAndOpenDetail(name: "Before", type: "Type", in: app)
+        openEditing(in: app)
+        try replaceFormValue("   ", field: "product-form-name", in: app)
+        try replaceFormValue("Edited", field: "product-form-type", in: app)
+
+        app.buttons["product-form-save"].tap()
+
+        XCTAssertTrue(app.staticTexts["product-form-name-error"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["商品編集"].exists)
+        assertForm(name: "   ", type: "Edited", in: app)
+        try replaceFormValue("Corrected", field: "product-form-name", in: app)
+        app.buttons["product-form-save"].tap()
+
+        assertDetail(name: "Corrected", type: "Edited", in: app)
+    }
+
+    @MainActor
+    private func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) {
+        openRegistration(in: app)
+        enterProduct(name: name, type: type, in: app)
+        app.buttons["product-form-save"].tap()
+        let row = productRow(name: name, type: type, in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        assertDetail(name: name, type: type, in: app)
+    }
+
+    @MainActor
+    private func openEditing(in app: XCUIApplication) {
+        let detail = app.navigationBars["商品詳細"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 5))
+        let edit = detail.buttons["product-detail-edit"]
+        XCTAssertTrue(edit.isHittable)
+        edit.tap()
+        XCTAssertTrue(app.navigationBars["商品編集"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["product-form-name"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func assertForm(name: String, type: String, in app: XCUIApplication) {
+        XCTAssertEqual(app.textFields["product-form-name"].value as? String, name)
+        XCTAssertEqual(app.textFields["product-form-type"].value as? String, type)
+    }
+
+    @MainActor
+    private func assertDetail(name: String, type: String, in app: XCUIApplication) {
+        XCTAssertTrue(app.navigationBars["商品詳細"].waitForExistence(timeout: 5))
+        let nameRow = app.descendants(matching: .any)["product-detail-name"]
+        XCTAssertTrue(nameRow.waitForExistence(timeout: 5))
+        XCTAssertEqual(nameRow.label, "名前、\(name)")
+        XCTAssertEqual(app.descendants(matching: .any)["product-detail-type"].label, "種類、\(type)")
+    }
+
+    @MainActor
+    private func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {
+        let textField = app.textFields[field]
+        let current = try XCTUnwrap(textField.value as? String)
+        textField.tap()
+        textField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + value)
+        XCTAssertEqual(textField.value as? String, value)
+    }
+
+    @MainActor
     private func makeApplication() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-store-id", UUID().uuidString]

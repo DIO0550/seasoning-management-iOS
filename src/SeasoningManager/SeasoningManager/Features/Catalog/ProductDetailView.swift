@@ -26,6 +26,14 @@ struct ProductDetailView: View {
                 )
             } else if let product = products.first, let detail = ProductDetailContent(product: product) {
                 details(detail)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            NavigationLink("編集") {
+                                ProductFormView(product: product)
+                            }
+                            .accessibilityIdentifier("product-detail-edit")
+                        }
+                    }
             } else {
                 ContentUnavailableView(
                     "商品が見つかりません",
