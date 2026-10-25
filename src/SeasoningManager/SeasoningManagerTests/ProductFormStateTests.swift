@@ -193,6 +193,9 @@ struct ProductFormStateTests {
         #expect(state.isEditing)
         #expect(state.draft.name == "元の商品")
         #expect(state.draft.type == "しょうゆ")
+        expectOriginalOptionalDraft(state.draft)
+        state.draft.priceYen = "398"
+        state.draft.protein = "1.23"
         state.draft.name = "保存しない名前"
         state.draft.type = "保存しない種類"
 
@@ -203,6 +206,8 @@ struct ProductFormStateTests {
         let reopened = ProductFormState(product: product)
         #expect(reopened.draft.name == "元の商品")
         #expect(reopened.draft.type == "しょうゆ")
+        expectOriginalOptionalDraft(reopened.draft)
+        expectOptionalValues(product)
         let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
         #expect(saved.name == "元の商品")
         #expect(saved.type == "しょうゆ")
@@ -267,6 +272,8 @@ struct ProductFormStateTests {
         context.insert(product)
         try context.save()
         var state = ProductFormState(product: product)
+        let expectedPrice = price.map { String($0) } ?? ""
+        #expect(state.draft.priceYen == expectedPrice)
         state.draft.name = "編集後"
 
         try state.save(using: ProductActions(context: context)) { _ in }.get()
@@ -283,7 +290,7 @@ struct ProductFormStateTests {
         #expect(saved.nutrientBasisUnit == nil)
     }
 
-    @Test func editingUsesCurrentOptionalValuesRatherThanOpeningSnapshot() throws {
+    @Test func editingUsesDraftValuesAndCurrentImage() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = try makeSavedProduct(in: context)
@@ -298,9 +305,9 @@ struct ProductFormStateTests {
 
         let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
         #expect(saved.name == "編集後")
-        #expect(saved.priceYen == 500)
+        #expect(saved.priceYen == 0)
         #expect(saved.image == Data([4, 5, 6]))
-        #expect(saved.protein == 456)
+        #expect(saved.protein == nil)
     }
 
     @Test func editingSaveFailureKeepsOriginalValuesAndDraftForRetry() throws {
@@ -314,6 +321,11 @@ struct ProductFormStateTests {
         var state = ProductFormState(product: product)
         state.draft.name = " 編集後 "
         state.draft.type = " みそ "
+        state.draft.priceYen = "398"
+        state.draft.fat = "1.23"
+        state.draft.sugar = "4.56"
+        state.draft.nutrientBasisAmount = "100"
+        state.draft.nutrientBasisUnit = "g"
         var selectedIDs: [UUID] = []
         let failing = ProductActions(context: context) { _ in .failure(StoreError.unavailable) }
 
@@ -328,6 +340,11 @@ struct ProductFormStateTests {
         #expect(selectedIDs.isEmpty)
         #expect(state.draft.name == " 編集後 ")
         #expect(state.draft.type == " みそ ")
+        #expect(state.draft.priceYen == "398")
+        #expect(state.draft.fat == "1.23")
+        #expect(state.draft.sugar == "4.56")
+        #expect(state.draft.nutrientBasisAmount == "100")
+        #expect(state.draft.nutrientBasisUnit == "g")
         #expect(state.saveErrorMessage?.contains("保存先を利用できません。") == true)
         #expect(product.name == "元の商品")
         #expect(product.type == "しょうゆ")
@@ -353,7 +370,13 @@ struct ProductFormStateTests {
         #expect(retried.id == productID)
         #expect(retried.name == "編集後")
         #expect(retried.type == "みそ")
-        expectOptionalValues(retried)
+        #expect(retried.image == Data([1, 2, 3]))
+        #expect(retried.priceYen == 398)
+        #expect(retried.fat == 123)
+        #expect(retried.sugar == 456)
+        #expect(retried.nutrientBasisAmount == 10000)
+        #expect(retried.nutrientBasisUnit == "g")
+        #expect(try ModelContext(container).fetch(FetchDescriptor<Item>()).first?.product?.id == productID)
     }
 
     @Test(arguments: [ProductDraft.Field.name, .type])
@@ -446,7 +469,7 @@ struct ProductFormStateTests {
         #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)
     }
 
-    @Test func editingShowsHiddenValidationFailureWithoutRepairingSavedData() throws {
+    @Test func editingShowsSavedInvalidValueInItsFieldAndAllowsCorrection() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = try makeSavedProduct(in: context)
@@ -464,11 +487,202 @@ struct ProductFormStateTests {
             return
         }
         #expect(validation.field == .priceYen)
-        #expect(state.saveErrorMessage != nil)
+        #expect(state.saveErrorMessage == nil)
+        #expect(state.validationMessage(for: .priceYen)?.contains("0以上の半角整数") == true)
+        #expect(state.draft.priceYen == "-1")
         #expect(state.draft.name == "編集後")
         #expect(product.name == "元の商品")
         #expect(product.priceYen == -1)
         #expect(!context.hasChanges)
+
+        state.draft.priceYen = "398"
+        try state.save(using: ProductActions(context: context)) { _ in }.get()
+
+        let corrected = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        #expect(corrected.priceYen == 398)
+        #expect(state.validationMessage(for: .priceYen) == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func optionalInputsAreSavedAndRestoredWithoutRounding(_ editing: Bool) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product: Product?
+        if editing {
+            product = try makeSavedProduct(in: context)
+        } else {
+            product = nil
+        }
+        var state = ProductFormState(product: product)
+        state.draft = ProductDraft(
+            name: "商品", type: "種類", priceYen: "0", calories: "12.34", protein: "0", fat: "1.23",
+            sugar: "4.56", carbohydrates: "92233720368547758.07",
+            nutrientBasisAmount: "0.01", nutrientBasisUnit: "食"
+        )
+
+        let id = try state.save(using: ProductActions(context: context)) { _ in }.get()
+        let reader = ModelContext(container)
+        let saved = try #require(reader.fetch(FetchDescriptor<Product>()).first)
+        #expect(saved.id == id)
+        #expect(saved.priceYen == 0)
+        #expect(saved.calories == 1234)
+        #expect(saved.protein == 0)
+        #expect(saved.fat == 123)
+        #expect(saved.sugar == 456)
+        #expect(saved.carbohydrates == Int64.max)
+        #expect(saved.nutrientBasisAmount == 1)
+        #expect(saved.nutrientBasisUnit == "食")
+        #expect(saved.image == product?.image)
+
+        let reopened = ProductFormState(product: saved)
+        #expect(reopened.draft.priceYen == "0")
+        #expect(reopened.draft.calories == "12.34")
+        #expect(reopened.draft.protein == "0")
+        #expect(reopened.draft.fat == "1.23")
+        #expect(reopened.draft.sugar == "4.56")
+        #expect(reopened.draft.carbohydrates == "92233720368547758.07")
+        #expect(reopened.draft.nutrientBasisAmount == "0.01")
+        #expect(reopened.draft.nutrientBasisUnit == "食")
+    }
+
+    @Test func clearingOptionalInputsAlsoClearsTheUnusedBasis() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        var state = ProductFormState(product: product)
+        // 最後の栄養素も消す。基準が入力欄に残っていても保存はしない。
+        state.draft = ProductDraft(
+            name: product.name, type: product.type, nutrientBasisAmount: "15", nutrientBasisUnit: "mL"
+        )
+
+        try state.save(using: ProductActions(context: context)) { _ in }.get()
+
+        let reader = ModelContext(container)
+        let saved = try #require(reader.fetch(FetchDescriptor<Product>()).first)
+        #expect(saved.priceYen == nil)
+        #expect(saved.calories == nil)
+        #expect(saved.protein == nil)
+        #expect(saved.fat == nil)
+        #expect(saved.sugar == nil)
+        #expect(saved.carbohydrates == nil)
+        #expect(saved.nutrientBasisAmount == nil)
+        #expect(saved.nutrientBasisUnit == nil)
+        #expect(saved.image == Data([1, 2, 3]))
+        let reopened = ProductFormState(product: saved)
+        #expect(reopened.draft.priceYen.isEmpty)
+        #expect(reopened.draft.nutrientBasisAmount.isEmpty)
+        #expect(reopened.draft.nutrientBasisUnit.isEmpty)
+    }
+
+    @Test func changingBasisDoesNotConvertNutrientInputs() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        var state = ProductFormState(product: product)
+        state.draft.nutrientBasisAmount = "1"
+        state.draft.nutrientBasisUnit = "杯（大さじ）"
+
+        try state.save(using: ProductActions(context: context)) { _ in }.get()
+
+        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        #expect(saved.calories == 1234)
+        #expect(saved.fat == 0)
+        #expect(saved.sugar == 1)
+        #expect(saved.carbohydrates == Int64.max)
+        #expect(saved.nutrientBasisAmount == 100)
+        #expect(saved.nutrientBasisUnit == "杯（大さじ）")
+    }
+
+    @Test(
+        arguments: [
+            ProductDraft.Field.priceYen, .calories, .protein, .fat, .sugar, .carbohydrates, .nutrientBasisAmount,
+        ],
+        ["-1", "1.234"]
+    )
+    func invalidOptionalInputAppearsInItsOwnField(_ field: ProductDraft.Field, _ input: String) throws {
+        try expectOptionalInputRejected(input, field: field, reason: .invalidFormat)
+    }
+
+    @Test(arguments: [
+        (ProductDraft.Field.priceYen, "9223372036854775808", ProductDraft.FailureReason.outOfRange),
+        (.calories, "92233720368547758.08", .outOfRange),
+        (.nutrientBasisAmount, "92233720368547758.08", .outOfRange),
+        (.nutrientBasisAmount, "", .required),
+        (.nutrientBasisAmount, "0", .mustBePositive),
+        (.nutrientBasisUnit, "　 ", .required),
+    ])
+    func optionalInputExplainsRangeAndRequiredBasis(
+        _ field: ProductDraft.Field, _ input: String, _ reason: ProductDraft.FailureReason
+    ) throws {
+        try expectOptionalInputRejected(input, field: field, reason: reason)
+    }
+
+    private func expectOptionalInputRejected(
+        _ input: String, field: ProductDraft.Field, reason: ProductDraft.FailureReason
+    ) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        var state = ProductFormState(product: product)
+        switch field {
+        case .priceYen:
+            state.draft.priceYen = input
+        case .calories:
+            state.draft.calories = input
+        case .protein:
+            state.draft.protein = input
+        case .fat:
+            state.draft.fat = input
+        case .sugar:
+            state.draft.sugar = input
+        case .carbohydrates:
+            state.draft.carbohydrates = input
+        case .nutrientBasisAmount:
+            state.draft.nutrientBasisAmount = input
+        case .nutrientBasisUnit:
+            state.draft.nutrientBasisUnit = input
+        case .name, .type:
+            Issue.record("任意欄以外はこの検証の対象外")
+            return
+        }
+        let before = state.draft
+        var notifications = 0
+
+        let result = state.save(using: ProductActions(context: context)) { _ in notifications += 1 }
+
+        guard case .failure(.validation(let validation)) = result else {
+            Issue.record("任意欄の不正入力を拒否しなかった")
+            return
+        }
+        #expect(validation == ProductDraft.ValidationError(field: field, reason: reason))
+        #expect(state.validationMessage(for: field) != nil)
+        #expect(state.saveErrorMessage == nil)
+        #expect(state.savedProductID == nil)
+        #expect(notifications == 0)
+        #expect(state.draft.name == before.name)
+        #expect(state.draft.type == before.type)
+        #expect(state.draft.priceYen == before.priceYen)
+        #expect(state.draft.calories == before.calories)
+        #expect(state.draft.protein == before.protein)
+        #expect(state.draft.fat == before.fat)
+        #expect(state.draft.sugar == before.sugar)
+        #expect(state.draft.carbohydrates == before.carbohydrates)
+        #expect(state.draft.nutrientBasisAmount == before.nutrientBasisAmount)
+        #expect(state.draft.nutrientBasisUnit == before.nutrientBasisUnit)
+        #expect(!context.hasChanges)
+        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        expectOptionalValues(saved)
+    }
+
+    private func expectOriginalOptionalDraft(_ draft: ProductDraft) {
+        #expect(draft.priceYen == "0")
+        #expect(draft.calories == "12.34")
+        #expect(draft.protein.isEmpty)
+        #expect(draft.fat == "0")
+        #expect(draft.sugar == "0.01")
+        #expect(draft.carbohydrates == "92233720368547758.07")
+        #expect(draft.nutrientBasisAmount == "15")
+        #expect(draft.nutrientBasisUnit == "mL")
     }
 
     private func makeSavedProduct(in context: ModelContext) throws -> Product {

@@ -219,6 +219,140 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
+    func testOptionalInputsSaveAndReopenAfterRelaunch() throws {
+        let app = makeApplication()
+        app.launch()
+        openRegistration(in: app)
+        enterProduct(name: "Extras", type: "Type", in: app)
+        try replaceFormValue("0", field: "product-form-price", in: app)
+        try replaceFormValue("12.34", field: "product-form-calories", in: app)
+        try replaceFormValue("0", field: "product-form-fat", in: app)
+        try replaceFormValue("4.56", field: "product-form-sugar", in: app)
+        try replaceFormValue("15", field: "product-form-basis-amount", in: app)
+        try replaceFormValue("mL", field: "product-form-basis-unit", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(productRow(name: "Extras", type: "Type", in: app).waitForExistence(timeout: 5))
+        app.terminate()
+        app.launch()
+        let row = productRow(name: "Extras", type: "Type", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        openEditing(in: app)
+
+        XCTAssertEqual(formField("product-form-price", in: app).value as? String, "0")
+        XCTAssertEqual(formField("product-form-calories", in: app).value as? String, "12.34")
+        try assertBlankOptionalField("product-form-protein", in: app)
+        XCTAssertEqual(formField("product-form-fat", in: app).value as? String, "0")
+        XCTAssertEqual(formField("product-form-sugar", in: app).value as? String, "4.56")
+        try assertBlankOptionalField("product-form-carbohydrates", in: app)
+        XCTAssertEqual(formField("product-form-basis-amount", in: app).value as? String, "15")
+        XCTAssertEqual(formField("product-form-basis-unit", in: app).value as? String, "mL")
+    }
+
+    @MainActor
+    func testOptionalInputErrorsKeepValuesAndAllowCorrection() throws {
+        let app = makeApplication()
+        app.launch()
+        openRegistration(in: app)
+        enterProduct(name: "Corrected", type: "Type", in: app)
+        try replaceFormValue("-1", field: "product-form-price", in: app)
+        app.buttons["product-form-save"].tap()
+
+        XCTAssertTrue(app.staticTexts["product-form-price-error"].waitForExistence(timeout: 5))
+        XCTAssertEqual(formField("product-form-price", in: app).value as? String, "-1")
+        try replaceFormValue("0", field: "product-form-price", in: app)
+        try replaceFormValue("1.234", field: "product-form-calories", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(app.staticTexts["product-form-calories-error"].waitForExistence(timeout: 5))
+        XCTAssertEqual(formField("product-form-calories", in: app).value as? String, "1.234")
+        try replaceFormValue("0", field: "product-form-calories", in: app)
+        app.buttons["product-form-save"].tap()
+        let amount = formField("product-form-basis-amount", in: app)
+        XCTAssertTrue(amount.isHittable)
+        XCTAssertTrue(app.staticTexts["product-form-basis-amount-error"].exists)
+        try replaceFormValue("0", field: "product-form-basis-amount", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(app.staticTexts["product-form-basis-amount-error"].label.contains("0より大きい"))
+        try replaceFormValue("100", field: "product-form-basis-amount", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(formField("product-form-basis-unit", in: app).isHittable)
+        XCTAssertTrue(app.staticTexts["product-form-basis-unit-error"].waitForExistence(timeout: 5))
+        try replaceFormValue("g", field: "product-form-basis-unit", in: app)
+        app.buttons["product-form-save"].tap()
+
+        let row = productRow(name: "Corrected", type: "Type", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        openEditing(in: app)
+        XCTAssertEqual(formField("product-form-price", in: app).value as? String, "0")
+        XCTAssertEqual(formField("product-form-calories", in: app).value as? String, "0")
+    }
+
+    @MainActor
+    func testOptionalEditingCancelAndClearLastNutrient() throws {
+        let app = makeApplication()
+        app.launch()
+        registerAndOpenDetail(name: "Clear", type: "Type", in: app)
+        openEditing(in: app)
+        try replaceFormValue("0", field: "product-form-price", in: app)
+        try replaceFormValue("0", field: "product-form-calories", in: app)
+        try replaceFormValue("100", field: "product-form-basis-amount", in: app)
+        try replaceFormValue("g", field: "product-form-basis-unit", in: app)
+        app.buttons["product-form-save"].tap()
+        openEditing(in: app)
+        try replaceFormValue("398", field: "product-form-price", in: app)
+        try replaceFormValue("1.23", field: "product-form-calories", in: app)
+        app.buttons["product-form-cancel"].tap()
+        openEditing(in: app)
+        XCTAssertEqual(formField("product-form-price", in: app).value as? String, "0")
+        XCTAssertEqual(formField("product-form-calories", in: app).value as? String, "0")
+
+        // 最後の栄養素だけ消し、欄に残った基準が保存されないことを再編集で確かめる。
+        try replaceFormValue("", field: "product-form-price", in: app)
+        try replaceFormValue("", field: "product-form-calories", in: app)
+        app.buttons["product-form-save"].tap()
+        openEditing(in: app)
+        try assertBlankOptionalField("product-form-price", in: app)
+        try assertBlankOptionalField("product-form-calories", in: app)
+        try assertBlankOptionalField("product-form-basis-amount", in: app)
+        try assertBlankOptionalField("product-form-basis-unit", in: app)
+    }
+
+    @MainActor
+    private func formField(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        let field = app.textFields[identifier]
+        let form = app.collectionViews.firstMatch
+        // 未生成のセルを探す場合は一度上端へ戻し、上から順に探す。
+        if !field.exists {
+            for _ in 0..<6 {
+                form.swipeDown()
+            }
+        }
+
+        for _ in 0..<12 {
+            if field.isHittable {
+                return field
+            }
+
+            if field.exists, field.frame.minY < app.navigationBars.firstMatch.frame.maxY {
+                form.swipeDown()
+            } else {
+                form.swipeUp()
+            }
+        }
+
+        XCTAssertTrue(field.isHittable, "入力欄を操作できない: \(identifier)")
+        return field
+    }
+
+    @MainActor
+    private func assertBlankOptionalField(_ identifier: String, in app: XCUIApplication) throws {
+        let field = formField(identifier, in: app)
+        let value = try XCTUnwrap(field.value as? String)
+        XCTAssertTrue(["", field.placeholderValue ?? ""].contains(value))
+    }
+
+    @MainActor
     private func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) {
         openRegistration(in: app)
         enterProduct(name: name, type: type, in: app)
@@ -257,10 +391,16 @@ final class SeasoningManagerUITests: XCTestCase {
 
     @MainActor
     private func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {
-        let textField = app.textFields[field]
+        let textField = formField(field, in: app)
         let current = try XCTUnwrap(textField.value as? String)
+        let content = current == textField.placeholderValue ? "" : current
         textField.tap()
-        textField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + value)
+        textField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: content.count) + value)
+        if value.isEmpty {
+            try assertBlankOptionalField(field, in: app)
+            return
+        }
+
         XCTAssertEqual(textField.value as? String, value)
     }
 
