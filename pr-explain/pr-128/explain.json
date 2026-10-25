@@ -45,12 +45,6 @@
       "change": "新規登録と既存商品の編集を分ける"
     },
     {
-      "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
-      "name": "商品保存",
-      "role": "既存の全項目検証・更新・失敗時復元を担当する",
-      "feature": "catalog"
-    },
-    {
       "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
       "name": "編集状態の検証",
       "role": "保存結果とデータ保持の回帰を確かめる",
@@ -79,14 +73,14 @@
     {
       "id": "update",
       "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
-      "to": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
-      "kind": "cmd",
-      "name": "同じ商品を更新する",
-      "code": "actions.update(product, from: values, image: product.image)",
-      "via": "call",
-      "payload": "対象商品と名前・種類、引き継ぐ任意値",
-      "returns": "Result<Void, ProductActions.ActionError>",
-      "status": "added"
+      "to": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+      "kind": "evt",
+      "name": "保存成功後に詳細へ戻る",
+      "code": "if case .success = state.save(using: ProductActions(context: modelContext), onSave: onSave) { dismiss() }",
+      "via": "state",
+      "payload": "同じ商品の保存成功",
+      "returns": "更新後の商品詳細",
+      "status": "changed"
     }
   ],
   "flows": [
@@ -190,9 +184,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "update"
-      ]
+      "covers": []
     },
     {
       "id": "price",
@@ -216,9 +208,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "update"
-      ]
+      "covers": []
     },
     {
       "id": "current",
@@ -242,9 +232,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "update"
-      ]
+      "covers": []
     },
     {
       "id": "retry",
@@ -269,9 +257,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "update"
-      ]
+      "covers": []
     },
     {
       "id": "required",
@@ -295,9 +281,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "update"
-      ]
+      "covers": []
     },
     {
       "id": "pending",
@@ -321,9 +305,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "update"
-      ]
+      "covers": []
     },
     {
       "id": "deleted",
@@ -347,9 +329,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "update"
-      ]
+      "covers": []
     },
     {
       "id": "invalid",
@@ -373,9 +353,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "update"
-      ]
+      "covers": []
     },
     {
       "id": "ui-save",
