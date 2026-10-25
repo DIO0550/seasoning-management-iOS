@@ -66,7 +66,7 @@ struct ProductExtraFieldsView: View {
                 .keyboardType(.numbersAndPunctuation)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .accessibilityLabel("\(title)、\(unit)、\(requirement)")
+                .accessibilityLabel([title, unit, requirement].filter { !$0.isEmpty }.joined(separator: "、"))
                 .accessibilityHint(validationMessage(field) ?? "空欄は未設定です。")
                 .accessibilityIdentifier("product-form-\(id)")
             fieldError(field, title: title, id: id)
