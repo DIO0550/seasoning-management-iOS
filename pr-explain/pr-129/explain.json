@@ -13,8 +13,7 @@
     ],
     "after": [
       {
-        "text": "保存した数値を各欄へ復元し、編集したdraft全体を保存する。",
-        "message": "persist"
+        "text": "保存した数値を各欄へ復元し、編集したdraft全体を保存する。"
       },
       {
         "text": "負値・書式・範囲・基準不足を該当欄に示し、入力を保持する。",
@@ -61,21 +60,20 @@
       "role": "入力状態を保持し、復元・保存・失敗表示を調整する。",
       "feature": "catalog",
       "change": "全数値を復元し、編集した全入力を保存する。"
-    },
-    {
-      "path": "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift",
-      "name": "商品入力の検証",
-      "role": "書式・範囲・基準・未設定を検証して正確な整数を返す。",
-      "feature": "catalog"
-    },
-    {
-      "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
-      "name": "商品の保存境界",
-      "role": "全入力を検証し、保存失敗時に元データへ戻す。",
-      "feature": "catalog"
     }
   ],
   "messages": [
+    {
+      "id": "compose",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductExtraFieldsView.swift",
+      "kind": "cmd",
+      "name": "任意項目の入力欄を組み立てる",
+      "code": "ProductExtraFieldsView(draft: $state.draft, validationMessage: state.validationMessage)",
+      "via": "call",
+      "status": "added",
+      "payload": "親が所有するdraftへのBindingと欄別メッセージの問い合わせ"
+    },
     {
       "id": "binding",
       "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductExtraFieldsView.swift",
@@ -97,46 +95,21 @@
       "via": "call",
       "status": "added",
       "returns": "該当欄のメッセージまたはnil"
-    },
-    {
-      "id": "persist",
-      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
-      "to": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
-      "kind": "cmd",
-      "name": "編集した入力を保存する",
-      "code": "actions.create(from: draft) / actions.update(product, from: draft, image: product.image)",
-      "via": "call",
-      "status": "changed",
-      "payload": "全欄のdraftと既存画像",
-      "returns": "Resultによる保存結果"
-    },
-    {
-      "id": "validate",
-      "from": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
-      "to": "src/SeasoningManager/SeasoningManager/Domain/ProductDraft.swift",
-      "kind": "qry",
-      "name": "商品全体を検証する",
-      "code": "draft.validated()",
-      "via": "call",
-      "returns": "検証済み値または最初の欄別エラー"
     }
   ],
   "flows": [
     {
       "id": "editing",
-      "label": "入力して保存するとき",
+      "label": "入力欄を開いて編集するとき",
       "steps": [
-        "binding",
-        "persist",
-        "validate"
+        "compose",
+        "binding"
       ]
     },
     {
       "id": "failure",
       "label": "入力の誤りを表示するとき",
       "steps": [
-        "persist",
-        "validate",
         "errors"
       ]
     }
@@ -202,9 +175,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "persist"
-      ]
+      "covers": []
     },
     {
       "id": "clear",
@@ -227,9 +198,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "persist"
-      ]
+      "covers": []
     },
     {
       "id": "basis",
@@ -252,9 +221,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "persist"
-      ]
+      "covers": []
     },
     {
       "id": "invalid",
@@ -277,10 +244,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "errors",
-        "persist"
-      ]
+      "covers": []
     },
     {
       "id": "required",
@@ -303,10 +267,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "errors",
-        "persist"
-      ]
+      "covers": []
     },
     {
       "id": "retry",
@@ -329,9 +290,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "persist"
-      ]
+      "covers": []
     },
     {
       "id": "image",
@@ -353,9 +312,7 @@
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
       ],
-      "covers": [
-        "persist"
-      ]
+      "covers": []
     },
     {
       "id": "ui-restore",
@@ -380,8 +337,7 @@
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductExtraFieldsView.swift"
       ],
       "covers": [
-        "binding",
-        "persist"
+        "binding"
       ]
     },
     {
@@ -408,8 +364,7 @@
       ],
       "covers": [
         "binding",
-        "errors",
-        "persist"
+        "errors"
       ]
     },
     {
@@ -435,8 +390,7 @@
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductExtraFieldsView.swift"
       ],
       "covers": [
-        "binding",
-        "persist"
+        "binding"
       ]
     }
   ],
