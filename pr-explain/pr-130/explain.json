@@ -1,0 +1,698 @@
+{
+  "version": 1,
+  "pr": 130,
+  "sha": "cb74b34510e4009d53eb48320fc1203c497590d5",
+  "issue": 49,
+  "overview": {
+    "title": "商品の写真を追加・差し替え・削除する",
+    "lead": "写真ライブラリから選んだ画像を、商品フォームで確認して保存できます。読み込みに失敗しても、既存の写真と名前・価格・栄養素などの入力を残します。",
+    "before": [
+      {
+        "text": "フォームには写真を編集する操作がなく、編集保存では既存の画像をそのまま引き継いでいました。"
+      }
+    ],
+    "after": [
+      {
+        "text": "写真を選んでも直ちに商品へ保存せず、フォームの保存で初めて反映します。",
+        "message": "save"
+      },
+      {
+        "text": "読み込み失敗は写真削除と区別し、同じ写真を選び直して再試行できます。",
+        "message": "load"
+      },
+      {
+        "text": "古い読み込み結果は、新しい選択・削除・フォーム終了後に採用しません。"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "読み込み中の操作",
+        "text": "読み込み中は保存を無効にし、別の写真選択と削除は可能にしています。写真欄のスクロールでは本体ロードを止めません。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
+        }
+      },
+      {
+        "title": "変更しなかった画像",
+        "text": "写真を操作していないときは、フォームを開いた時点のコピーではなく保存直前の画像を引き継ぎます。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "photo",
+      "label": "商品の写真",
+      "role": "ライブラリの画像を選び、保存前の編集状態として保持する。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+      "name": "写真の選択と状態",
+      "role": "写真欄・読み込み・成功と失敗・古い結果の判定を持つ。",
+      "feature": "photo",
+      "change": "写真選択と編集状態を追加。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "name": "商品の登録と編集",
+      "role": "入力全体と非同期処理の寿命を持ち、保存操作へ確定画像を渡す。",
+      "feature": "photo",
+      "change": "写真欄を追加し、保存と取消に接続。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "name": "商品の保存",
+      "role": "入力を検証し、画像と商品情報を保存する。失敗した変更は取り消す。",
+      "feature": "photo"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerTests/ProductPhotoPickerTests.swift",
+      "name": "写真状態の検証",
+      "role": "成功・失敗・取消と読み込み競合を検証する。",
+      "feature": "photo"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+      "name": "フォーム保存の検証",
+      "role": "別の保存コンテキストから写真の保存結果と入力保持を確認する。",
+      "feature": "photo"
+    }
+  ],
+  "messages": [
+    {
+      "id": "load",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+      "kind": "qry",
+      "name": "写真を読み込む",
+      "code": "photoLoader.load { try await item.loadTransferable(type: Data.self) }",
+      "via": "call",
+      "returns": "Result<Data, ProductPhotoError>",
+      "status": "added"
+    },
+    {
+      "id": "resolve",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+      "kind": "qry",
+      "name": "保存する写真を決める",
+      "code": "photo.image(original: product.image)",
+      "via": "call",
+      "returns": "Data?",
+      "status": "added"
+    },
+    {
+      "id": "save",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "kind": "cmd",
+      "name": "商品と写真を保存する",
+      "code": "actions.create(from: draft, image: image) / actions.update(product, from: draft, image: image)",
+      "via": "call",
+      "status": "changed"
+    }
+  ],
+  "flows": [
+    {
+      "id": "select",
+      "label": "写真を選ぶ",
+      "steps": [
+        "load"
+      ]
+    },
+    {
+      "id": "persist",
+      "label": "写真と商品を保存する",
+      "steps": [
+        "resolve",
+        "save"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "phase": "core",
+      "role": "写真編集を既存の商品フォームと保存境界へ接続する。",
+      "why": "商品モデルと保存APIは既に画像を扱えるため、その手前の選択・状態管理に変更を限定しました。失敗をnilへ変換すると削除と区別できなくなるため、型付きの失敗と明示的な画像変更を分けています。",
+      "flows": [
+        "select",
+        "persist"
+      ],
+      "review": [
+        "未変更の写真が保存直前の値を引き継ぐこと。",
+        "失敗と取消が入力値を初期化しないこと。",
+        "削除・選び直し後に古い読み込み結果が復活しないこと。"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "商品に写真を付ける",
+    "lead": "商品登録・編集の「画像」欄から写真を選べます。写真を付けずに保存することもできます。",
+    "changed": {
+      "before": [
+        {
+          "text": "商品フォームから写真を選び直したり削除したりできませんでした。"
+        }
+      ],
+      "after": [
+        {
+          "text": "「写真を追加」「写真を差し替え」「写真を削除」を使い、保存前に画像を確認できます。"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "写真の読み込みに失敗したとき",
+        "before": [],
+        "after": [
+          {
+            "text": "理由を表示し、既存の写真と入力を残します。写真を選び直して再試行できます。"
+          }
+        ],
+        "tests": [
+          "invalid",
+          "retry",
+          "inputs"
+        ]
+      },
+      {
+        "label": "写真を読み込んでいる間",
+        "before": [],
+        "after": [
+          {
+            "text": "進行中の表示が出て、保存ボタンは使えなくなります。別の写真の選択や削除、キャンセルはできます。"
+          }
+        ]
+      }
+    ],
+    "kept": [
+      {
+        "text": "保存前にキャンセルしても、登録済みの商品は変更しません。",
+        "tests": [
+          "new-save"
+        ]
+      },
+      {
+        "text": "写真を操作しない場合は、保存直前の登録済み画像を引き継ぎます。",
+        "tests": []
+      },
+      {
+        "text": "名前・種類・価格・栄養素の入力規則は変更していません。"
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "binding",
+      "kind": "language",
+      "category": "Swiftと画面状態",
+      "label": "`@State`・`@Binding` と写真選択",
+      "gist": "写真の選択結果と、保存する画像データは別の値です。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`@State` はSwiftUIの画面が所有する一時的な値を保持する仕組みです。Viewの構造体が作り直されても、同じ画面として扱われる間は値を維持します。`@Binding` は親が所有する値を子から読み書きする窓口です。`@` はプロパティにこうした管理規則を付ける記法で、`$selection` は値そのものではなく読み書きする接続を表します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+            "start": 118,
+            "end": 126,
+            "text": "struct ProductPhotoPicker: View {\n    @Binding var selection: PhotosPickerItem?\n    let imageData: Data?\n    let isLoading: Bool\n    let error: ProductPhotoError?\n    let loader: ProductPhotoLoader\n    let remove: () -> Void\n\n    @State private var preview: UIImage?"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "この写真欄は親の選択値を`@Binding`で受け取り、プレビューだけを自身の`@State`に持ちます。`PhotosPickerItem?`の`?`は、選択がない場合にnilになれるOptionalという意味です。選択アイテムは写真本体ではないため、親が`loadTransferable(type: Data.self)`でバイト列を取得します。写真を選んだだけでは商品モデルを書き換えません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+          "lineRange": {
+            "start": 118,
+            "end": 126
+          },
+          "text": "このPRで使っている実装。",
+          "shas": [
+            "cb74b34510e4009d53eb48320fc1203c497590d5"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "actor",
+      "kind": "language",
+      "category": "Swiftと画面状態",
+      "label": "actor と `@MainActor`",
+      "gist": "画面の更新と写真の検証を別々の実行領域へ分けます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "actorは、同じ状態への同時アクセスを制御するSwiftの型です。`@MainActor`は、宣言した処理をUI向けの共有actorで実行する規則を付ける注釈です。メインスレッドはOSの実行単位、MainActorはSwiftの隔離規則で、AppleのUI環境ではMainActorがメインスレッド上で動きます。UIの状態を安全に更新できても、そこで重い処理をすると画面が止まり得ます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+            "start": 27,
+            "end": 42,
+            "text": "actor ProductPhotoLoader {\n    func load(using read: @Sendable () async throws -> Data?) async -> Result<Data, ProductPhotoError> {\n        do {\n            try Task.checkCancellation()\n            let data = try await read()\n            try Task.checkCancellation()\n\n            guard let data else {\n                return .failure(.unavailable)\n            }\n\n            guard !data.isEmpty, UIImage(data: data) != nil else {\n                return .failure(.invalidImage)\n            }\n\n            return .success(data)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "この実装では画像の検証を`ProductPhotoLoader`という専用actorに置き、画面の写真状態は`@MainActor`に置きます。別のactorへ処理を頼むため呼び出し側は`await`を使います。actorを作ることは専用スレッドを作ることではなく、`Task`を書くだけで処理が自動的にバックグラウンドへ移るわけでもありません。プレビューの生成もこのactorに依頼し、描画のたびに画像を復号しません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+          "lineRange": {
+            "start": 27,
+            "end": 42
+          },
+          "text": "このPRで使っている実装。",
+          "shas": [
+            "cb74b34510e4009d53eb48320fc1203c497590d5"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "result",
+      "kind": "language",
+      "category": "Swiftと画面状態",
+      "label": "`Result` と Optional",
+      "gist": "失敗と、写真が未設定であることを別に表します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "Optionalは「値がある／ない」、`Result<Success, Failure>`は「成功した値／失敗の理由」を表す型です。写真を取得できなかったことを単にnilへ変換すると、利用者が写真を削除した場合との区別が消えます。そこで読み込み結果を成功の`Data`と失敗の`ProductPhotoError`に分けます。`Data`は画像のファイル形式に応じたバイト列であり、画面に描けることは別途確認が必要です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+            "start": 28,
+            "end": 46,
+            "text": "    func load(using read: @Sendable () async throws -> Data?) async -> Result<Data, ProductPhotoError> {\n        do {\n            try Task.checkCancellation()\n            let data = try await read()\n            try Task.checkCancellation()\n\n            guard let data else {\n                return .failure(.unavailable)\n            }\n\n            guard !data.isEmpty, UIImage(data: data) != nil else {\n                return .failure(.invalidImage)\n            }\n\n            return .success(data)\n        } catch is CancellationError {\n            return .failure(.cancelled)\n        } catch {\n            return .failure(.loading(error))"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`try await read()`は、待機が必要で例外を投げる可能性がある処理を呼び出します。nilなら取得不能、空や画像として解釈できないデータなら不正画像として返します。`catch`で受け取ったフレームワークの元エラーは`.loading(error)`に残します。取消は別のcaseにして、利用者へ読み込み失敗のメッセージを出しません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+          "lineRange": {
+            "start": 28,
+            "end": 46
+          },
+          "text": "このPRで使っている実装。",
+          "shas": [
+            "cb74b34510e4009d53eb48320fc1203c497590d5"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tasks",
+      "kind": "language",
+      "category": "Swiftと画面状態",
+      "label": "`Task`・`await` と取消",
+      "gist": "非同期の完了順序は、選択した順序と一致するとは限りません。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`Task`は非同期処理のまとまりです。`await`に到達すると待機中にほかの処理が進めるため、写真Aの読み込み中に写真Bを選ぶことができます。先に選んだAが後から完了すると、そのまま代入しただけではBを上書きしてしまいます。また`cancel()`は強制停止ではなく取消要求なので、処理側にも要求の確認が必要です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+            "start": 260,
+            "end": 276,
+            "text": "    private func loadPhoto(_ item: PhotosPickerItem) {\n        photoTask?.cancel()\n        let requestID = state.photo.beginLoading()\n        // 同じ写真を選び直した場合も、もう一度読み込めるようにする。\n        selectedPhoto = nil\n\n        photoTask = Task {\n            let result = await photoLoader.load {\n                try await item.loadTransferable(type: Data.self)\n            }\n\n            guard !Task.isCancelled, state.photo.requestID == requestID else {\n                return\n            }\n\n            state.photo.complete(result, request: requestID)\n            photoTask = nil"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "このコードは前のTaskを取り消し、毎回新しいrequest IDを発行します。結果を反映する直前に取消とIDの一致を確認し、古い結果を捨てます。選択値をnilへ戻すのは保存画像を消す操作ではなく、同じ写真をもう一度選べるようにするためです。Taskは親フォームが所有するため、写真欄のスクロールとフォーム終了を区別できます。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "lineRange": {
+            "start": 260,
+            "end": 276
+          },
+          "text": "このPRで使っている実装。",
+          "shas": [
+            "cb74b34510e4009d53eb48320fc1203c497590d5"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "changes",
+      "kind": "codebase",
+      "category": "写真の編集と保存",
+      "label": "未変更・差し替え・削除の区別",
+      "gist": "写真を触らなかった場合と、消した場合は保存時の意味が異なります。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "写真の編集状態は、画像データの有無だけでは表せません。未変更なら保存直前の画像を使い、差し替えなら新しい画像を使い、削除ならnilを保存する必要があります。初期画像をコピーして常に保存する方法は、フォームを開いた後に保存済み画像が更新された場合に古い画像で上書きするため採用しませんでした。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+            "start": 58,
+            "end": 79,
+            "text": "    private enum Change {\n        case unchanged\n        case replaced(Data)\n        case removed\n    }\n\n    private var change = Change.unchanged\n    private(set) var requestID: UUID?\n    private(set) var error: ProductPhotoError?\n\n    var isLoading: Bool {\n        requestID != nil\n    }\n\n    func image(original: Data?) -> Data? {\n        switch change {\n        case .unchanged:\n            return original\n        case .replaced(let data):\n            return data\n        case .removed:\n            return nil"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`enum`は取り得る状態を列挙する型です。`.replaced(Data)`はcaseに値を伴う「関連値」で、差し替えた画像本体を保持します。`switch`が各状態に対応する確定画像を返します。読み込み失敗ではこの変更状態を更新しないため、直前の写真と明示的削除の意図を維持できます。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+          "lineRange": {
+            "start": 58,
+            "end": 79
+          },
+          "text": "このPRで使っている実装。",
+          "shas": [
+            "cb74b34510e4009d53eb48320fc1203c497590d5"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "stale",
+        "remove"
+      ]
+    },
+    {
+      "id": "saving",
+      "kind": "codebase",
+      "category": "写真の編集と保存",
+      "label": "写真を保存境界へ渡す",
+      "gist": "編集途中の写真を保存済みモデルから分離します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "フォームは名前などの入力をdraftに、写真の操作を写真状態に保持します。保存済みの商品を選択直後に書き換えないため、画面をキャンセルした場合は保存操作自体が発生しません。保存時には既存の`ProductActions`へ商品情報と確定画像を一緒に渡します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+            "start": 76,
+            "end": 87,
+            "text": "    private func persist(using actions: ProductActions) -> Result<UUID, ProductActions.ActionError> {\n        guard let product else {\n            return actions.create(from: draft, image: image).map { $0.id }\n        }\n\n        guard !product.isDeleted, product.modelContext != nil else {\n            return .failure(.productNotInContext)\n        }\n\n        // 写真を操作していないときだけ、保存直前の画像を引き継ぐ。\n        let productID = product.id\n        return actions.update(product, from: draft, image: image).map { productID }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "新規なら`create`、編集なら`update`を呼び、削除済み・保存先に所属していない商品は拒否します。既存の保存境界が失敗した変更をrollbackする一方、フォーム側のdraftと写真状態は再試行用に残ります。単体テストでは別の`ModelContext`から保存結果を読み、見た目の状態だけで保存成功を判定しません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "lineRange": {
+            "start": 76,
+            "end": 87
+          },
+          "text": "このPRで使っている実装。",
+          "shas": [
+            "cb74b34510e4009d53eb48320fc1203c497590d5"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "new-save",
+        "inputs",
+        "save-retry"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "photo-tests",
+      "label": "写真の状態と読み込み",
+      "file": "src/SeasoningManager/SeasoningManagerTests/ProductPhotoPickerTests.swift"
+    },
+    {
+      "id": "form-tests",
+      "label": "写真と商品の保存",
+      "file": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "valid",
+      "suite": "photo-tests",
+      "name": "loadingValidImageAllowsAdditionAndReplacement",
+      "techniques": [
+        "state"
+      ],
+      "why": "実際の画像データを読み込めることを確認する。",
+      "given": "有効な1px PNGを用意。",
+      "when": "ロード境界を通して結果を状態へ反映。",
+      "then": "新規と既存画像の両方で選択画像が使われ、プレビューも生成できる。",
+      "commit": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductPhotoPickerTests.swift",
+        "start": 26,
+        "end": 42,
+        "text": "    @Test func loadingValidImageAllowsAdditionAndReplacement() async throws {\n        let data = try Self.imageData()\n        let loader = ProductPhotoLoader()\n        var state = ProductPhotoState()\n        let request = state.beginLoading()\n\n        #expect(state.isLoading)\n        let result = await loader.load { data }\n        state.complete(result, request: request)\n\n        #expect(try result.get() == data)\n        #expect(state.image(original: nil) == data)\n        #expect(state.image(original: Data([1])) == data)\n        #expect(!state.isLoading)\n        #expect(state.error == nil)\n        #expect(await loader.preview(for: data) != nil)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift"
+      ],
+      "covers": [
+        "load"
+      ]
+    },
+    {
+      "id": "invalid",
+      "suite": "photo-tests",
+      "name": "missingOrInvalidImagePreservesPhoto",
+      "techniques": [
+        "boundary",
+        "error"
+      ],
+      "why": "不正データを削除として扱わないことを確認する。",
+      "given": "元画像があり、nil・空・不正バイト列を入力。",
+      "when": "ロード境界と完了処理を実行。",
+      "then": "失敗理由を持ち、元画像を保持する。",
+      "commit": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductPhotoPickerTests.swift",
+        "start": 45,
+        "end": 61,
+        "text": "    func missingOrInvalidImagePreservesPhoto(_ data: Data?) async throws {\n        let original = try Self.imageData()\n        let loader = ProductPhotoLoader()\n        var state = ProductPhotoState()\n        let request = state.beginLoading()\n\n        let result = await loader.load { data }\n        state.complete(result, request: request)\n\n        guard case .failure = result else {\n            Issue.record(\"読み込めない画像を成功扱いした\")\n            return\n        }\n        #expect(state.image(original: original) == original)\n        #expect(state.error?.message != nil)\n        #expect(!state.isLoading)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift"
+      ],
+      "covers": [
+        "load"
+      ]
+    },
+    {
+      "id": "retry",
+      "suite": "photo-tests",
+      "name": "readFailureRetainsUnderlyingErrorAndRetryClearsIt",
+      "techniques": [
+        "error",
+        "state"
+      ],
+      "why": "元のエラー保持と再試行での復帰を確認する。",
+      "given": "読み込みがエラーを投げる。",
+      "when": "失敗後、同じ状態へ有効画像を読み込む。",
+      "then": "元エラーを取得でき、再試行成功後は画像が設定されエラーが消える。",
+      "commit": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductPhotoPickerTests.swift",
+        "start": 63,
+        "end": 84,
+        "text": "    @Test func readFailureRetainsUnderlyingErrorAndRetryClearsIt() async throws {\n        let data = try Self.imageData()\n        let loader = ProductPhotoLoader()\n        var state = ProductPhotoState()\n        let request = state.beginLoading()\n        let failure = await loader.load { throw ReadError.unavailable }\n        state.complete(failure, request: request)\n\n        guard case .loading(let underlying) = state.error else {\n            Issue.record(\"元の読み込みエラーを保持しなかった\")\n            return\n        }\n        #expect(underlying as? ReadError == .unavailable)\n        #expect(state.image(original: data) == data)\n\n        let retry = state.beginLoading()\n        state.complete(await loader.load { data }, request: retry)\n\n        #expect(state.image(original: nil) == data)\n        #expect(state.error == nil)\n        #expect(!state.isLoading)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift"
+      ],
+      "covers": [
+        "load"
+      ]
+    },
+    {
+      "id": "stale",
+      "suite": "photo-tests",
+      "name": "olderCompletionCannotOverwriteNewerSelection",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "読み込み完了順が逆転する回帰を防ぐ。",
+      "given": "Aの後にBを開始。",
+      "when": "Bの完了前と完了後にAの成功または失敗を渡す。",
+      "then": "Bの待機状態または成功画像を維持し、Aのエラーも表示しない。",
+      "commit": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductPhotoPickerTests.swift",
+        "start": 100,
+        "end": 119,
+        "text": "    func olderCompletionCannotOverwriteNewerSelection(_ oldFails: Bool) throws {\n        let data = try Self.imageData()\n        var state = ProductPhotoState()\n        let first = state.beginLoading()\n        let second = state.beginLoading()\n        let oldResult: Result<Data, ProductPhotoError> = oldFails ? .failure(.unavailable) : .success(Data([1]))\n\n        state.complete(oldResult, request: first)\n        #expect(state.isLoading)\n        #expect(state.requestID == second)\n        #expect(state.image(original: nil) == nil)\n        #expect(state.error == nil)\n\n        state.complete(.success(data), request: second)\n        state.complete(oldResult, request: first)\n\n        #expect(state.image(original: nil) == data)\n        #expect(!state.isLoading)\n        #expect(state.error == nil)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift"
+      ],
+      "covers": []
+    },
+    {
+      "id": "remove",
+      "suite": "photo-tests",
+      "name": "removingPhotoInvalidatesPendingResultAndClearsError",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "削除した写真が遅い読み込みで復活するのを防ぐ。",
+      "given": "失敗表示の後、写真を削除。さらに読込中にも削除。",
+      "when": "削除後に読み込み成功を渡す。",
+      "then": "未設定を保ち、エラーと読込中表示は残らない。",
+      "commit": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductPhotoPickerTests.swift",
+        "start": 121,
+        "end": 136,
+        "text": "    @Test func removingPhotoInvalidatesPendingResultAndClearsError() throws {\n        let data = try Self.imageData()\n        var state = ProductPhotoState()\n        let failure = state.beginLoading()\n        state.complete(.failure(.unavailable), request: failure)\n        state.remove()\n        #expect(state.error == nil)\n\n        let pending = state.beginLoading()\n        state.remove()\n        state.complete(.success(data), request: pending)\n\n        #expect(state.image(original: data) == nil)\n        #expect(!state.isLoading)\n        #expect(state.error == nil)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift"
+      ],
+      "covers": [
+        "resolve"
+      ]
+    },
+    {
+      "id": "new-save",
+      "suite": "form-tests",
+      "name": "selectedPhotoIsSavedWithNewProductOnlyAfterSaving",
+      "techniques": [
+        "state"
+      ],
+      "why": "写真の選択だけで保存されないことを確認する。",
+      "given": "新規フォームに有効な商品入力と画像。",
+      "when": "選択直後と保存後を別のModelContextから読む。",
+      "then": "保存前の商品は0件、保存後は画像付き商品が1件。個体は作らない。",
+      "commit": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 620,
+        "end": 640,
+        "text": "    @Test func selectedPhotoIsSavedWithNewProductOnlyAfterSaving() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        var state = ProductFormState()\n        state.draft = ProductDraft(name: \"写真付き商品\", type: \"しょうゆ\")\n        let image = try ProductPhotoPickerTests.imageData()\n        let request = state.photo.beginLoading()\n        state.photo.complete(.success(image), request: request)\n\n        #expect(!context.hasChanges)\n        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)\n        #expect(state.image == image)\n\n        let id = try state.save(using: ProductActions(context: context)) { _ in }.get()\n\n        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)\n        #expect(saved.id == id)\n        #expect(saved.image == image)\n        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Item>()) == 0)\n        #expect(ProductFormState(product: saved).image == image)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
+      ],
+      "covers": [
+        "save",
+        "resolve"
+      ]
+    },
+    {
+      "id": "inputs",
+      "suite": "form-tests",
+      "name": "photoReadFailurePreservesAllDraftFieldsAndSavedImage",
+      "techniques": [
+        "error",
+        "regression"
+      ],
+      "why": "写真失敗で他の入力欄を消す回帰を防ぐ。",
+      "given": "全入力欄を変更した編集フォーム。",
+      "when": "画像読込を失敗させ、その後商品を保存。",
+      "then": "全入力が失敗直後も残り、元画像を維持したまま保存できる。",
+      "commit": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 670,
+        "end": 704,
+        "text": "    @Test func photoReadFailurePreservesAllDraftFieldsAndSavedImage() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = try makeSavedProduct(in: context)\n        var state = ProductFormState(product: product)\n        state.draft = ProductDraft(\n            name: \" 編集中 \", type: \" みそ \", priceYen: \"398\", calories: \"10.25\", protein: \"2.5\", fat: \"1.23\",\n            sugar: \"4.56\", carbohydrates: \"8.5\", nutrientBasisAmount: \"100\", nutrientBasisUnit: \"g\"\n        )\n        let request = state.photo.beginLoading()\n\n        state.photo.complete(.failure(.loading(StoreError.unavailable)), request: request)\n\n        #expect(state.draft.name == \" 編集中 \")\n        #expect(state.draft.type == \" みそ \")\n        #expect(state.draft.priceYen == \"398\")\n        #expect(state.draft.calories == \"10.25\")\n        #expect(state.draft.protein == \"2.5\")\n        #expect(state.draft.fat == \"1.23\")\n        #expect(state.draft.sugar == \"4.56\")\n        #expect(state.draft.carbohydrates == \"8.5\")\n        #expect(state.draft.nutrientBasisAmount == \"100\")\n        #expect(state.draft.nutrientBasisUnit == \"g\")\n        #expect(state.image == Data([1, 2, 3]))\n        #expect(state.photo.error?.message != nil)\n        #expect(!context.hasChanges)\n        #expect(state.savedProductID == nil)\n        expectOptionalValues(product)\n\n        try state.save(using: ProductActions(context: context)) { _ in }.get()\n\n        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)\n        #expect(saved.image == Data([1, 2, 3]))\n        #expect(saved.name == \"編集中\")\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
+      ],
+      "covers": [
+        "save",
+        "resolve"
+      ]
+    },
+    {
+      "id": "save-retry",
+      "suite": "form-tests",
+      "name": "photoSaveFailureKeepsChangeForRetry",
+      "techniques": [
+        "error",
+        "state"
+      ],
+      "why": "保存失敗で選んだ画像や削除意図が失われないことを確認する。",
+      "given": "既存画像の差し替えまたは削除と名前編集。",
+      "when": "保存を失敗させ、同じ状態から再試行。",
+      "then": "失敗中は保存済み画像を保持し、成功後に意図した画像と名前が保存される。",
+      "commit": "cb74b34510e4009d53eb48320fc1203c497590d5",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+        "start": 707,
+        "end": 743,
+        "text": "    func photoSaveFailureKeepsChangeForRetry(_ remove: Bool) throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = try makeSavedProduct(in: context)\n        var state = ProductFormState(product: product)\n        state.draft.name = \" 編集後 \"\n        let image = try ProductPhotoPickerTests.imageData()\n        let request = state.photo.beginLoading()\n        state.photo.complete(.success(image), request: request)\n        if remove {\n            state.photo.remove()\n        }\n        let expected = remove ? nil : image\n        let failing = ProductActions(context: context) { _ in .failure(StoreError.unavailable) }\n\n        let result = state.save(using: failing) { _ in Issue.record(\"保存失敗を成功として通知した\") }\n\n        guard case .failure(.persistence) = result else {\n            Issue.record(\"保存失敗が返されなかった\")\n            return\n        }\n        #expect(state.savedProductID == nil)\n        #expect(state.draft.name == \" 編集後 \")\n        #expect(state.image == expected)\n        #expect(product.image == Data([1, 2, 3]))\n        #expect(!context.hasChanges)\n        let before = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)\n        #expect(before.image == Data([1, 2, 3]))\n\n        try state.save(using: ProductActions(context: context)) { _ in }.get()\n\n        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)\n        #expect(saved.id == product.id)\n        #expect(saved.name == \"編集後\")\n        #expect(saved.image == expected)\n        #expect(state.error == nil)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
+      ],
+      "covers": [
+        "save"
+      ]
+    },
+    {
+      "id": "device",
+      "suite": "photo-tests",
+      "name": "写真ライブラリでの選択・取消・同じ写真の再選択と読み上げ",
+      "techniques": [
+        "state"
+      ],
+      "why": "OS提供画面とフォームの接続を実機で確認する必要がある。",
+      "given": "写真ライブラリに複数の写真があるiPhoneまたはSimulator。",
+      "when": "追加・差し替え・取消・再選択・スクロール・文字拡大を操作する。",
+      "then": "選択結果と保存抑止が正しくつながり、主要操作を読み上げて使える。",
+      "todo": true,
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductPhotoPicker.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift"
+      ]
+    }
+  ]
+}
