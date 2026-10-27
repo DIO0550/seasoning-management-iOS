@@ -32,7 +32,7 @@ final class SeasoningManagerUITests: XCTestCase {
         let type = "!UI-\(UUID().uuidString)"
 
         openRegistration(in: app)
-        enterProduct(name: cancelledName, type: type, in: app)
+        try enterProduct(name: cancelledName, type: type, in: app)
         app.buttons["product-form-cancel"].tap()
 
         XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
@@ -40,7 +40,7 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertFalse(productRow(name: cancelledName, type: type, in: app).exists)
         openRegistration(in: app)
         try assertBlankForm(in: app)
-        enterProduct(name: backName, type: type, in: app)
+        try enterProduct(name: backName, type: type, in: app)
 
         // キャンセルとは別に、標準の戻る操作でも入力だけを捨てる。
         let backButton = app.navigationBars["商品登録"].buttons["商品一覧"]
@@ -71,7 +71,7 @@ final class SeasoningManagerUITests: XCTestCase {
         let type = "!UI-\(UUID().uuidString)"
 
         openRegistration(in: app)
-        enterProduct(name: "  \(name)  ", type: "  \(type)  ", in: app)
+        try enterProduct(name: "  \(name)  ", type: "  \(type)  ", in: app)
         app.buttons["product-form-save"].tap()
 
         XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
@@ -93,7 +93,7 @@ final class SeasoningManagerUITests: XCTestCase {
         let type = "!UI-\(UUID().uuidString)"
 
         openRegistration(in: app)
-        enterProduct(name: name, type: type, in: app)
+        try enterProduct(name: name, type: type, in: app)
         app.buttons["product-form-save"].tap()
         let row = productRow(name: name, type: type, in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 5))
@@ -124,7 +124,7 @@ final class SeasoningManagerUITests: XCTestCase {
         let type = "!UI-\(UUID().uuidString)"
 
         openRegistration(in: app)
-        enterProduct(name: "   ", type: type, in: app)
+        try enterProduct(name: "   ", type: type, in: app)
         app.buttons["product-form-save"].tap()
 
         XCTAssertTrue(app.staticTexts["product-form-name-error"].waitForExistence(timeout: 5))
@@ -141,7 +141,7 @@ final class SeasoningManagerUITests: XCTestCase {
     func testProductEditingSavesToDetailsAndSurvivesRelaunch() throws {
         let app = makeApplication()
         app.launch()
-        registerAndOpenDetail(name: "Before", type: "Type", in: app)
+        try registerAndOpenDetail(name: "Before", type: "Type", in: app)
         openEditing(in: app)
         assertForm(name: "Before", type: "Type", in: app)
 
@@ -170,7 +170,7 @@ final class SeasoningManagerUITests: XCTestCase {
     func testProductEditingCancelAndBackKeepSavedValues() throws {
         let app = makeApplication()
         app.launch()
-        registerAndOpenDetail(name: "Before", type: "Type", in: app)
+        try registerAndOpenDetail(name: "Before", type: "Type", in: app)
         openEditing(in: app)
         try replaceFormValue("Cancelled", field: "product-form-name", in: app)
         try replaceFormValue("Changed", field: "product-form-type", in: app)
@@ -202,7 +202,7 @@ final class SeasoningManagerUITests: XCTestCase {
     func testProductEditingRequiredErrorKeepsInputAndAllowsCorrection() throws {
         let app = makeApplication()
         app.launch()
-        registerAndOpenDetail(name: "Before", type: "Type", in: app)
+        try registerAndOpenDetail(name: "Before", type: "Type", in: app)
         openEditing(in: app)
         try replaceFormValue("   ", field: "product-form-name", in: app)
         try replaceFormValue("Edited", field: "product-form-type", in: app)
@@ -219,9 +219,191 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) {
+    func testOptionalInputsSaveAndReopenAfterRelaunch() throws {
+        let app = makeApplication()
+        app.launch()
         openRegistration(in: app)
-        enterProduct(name: name, type: type, in: app)
+        try enterProduct(name: "Extras", type: "Type", in: app)
+        try replaceFormValue("0", field: "product-form-price", in: app)
+        try replaceFormValue("12.34", field: "product-form-calories", in: app)
+        try replaceFormValue("0", field: "product-form-fat", in: app)
+        try replaceFormValue("4.56", field: "product-form-sugar", in: app)
+        try replaceFormValue("15", field: "product-form-basis-amount", in: app)
+        try replaceFormValue("mL", field: "product-form-basis-unit", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(productRow(name: "Extras", type: "Type", in: app).waitForExistence(timeout: 5))
+        app.terminate()
+        app.launch()
+        let row = productRow(name: "Extras", type: "Type", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        openEditing(in: app)
+
+        let price = try formField("product-form-price", in: app)
+        XCTAssertEqual(price.value as? String, "0")
+        XCTAssertEqual(price.label, "価格、円、任意")
+        XCTAssertEqual(try formField("product-form-calories", in: app).value as? String, "12.34")
+        try assertBlankOptionalField("product-form-protein", in: app)
+        XCTAssertEqual(try formField("product-form-fat", in: app).value as? String, "0")
+        XCTAssertEqual(try formField("product-form-sugar", in: app).value as? String, "4.56")
+        try assertBlankOptionalField("product-form-carbohydrates", in: app)
+        let basisAmount = try formField("product-form-basis-amount", in: app)
+        XCTAssertEqual(basisAmount.value as? String, "15")
+        XCTAssertEqual(basisAmount.label, "基準量、栄養素を入力した場合は必須")
+        XCTAssertEqual(try formField("product-form-basis-unit", in: app).value as? String, "mL")
+    }
+
+    @MainActor
+    func testOptionalInputErrorsKeepValuesAndAllowCorrection() throws {
+        let app = makeApplication()
+        app.launch()
+        openRegistration(in: app)
+        try enterProduct(name: "Corrected", type: "Type", in: app)
+        try replaceFormValue("-1", field: "product-form-price", in: app)
+        app.buttons["product-form-save"].tap()
+
+        XCTAssertTrue(app.staticTexts["product-form-price-error"].waitForExistence(timeout: 5))
+        XCTAssertEqual(try formField("product-form-price", in: app).value as? String, "-1")
+        try replaceFormValue("0", field: "product-form-price", in: app)
+        try replaceFormValue("1.234", field: "product-form-calories", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(app.staticTexts["product-form-calories-error"].waitForExistence(timeout: 5))
+        XCTAssertEqual(try formField("product-form-calories", in: app).value as? String, "1.234")
+        try replaceFormValue("0", field: "product-form-calories", in: app)
+        app.buttons["product-form-save"].tap()
+        let amount = try formField("product-form-basis-amount", in: app)
+        XCTAssertTrue(amount.isHittable)
+        XCTAssertTrue(app.staticTexts["product-form-basis-amount-error"].exists)
+        try replaceFormValue("0", field: "product-form-basis-amount", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(app.staticTexts["product-form-basis-amount-error"].label.contains("0より大きい"))
+        try replaceFormValue("100", field: "product-form-basis-amount", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(try formField("product-form-basis-unit", in: app).isHittable)
+        XCTAssertTrue(app.staticTexts["product-form-basis-unit-error"].waitForExistence(timeout: 5))
+        try replaceFormValue("g", field: "product-form-basis-unit", in: app)
+        app.buttons["product-form-save"].tap()
+
+        let row = productRow(name: "Corrected", type: "Type", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        openEditing(in: app)
+        XCTAssertEqual(try formField("product-form-price", in: app).value as? String, "0")
+        XCTAssertEqual(try formField("product-form-calories", in: app).value as? String, "0")
+    }
+
+    @MainActor
+    func testOptionalEditingCancelAndClearLastNutrient() throws {
+        let app = makeApplication()
+        app.launch()
+        try registerAndOpenDetail(name: "Clear", type: "Type", in: app)
+        openEditing(in: app)
+        try replaceFormValue("0", field: "product-form-price", in: app)
+        try replaceFormValue("0", field: "product-form-calories", in: app)
+        try replaceFormValue("100", field: "product-form-basis-amount", in: app)
+        try replaceFormValue("g", field: "product-form-basis-unit", in: app)
+        app.buttons["product-form-save"].tap()
+        openEditing(in: app)
+        try replaceFormValue("398", field: "product-form-price", in: app)
+        try replaceFormValue("1.23", field: "product-form-calories", in: app)
+        app.buttons["product-form-cancel"].tap()
+        openEditing(in: app)
+        XCTAssertEqual(try formField("product-form-price", in: app).value as? String, "0")
+        XCTAssertEqual(try formField("product-form-calories", in: app).value as? String, "0")
+
+        // 最後の栄養素だけ消し、欄に残った基準が保存されないことを再編集で確かめる。
+        try replaceFormValue("", field: "product-form-price", in: app)
+        try replaceFormValue("", field: "product-form-calories", in: app)
+        app.buttons["product-form-save"].tap()
+        openEditing(in: app)
+        try assertBlankOptionalField("product-form-price", in: app)
+        try assertBlankOptionalField("product-form-calories", in: app)
+        try assertBlankOptionalField("product-form-basis-amount", in: app)
+        try assertBlankOptionalField("product-form-basis-unit", in: app)
+    }
+
+    private enum FormInputFailure: Error {
+        case unavailable
+    }
+
+    @MainActor
+    private func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
+        let field = app.textFields[identifier]
+        // 未生成のセルは、上端へ戻してから下へ探す。各操作の前に領域を取り直す。
+        if !field.exists {
+            for _ in 0..<12 {
+                if field.exists {
+                    break
+                }
+
+                try scrollForm(towardTop: true, in: app)
+            }
+        }
+
+        for _ in 0..<24 {
+            let safeFrame = try formInteractionFrame(in: app)
+            if field.exists {
+                let frame = field.frame
+                if !frame.isEmpty, safeFrame.contains(frame), field.isHittable {
+                    return field
+                }
+
+                try scrollForm(towardTop: frame.minY < safeFrame.minY, in: app)
+            } else {
+                try scrollForm(towardTop: false, in: app)
+            }
+        }
+
+        let safeFrame = try formInteractionFrame(in: app)
+        XCTFail("入力欄を操作できない: \(identifier)、欄: \(field.frame)、操作領域: \(safeFrame)")
+        throw FormInputFailure.unavailable
+    }
+
+    @MainActor
+    private func formInteractionFrame(in app: XCUIApplication) throws -> CGRect {
+        let form = app.collectionViews.firstMatch
+        let frame = form.frame.intersection(app.frame)
+        let navigationBar = app.navigationBars.firstMatch
+        let top = max(frame.minY, navigationBar.frame.maxY) + 12
+        var bottom = frame.maxY - 12
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists, keyboard.frame.intersects(frame) {
+            bottom = min(bottom, keyboard.frame.minY - 12)
+        }
+
+        let safeFrame = CGRect(x: frame.minX + 12, y: top, width: frame.width - 24, height: bottom - top)
+        guard !frame.isNull, safeFrame.width > 24, safeFrame.height > 80 else {
+            XCTFail("フォームの操作領域を確保できない: フォーム \(frame)、操作領域 \(safeFrame)")
+            throw FormInputFailure.unavailable
+        }
+
+        return safeFrame
+    }
+
+    @MainActor
+    private func scrollForm(towardTop: Bool, in app: XCUIApplication) throws {
+        let safeFrame = try formInteractionFrame(in: app)
+        let distance = min(safeFrame.height * 0.35, 140)
+        let offset = towardTop ? distance : -distance
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        // 文字列の選択を始めないよう、入力欄の右側の余白から短くドラッグする。
+        let x = safeFrame.maxX - 4 - app.frame.minX
+        let start = origin.withOffset(CGVector(dx: x, dy: safeFrame.midY - offset / 2 - app.frame.minY))
+        let end = origin.withOffset(CGVector(dx: x, dy: safeFrame.midY + offset / 2 - app.frame.minY))
+        start.press(forDuration: 0.01, thenDragTo: end)
+    }
+
+    @MainActor
+    private func assertBlankOptionalField(_ identifier: String, in app: XCUIApplication) throws {
+        let field = try formField(identifier, in: app)
+        let value = try XCTUnwrap(field.value as? String)
+        XCTAssertTrue(["", field.placeholderValue ?? ""].contains(value))
+    }
+
+    @MainActor
+    private func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) throws {
+        openRegistration(in: app)
+        try enterProduct(name: name, type: type, in: app)
         app.buttons["product-form-save"].tap()
         let row = productRow(name: name, type: type, in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 5))
@@ -257,11 +439,50 @@ final class SeasoningManagerUITests: XCTestCase {
 
     @MainActor
     private func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {
-        let textField = app.textFields[field]
+        var focusedField: XCUIElement?
+        let keyboard = app.keyboards.firstMatch
+        // タップ後に現れるキーボードで領域が変わるため、改めて欄全体を確認する。
+        for _ in 0..<3 {
+            let candidate = try formField(field, in: app)
+            candidate.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+            guard keyboard.waitForExistence(timeout: 5) else {
+                XCTFail("キーボードが表示されない: \(field)")
+                throw FormInputFailure.unavailable
+            }
+
+            let safeFrame = try formInteractionFrame(in: app)
+            if safeFrame.contains(candidate.frame), candidate.isHittable {
+                focusedField = candidate
+                break
+            }
+        }
+
+        let textField = try XCTUnwrap(focusedField, "キーボード表示後に入力欄全体を操作できない: \(field)")
         let current = try XCTUnwrap(textField.value as? String)
-        textField.tap()
-        textField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + value)
-        XCTAssertEqual(textField.value as? String, value)
+        let content = current == textField.placeholderValue ? "" : current
+        if !content.isEmpty {
+            textField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: content.count))
+        }
+        try waitForFormValue("", field: textField)
+
+        if value.isEmpty {
+            return
+        }
+
+        textField.typeText(value)
+        try waitForFormValue(value, field: textField)
+    }
+
+    @MainActor
+    private func waitForFormValue(_ value: String, field: XCUIElement) throws {
+        let expected = value.isEmpty ? ["", field.placeholderValue ?? ""] : [value]
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value IN %@", expected as NSArray), object: field
+        )
+        guard XCTWaiter.wait(for: [expectation], timeout: 5) == .completed else {
+            XCTFail("入力値が反映されない: \(field.identifier)、期待: \(value)、実際: \(String(describing: field.value))")
+            throw FormInputFailure.unavailable
+        }
     }
 
     @MainActor
@@ -283,13 +504,9 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func enterProduct(name: String, type: String, in app: XCUIApplication) {
-        let nameField = app.textFields["product-form-name"]
-        nameField.tap()
-        nameField.typeText(name)
-        let typeField = app.textFields["product-form-type"]
-        typeField.tap()
-        typeField.typeText(type)
+    private func enterProduct(name: String, type: String, in app: XCUIApplication) throws {
+        try replaceFormValue(name, field: "product-form-name", in: app)
+        try replaceFormValue(type, field: "product-form-type", in: app)
     }
 
     @MainActor

@@ -21,8 +21,18 @@ struct ProductFormState {
             return
         }
 
-        draft.name = product.name
-        draft.type = product.type
+        draft = ProductDraft(
+            name: product.name,
+            type: product.type,
+            priceYen: product.priceYen.map { String($0) } ?? "",
+            calories: Self.decimal(product.calories),
+            protein: Self.decimal(product.protein),
+            fat: Self.decimal(product.fat),
+            sugar: Self.decimal(product.sugar),
+            carbohydrates: Self.decimal(product.carbohydrates),
+            nutrientBasisAmount: Self.decimal(product.nutrientBasisAmount),
+            nutrientBasisUnit: product.nutrientBasisUnit ?? ""
+        )
     }
 
     var isEditing: Bool {
@@ -58,21 +68,9 @@ struct ProductFormState {
             return .failure(.productNotInContext)
         }
 
-        // 入力欄のない情報は保存直前の値を引き継ぎ、基本情報の編集で消さない。
-        let values = ProductDraft(
-            name: draft.name,
-            type: draft.type,
-            priceYen: product.priceYen.map { String($0) } ?? "",
-            calories: Self.decimal(product.calories),
-            protein: Self.decimal(product.protein),
-            fat: Self.decimal(product.fat),
-            sugar: Self.decimal(product.sugar),
-            carbohydrates: Self.decimal(product.carbohydrates),
-            nutrientBasisAmount: Self.decimal(product.nutrientBasisAmount),
-            nutrientBasisUnit: product.nutrientBasisUnit ?? ""
-        )
+        // 画像の入力欄はないため、保存直前の画像を引き継ぐ。
         let productID = product.id
-        return actions.update(product, from: values, image: product.image).map { productID }
+        return actions.update(product, from: draft, image: product.image).map { productID }
     }
 
     private static func decimal(_ value: Int64?) -> String {
@@ -102,8 +100,31 @@ struct ProductFormState {
             return "名前を入力してください。"
         case .type:
             return "種類を入力してください。"
-        default:
-            return "入力内容を確認してください。"
+        case .nutrientBasisUnit:
+            return "栄養素を入力した場合は、基準単位を入力してください。"
+        case .priceYen:
+            if validation.reason == .outOfRange {
+                return "価格は9223372036854775807円以下で入力してください。"
+            }
+
+            return "価格は0以上の半角整数で入力してください。小数・符号・桁区切りは使えません。"
+        case .nutrientBasisAmount:
+            switch validation.reason {
+            case .required:
+                return "栄養素を入力した場合は、基準量を入力してください。"
+            case .mustBePositive:
+                return "基準量は0より大きい値を入力してください。"
+            case .invalidFormat:
+                return "基準量は0より大きい半角数値を、小数点以下2桁までで入力してください。符号は使えません。"
+            case .outOfRange:
+                return "基準量は92233720368547758.07以下で入力してください。"
+            }
+        case .calories, .protein, .fat, .sugar, .carbohydrates:
+            if validation.reason == .outOfRange {
+                return "栄養値は92233720368547758.07以下で入力してください。"
+            }
+
+            return "栄養値は0以上の半角数値を、小数点以下2桁までで入力してください。符号・桁区切りは使えません。"
         }
     }
 
@@ -113,13 +134,8 @@ struct ProductFormState {
         }
 
         switch error {
-        case .validation(let validation):
-            switch validation.field {
-            case .name, .type:
-                return nil
-            default:
-                return "登録済みの価格・栄養素の内容を確認できないため、商品を保存できませんでした。入力内容は保持されています。"
-            }
+        case .validation:
+            return nil
         case .pendingChanges:
             return "ほかの変更が保存されていません。変更が保存されてから、もう一度「保存」を押してください。"
         case .persistence(let underlying):
@@ -176,6 +192,8 @@ struct ProductFormView: View {
                 Text("名前と種類は必須です。")
             }
 
+            ProductExtraFieldsView(draft: $state.draft, validationMessage: state.validationMessage)
+
             if let message = state.saveErrorMessage {
                 Section {
                     Text(message)
@@ -185,6 +203,7 @@ struct ProductFormView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle(state.isEditing ? "商品編集" : "商品登録")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
