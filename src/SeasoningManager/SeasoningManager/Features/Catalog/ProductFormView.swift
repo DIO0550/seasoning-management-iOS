@@ -1,4 +1,5 @@
 import Foundation
+import PhotosUI
 import SwiftData
 import SwiftUI
 
@@ -6,6 +7,7 @@ import SwiftUI
 @MainActor
 struct ProductFormState {
     var draft = ProductDraft()
+    var photo = ProductPhotoState()
     private(set) var error: ProductActions.ActionError?
     private(set) var savedProductID: UUID?
     private let product: Product?
@@ -39,6 +41,18 @@ struct ProductFormState {
         product != nil
     }
 
+    var image: Data? {
+        guard let product else {
+            return photo.image(original: nil)
+        }
+
+        guard !product.isDeleted, product.modelContext != nil else {
+            return photo.image(original: nil)
+        }
+
+        return photo.image(original: product.image)
+    }
+
     /// 保存成功後は完了状態とし、別の登録・編集には新しいフォーム状態を使う。
     mutating func save(
         using actions: ProductActions, onSave: @MainActor (UUID) -> Void
@@ -61,16 +75,16 @@ struct ProductFormState {
 
     private func persist(using actions: ProductActions) -> Result<UUID, ProductActions.ActionError> {
         guard let product else {
-            return actions.create(from: draft).map { $0.id }
+            return actions.create(from: draft, image: image).map { $0.id }
         }
 
         guard !product.isDeleted, product.modelContext != nil else {
             return .failure(.productNotInContext)
         }
 
-        // 画像の入力欄はないため、保存直前の画像を引き継ぐ。
+        // 写真を操作していないときだけ、保存直前の画像を引き継ぐ。
         let productID = product.id
-        return actions.update(product, from: draft, image: product.image).map { productID }
+        return actions.update(product, from: draft, image: image).map { productID }
     }
 
     private static func decimal(_ value: Int64?) -> String {
@@ -152,6 +166,9 @@ struct ProductFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var state: ProductFormState
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var photoTask: Task<Void, Never>?
+    @State private var photoLoader = ProductPhotoLoader()
 
     private let onSave: @MainActor (UUID) -> Void
 
@@ -192,6 +209,11 @@ struct ProductFormView: View {
                 Text("名前と種類は必須です。")
             }
 
+            ProductPhotoPicker(
+                selection: $selectedPhoto, imageData: state.image, isLoading: state.photo.isLoading,
+                error: state.photo.error, loader: photoLoader, remove: removePhoto
+            )
+
             ProductExtraFieldsView(draft: $state.draft, validationMessage: state.validationMessage)
 
             if let message = state.saveErrorMessage {
@@ -203,12 +225,21 @@ struct ProductFormView: View {
                 }
             }
         }
+        .onChange(of: selectedPhoto) { _, item in
+            guard let item else {
+                return
+            }
+
+            loadPhoto(item)
+        }
+        .onDisappear(perform: cancelPhotoLoading)
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle(state.isEditing ? "商品編集" : "商品登録")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("キャンセル") {
+                    cancelPhotoLoading()
                     dismiss()
                 }
                 .accessibilityIdentifier("product-form-cancel")
@@ -220,9 +251,41 @@ struct ProductFormView: View {
                         dismiss()
                     }
                 }
-                .disabled(state.savedProductID != nil)
+                .disabled(state.savedProductID != nil || state.photo.isLoading)
                 .accessibilityIdentifier("product-form-save")
             }
         }
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem) {
+        photoTask?.cancel()
+        let requestID = state.photo.beginLoading()
+        // 同じ写真を選び直した場合も、もう一度読み込めるようにする。
+        selectedPhoto = nil
+
+        photoTask = Task {
+            let result = await photoLoader.load {
+                try await item.loadTransferable(type: Data.self)
+            }
+
+            guard !Task.isCancelled, state.photo.requestID == requestID else {
+                return
+            }
+
+            state.photo.complete(result, request: requestID)
+            photoTask = nil
+        }
+    }
+
+    private func removePhoto() {
+        cancelPhotoLoading()
+        state.photo.remove()
+    }
+
+    private func cancelPhotoLoading() {
+        photoTask?.cancel()
+        photoTask = nil
+        selectedPhoto = nil
+        state.photo.cancelLoading()
     }
 }

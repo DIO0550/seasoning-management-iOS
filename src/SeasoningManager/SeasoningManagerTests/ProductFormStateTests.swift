@@ -617,6 +617,131 @@ struct ProductFormStateTests {
         try expectOptionalInputRejected(input, field: field, reason: reason)
     }
 
+    @Test func selectedPhotoIsSavedWithNewProductOnlyAfterSaving() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        var state = ProductFormState()
+        state.draft = ProductDraft(name: "写真付き商品", type: "しょうゆ")
+        let image = try ProductPhotoPickerTests.imageData()
+        let request = state.photo.beginLoading()
+        state.photo.complete(.success(image), request: request)
+
+        #expect(!context.hasChanges)
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Product>()) == 0)
+        #expect(state.image == image)
+
+        let id = try state.save(using: ProductActions(context: context)) { _ in }.get()
+
+        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        #expect(saved.id == id)
+        #expect(saved.image == image)
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Item>()) == 0)
+        #expect(ProductFormState(product: saved).image == image)
+    }
+
+    @Test(arguments: [false, true])
+    func photoReplacementOrRemovalDoesNotChangeProductUntilSave(_ remove: Bool) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        var state = ProductFormState(product: product)
+        let image = try ProductPhotoPickerTests.imageData()
+        let request = state.photo.beginLoading()
+        state.photo.complete(.success(image), request: request)
+        if remove {
+            state.photo.remove()
+        }
+        let expected = remove ? nil : image
+
+        #expect(state.image == expected)
+        #expect(product.image == Data([1, 2, 3]))
+        #expect(!context.hasChanges)
+        let before = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        #expect(before.image == Data([1, 2, 3]))
+
+        try state.save(using: ProductActions(context: context)) { _ in }.get()
+
+        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        #expect(saved.image == expected)
+        #expect(saved.id == product.id)
+        #expect(ProductFormState(product: saved).image == expected)
+    }
+
+    @Test func photoReadFailurePreservesAllDraftFieldsAndSavedImage() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        var state = ProductFormState(product: product)
+        state.draft = ProductDraft(
+            name: " 編集中 ", type: " みそ ", priceYen: "398", calories: "10.25", protein: "2.5", fat: "1.23",
+            sugar: "4.56", carbohydrates: "8.5", nutrientBasisAmount: "100", nutrientBasisUnit: "g"
+        )
+        let request = state.photo.beginLoading()
+
+        state.photo.complete(.failure(.loading(StoreError.unavailable)), request: request)
+
+        #expect(state.draft.name == " 編集中 ")
+        #expect(state.draft.type == " みそ ")
+        #expect(state.draft.priceYen == "398")
+        #expect(state.draft.calories == "10.25")
+        #expect(state.draft.protein == "2.5")
+        #expect(state.draft.fat == "1.23")
+        #expect(state.draft.sugar == "4.56")
+        #expect(state.draft.carbohydrates == "8.5")
+        #expect(state.draft.nutrientBasisAmount == "100")
+        #expect(state.draft.nutrientBasisUnit == "g")
+        #expect(state.image == Data([1, 2, 3]))
+        #expect(state.photo.error?.message != nil)
+        #expect(!context.hasChanges)
+        #expect(state.savedProductID == nil)
+        expectOptionalValues(product)
+
+        try state.save(using: ProductActions(context: context)) { _ in }.get()
+
+        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        #expect(saved.image == Data([1, 2, 3]))
+        #expect(saved.name == "編集中")
+    }
+
+    @Test(arguments: [false, true])
+    func photoSaveFailureKeepsChangeForRetry(_ remove: Bool) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try makeSavedProduct(in: context)
+        var state = ProductFormState(product: product)
+        state.draft.name = " 編集後 "
+        let image = try ProductPhotoPickerTests.imageData()
+        let request = state.photo.beginLoading()
+        state.photo.complete(.success(image), request: request)
+        if remove {
+            state.photo.remove()
+        }
+        let expected = remove ? nil : image
+        let failing = ProductActions(context: context) { _ in .failure(StoreError.unavailable) }
+
+        let result = state.save(using: failing) { _ in Issue.record("保存失敗を成功として通知した") }
+
+        guard case .failure(.persistence) = result else {
+            Issue.record("保存失敗が返されなかった")
+            return
+        }
+        #expect(state.savedProductID == nil)
+        #expect(state.draft.name == " 編集後 ")
+        #expect(state.image == expected)
+        #expect(product.image == Data([1, 2, 3]))
+        #expect(!context.hasChanges)
+        let before = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        #expect(before.image == Data([1, 2, 3]))
+
+        try state.save(using: ProductActions(context: context)) { _ in }.get()
+
+        let saved = try #require(ModelContext(container).fetch(FetchDescriptor<Product>()).first)
+        #expect(saved.id == product.id)
+        #expect(saved.name == "編集後")
+        #expect(saved.image == expected)
+        #expect(state.error == nil)
+    }
+
     private func expectOptionalInputRejected(
         _ input: String, field: ProductDraft.Field, reason: ProductDraft.FailureReason
     ) throws {
