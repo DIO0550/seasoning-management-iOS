@@ -117,6 +117,47 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
+    func testProductDeletionRequiresConfirmationAndSurvivesRelaunch() throws {
+        let app = makeApplication()
+        app.launch()
+        try registerAndOpenDetail(name: "Delete", type: "Type", in: app)
+
+        let unopened = try detailElement("product-detail-unopened", in: app)
+        XCTAssertEqual(unopened.label, "未開封、0件")
+        let inUse = try detailElement("product-detail-in-use", in: app)
+        XCTAssertEqual(inUse.label, "使用中、0件")
+        let history = try detailElement("product-detail-history", in: app)
+        XCTAssertEqual(history.label, "使い切り履歴、0件")
+        let delete = try detailElement("product-detail-delete", in: app)
+        XCTAssertTrue(delete.isEnabled)
+        delete.tap()
+
+        let confirm = app.buttons["product-detail-confirm-delete"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["「Delete」の商品情報と画像を削除します。この操作は取り消せません。"].exists)
+        app.buttons["キャンセル"].tap()
+        XCTAssertTrue(app.navigationBars["商品詳細"].exists)
+        app.navigationBars["商品詳細"].buttons["商品一覧"].tap()
+        let row = productRow(name: "Delete", type: "Type", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+
+        try detailElement("product-detail-delete", in: app).tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["商品はまだありません"].waitForExistence(timeout: 5))
+        XCTAssertFalse(row.exists)
+        app.terminate()
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["商品はまだありません"].waitForExistence(timeout: 5))
+        XCTAssertFalse(productRow(name: "Delete", type: "Type", in: app).exists)
+    }
+
+    @MainActor
     func testProductRegistrationShowsRequiredErrorAndPreservesInput() throws {
         let app = makeApplication()
         app.launch()
@@ -324,6 +365,22 @@ final class SeasoningManagerUITests: XCTestCase {
 
     private enum FormInputFailure: Error {
         case unavailable
+    }
+
+    @MainActor
+    private func detailElement(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
+        let element = app.descendants(matching: .any)[identifier]
+        for _ in 0..<24 {
+            let safeFrame = try formInteractionFrame(in: app)
+            if element.exists, safeFrame.contains(element.frame), element.isHittable {
+                return element
+            }
+
+            try scrollForm(towardTop: false, in: app)
+        }
+
+        XCTFail("商品詳細の項目を操作できない: \(identifier)")
+        throw FormInputFailure.unavailable
     }
 
     @MainActor
