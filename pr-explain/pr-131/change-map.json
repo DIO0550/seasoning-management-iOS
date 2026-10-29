@@ -1,0 +1,120 @@
+{
+  "version": 2,
+  "pr": 131,
+  "headBranch": "feat/issue-50-product-deletion",
+  "baseBranch": "master",
+  "mergeBase": "f4a245b88278077d94412b3cf33c197111183f88",
+  "head": "d85c718a332f2f82084eaf318d6c761728e5f379",
+  "groups": [
+    {
+      "label": "単体テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 71,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 57,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "アプリ(その他)",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 116,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+        "name": "deletionCountsIncludeEveryStateAndExcludeOtherProducts"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+        "name": "historyOrUnknownStateAlonePreventsDeletion"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+        "name": "productWithoutItemsCanBeDeleted"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testProductDeletionRequiresConfirmationAndSurvivesRelaunch"
+      }
+    ],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "d85c718a332f2f82084eaf318d6c761728e5f379",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-10-29T23:53:35+09:00",
+      "subject": "feat: 商品詳細に削除確認と個体件数を表示する",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 116,
+          "deletions": 0,
+          "patch": "@@ -4,10 +4,16 @@ import SwiftUI\n import UIKit\n \n struct ProductDetailView: View {\n+    @Environment(\\.modelContext) private var modelContext\n+    @Environment(\\.dismiss) private var dismiss\n     @Query private var products: [Product]\n+    @Query private var items: [Item]\n+    @State private var showsDeletionConfirmation = false\n+    @State private var deletionError: String?\n \n     init(productID: UUID) {\n         _products = Query(Self.descriptor(for: productID))\n+        _items = Query(Self.itemDescriptor(for: productID))\n     }\n \n     static func descriptor(for productID: UUID) -> FetchDescriptor<Product> {\n@@ -16,6 +22,10 @@ struct ProductDetailView: View {\n         return descriptor\n     }\n \n+    static func itemDescriptor(for productID: UUID) -> FetchDescriptor<Item> {\n+        FetchDescriptor<Item>(predicate: #Predicate { $0.product?.id == productID })\n+    }\n+\n     var body: some View {\n         Group {\n             if let error = _products.fetchError {\n@@ -26,6 +36,18 @@ struct ProductDetailView: View {\n                 )\n             } else if let product = products.first, let detail = ProductDetailContent(product: product) {\n                 details(detail)\n+                    .confirmationDialog(\n+                        \"商品を削除しますか？\", isPresented: $showsDeletionConfirmation, titleVisibility: .visible\n+                    ) {\n+                        Button(\"削除する\", role: .destructive) {\n+                            deleteProduct()\n+                        }\n+                        .accessibilityIdentifier(\"product-detail-confirm-delete\")\n+\n+                        Button(\"キャンセル\", role: .cancel) {}\n+                    } message: {\n+                        Text(\"「\\(detail.name)」の商品情報と画像を削除します。この操作は取り消せません。\")\n+                    }\n                     .toolbar {\n                         ToolbarItem(placement: .topBarTrailing) {\n                             NavigationLink(\"編集\") {\n@@ -81,6 +103,100 @@ struct ProductDetailView: View {\n                 ProductDetailRow(label: \"糖質\", value: detail.sugar)\n                 ProductDetailRow(label: \"炭水化物\", value: detail.carbohydrates)\n             }\n+\n+            deletionSection\n+        }\n+    }\n+\n+    private var deletionSection: some View {\n+        let counts = ProductDeletionCounts(items: items)\n+\n+        return Section(\"個体と削除\") {\n+            if let error = _items.fetchError {\n+                Text(\"個体の件数を読み込めないため削除できません。\\(error.localizedDescription) 一覧に戻って、もう一度商品を選んでください。\")\n+            } else {\n+                ProductDetailRow(label: \"未開封\", value: \"\\(counts.unopened)件\")\n+                    .accessibilityIdentifier(\"product-detail-unopened\")\n+                ProductDetailRow(label: \"使用中\", value: \"\\(counts.inUse)件\")\n+                    .accessibilityIdentifier(\"product-detail-in-use\")\n+                ProductDetailRow(label: \"使い切り履歴\", value: \"\\(counts.history)件\")\n+                    .accessibilityIdentifier(\"product-detail-history\")\n+\n+                if counts.unknown > 0 {\n+                    ProductDetailRow(label: \"不明な状態\", value: \"\\(counts.unknown)件\")\n+                }\n+\n+                if !counts.canDelete {\n+                    Text(\"個体が紐づいているため削除できません。使い切り履歴や不明な状態の個体も削除不可の対象です。\")\n+                        .accessibilityIdentifier(\"product-detail-deletion-reason\")\n+                }\n+            }\n+\n+            if let deletionError {\n+                Text(deletionError)\n+                    .foregroundStyle(.red)\n+                    .accessibilityIdentifier(\"product-detail-deletion-error\")\n+            }\n+\n+            Button(\"商品を削除\", role: .destructive) {\n+                deletionError = nil\n+                showsDeletionConfirmation = true\n+            }\n+            .disabled(_items.fetchError != nil || !counts.canDelete)\n+            .accessibilityIdentifier(\"product-detail-delete\")\n+        }\n+    }\n+\n+    private func deleteProduct() {\n+        guard let product = products.first, !product.isDeleted, product.modelContext === modelContext else {\n+            deletionError = \"商品が見つかりません。一覧に戻って商品を選び直してください。\"\n+            return\n+        }\n+\n+        // 確認中に個体が増えていても、保存境界で最新の件数を再検査する。\n+        switch ProductActions(context: modelContext).delete(product, confirmed: true) {\n+        case .success:\n+            dismiss()\n+        case .failure(let error):\n+            switch error {\n+            case .productHasItems(let count):\n+                deletionError = \"個体が\\(count)件紐づいているため削除できません。一覧に戻って最新の件数を確認してください。\"\n+            case .pendingChanges:\n+                deletionError = \"ほかの変更が保存されていません。保存が完了してから、もう一度「商品を削除」を押してください。\"\n+            case .productNotInContext:\n+                deletionError = \"商品が見つかりません。一覧に戻って商品を選び直してください。\"\n+            case .persistence(let underlying):\n+                deletionError = \"削除を保存できませんでした。\\(underlying.localizedDescription) もう一度「商品を削除」を押してください。\"\n+            case .deletionNotConfirmed, .validation:\n+                deletionError = \"削除できませんでした。一覧に戻って商品を選び直し、もう一度確認してください。\"\n+            }\n+        }\n+    }\n+}\n+\n+/// 在庫だけでなく履歴と未知の状態も、削除を妨げる個体として数える。\n+struct ProductDeletionCounts {\n+    private(set) var unopened = 0\n+    private(set) var inUse = 0\n+    private(set) var history = 0\n+    private(set) var unknown = 0\n+\n+    var canDelete: Bool {\n+        unopened + inUse + history + unknown == 0\n+    }\n+\n+    init(items: [Item]) {\n+        for item in items {\n+            switch item.status {\n+            case .unopened?:\n+                unopened += 1\n+            case .inUse?:\n+                inUse += 1\n+            case .consumed?:\n+                history += 1\n+            case nil:\n+                unknown += 1\n+            }\n         }\n     }\n }",
+          "patchLines": 148,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 71,
+          "deletions": 0,
+          "patch": "@@ -199,6 +199,77 @@ struct ProductDetailTests {\n         #expect(detail.price == \"398円\")\n     }\n \n+    @Test func productWithoutItemsCanBeDeleted() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        context.insert(product)\n+        try context.save()\n+\n+        let reader = ModelContext(container)\n+        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))\n+        let counts = ProductDeletionCounts(items: items)\n+\n+        #expect(counts.unopened == 0)\n+        #expect(counts.inUse == 0)\n+        #expect(counts.history == 0)\n+        #expect(counts.unknown == 0)\n+        #expect(counts.canDelete)\n+    }\n+\n+    @Test func deletionCountsIncludeEveryStateAndExcludeOtherProducts() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let other = Product(name: \"しょうゆ\", type: \"調味料\")\n+        context.insert(product)\n+        context.insert(other)\n+        let states = [\"unopened\", \"unopened\", \"inUse\", \"consumed\", \"consumed\", \"consumed\", \"future\"]\n+        for state in states {\n+            let item = Item(product: product)\n+            item.statusRawValue = state\n+            context.insert(item)\n+        }\n+        context.insert(Item(product: other))\n+        try context.save()\n+\n+        let reader = ModelContext(container)\n+        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))\n+        let counts = ProductDeletionCounts(items: items)\n+\n+        #expect(items.count == states.count)\n+        #expect(items.allSatisfy { $0.product?.id == product.id })\n+        #expect(counts.unopened == 2)\n+        #expect(counts.inUse == 1)\n+        #expect(counts.history == 3)\n+        #expect(counts.unknown == 1)\n+        #expect(!counts.canDelete)\n+        #expect(!reader.hasChanges)\n+    }\n+\n+    @Test(arguments: [(\"consumed\", 1, 0), (\"future\", 0, 1)])\n+    func historyOrUnknownStateAlonePreventsDeletion(_ state: String, _ history: Int, _ unknown: Int) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        context.insert(product)\n+        let item = Item(product: product)\n+        item.statusRawValue = state\n+        context.insert(item)\n+        try context.save()\n+\n+        let reader = ModelContext(container)\n+        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))\n+        let counts = ProductDeletionCounts(items: items)\n+\n+        #expect(counts.unopened == 0)\n+        #expect(counts.inUse == 0)\n+        #expect(counts.history == history)\n+        #expect(counts.unknown == unknown)\n+        #expect(!counts.canDelete)\n+        #expect(items.first?.statusRawValue == state)\n+    }\n+\n     private func makeContainer() throws -> ModelContainer {\n         let schema = Schema([Product.self, Item.self])\n         let configuration = ModelConfiguration(",
+          "patchLines": 78,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 57,
+          "deletions": 0,
+          "patch": "@@ -116,6 +116,47 @@ final class SeasoningManagerUITests: XCTestCase {\n         XCTAssertTrue(productRow(name: name, type: type, in: app).exists)\n     }\n \n+    @MainActor\n+    func testProductDeletionRequiresConfirmationAndSurvivesRelaunch() throws {\n+        let app = makeApplication()\n+        app.launch()\n+        try registerAndOpenDetail(name: \"Delete\", type: \"Type\", in: app)\n+\n+        let unopened = try detailElement(\"product-detail-unopened\", in: app)\n+        XCTAssertEqual(unopened.label, \"未開封、0件\")\n+        let inUse = try detailElement(\"product-detail-in-use\", in: app)\n+        XCTAssertEqual(inUse.label, \"使用中、0件\")\n+        let history = try detailElement(\"product-detail-history\", in: app)\n+        XCTAssertEqual(history.label, \"使い切り履歴、0件\")\n+        let delete = try detailElement(\"product-detail-delete\", in: app)\n+        XCTAssertTrue(delete.isEnabled)\n+        delete.tap()\n+\n+        let confirm = app.buttons[\"product-detail-confirm-delete\"]\n+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n+        app.buttons[\"キャンセル\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"商品詳細\"].exists)\n+        app.navigationBars[\"商品詳細\"].buttons[\"商品一覧\"].tap()\n+        let row = productRow(name: \"Delete\", type: \"Type\", in: app)\n+        XCTAssertTrue(row.waitForExistence(timeout: 5))\n+        row.tap()\n+\n+        try detailElement(\"product-detail-delete\", in: app).tap()\n+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n+        confirm.tap()\n+\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        XCTAssertFalse(row.exists)\n+        app.terminate()\n+        app.launch()\n+\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        XCTAssertFalse(productRow(name: \"Delete\", type: \"Type\", in: app).exists)\n+    }\n+\n     @MainActor\n     func testProductRegistrationShowsRequiredErrorAndPreservesInput() throws {\n         let app = makeApplication()\n@@ -326,6 +367,22 @@ final class SeasoningManagerUITests: XCTestCase {\n         case unavailable\n     }\n \n+    @MainActor\n+    private func detailElement(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n+        let element = app.descendants(matching: .any)[identifier]\n+        for _ in 0..<24 {\n+            let safeFrame = try formInteractionFrame(in: app)\n+            if element.exists, safeFrame.contains(element.frame), element.isHittable {\n+                return element\n+            }\n+\n+            try scrollForm(towardTop: false, in: app)\n+        }\n+\n+        XCTFail(\"商品詳細の項目を操作できない: \\(identifier)\")\n+        throw FormInputFailure.unavailable\n+    }\n+\n     @MainActor\n     private func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n         let field = app.textFields[identifier]",
+          "patchLines": 71,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
