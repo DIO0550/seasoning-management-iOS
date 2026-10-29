@@ -1,0 +1,456 @@
+{
+  "version": 1,
+  "pr": 131,
+  "sha": "d85c718a332f2f82084eaf318d6c761728e5f379",
+  "issue": 50,
+  "overview": {
+    "title": "個体と履歴を確かめてから商品を削除する",
+    "lead": "商品詳細で状態別の件数と削除できない理由が分かるようにします。0件の場合だけ確認を経て削除し、保存成功後に一覧へ戻ります。",
+    "before": [
+      {
+        "text": "詳細画面には商品情報と編集操作があり、削除を始める操作はなかった。"
+      }
+    ],
+    "after": [
+      {
+        "text": "未開封・使用中・使い切り履歴の件数を表示する。"
+      },
+      {
+        "text": "履歴や未知状態を含む個体がある場合は削除を無効にする。"
+      },
+      {
+        "text": "確認後に既存の保存処理で再検査し、成功時だけ画面を閉じる。",
+        "message": "delete"
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "deletion",
+      "label": "商品削除",
+      "role": "削除できる理由とできない理由を確認した上で商品を削除する。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+      "name": "商品詳細",
+      "role": "個体件数と削除理由を表示し、確認後の削除結果を画面に反映する。",
+      "feature": "deletion",
+      "change": "個体の照会、集計、確認、エラー表示を追加。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "name": "商品保存操作",
+      "role": "全個体の再検査と保存・失敗時の復元を担う既存の境界。",
+      "feature": "deletion"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+      "name": "詳細の単体テスト",
+      "role": "保存済みデータの絞り込みと件数を確認する。",
+      "feature": "deletion"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "画面操作テスト",
+      "role": "確認とキャンセル、削除後の一覧と再起動を確認する。",
+      "feature": "deletion"
+    }
+  ],
+  "messages": [
+    {
+      "id": "delete",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "kind": "cmd",
+      "name": "確認した商品を削除する",
+      "code": "ProductActions(context: modelContext).delete(product, confirmed: true)",
+      "via": "call",
+      "returns": "Result<Void, ActionError>",
+      "status": "added"
+    }
+  ],
+  "flows": [
+    {
+      "id": "confirmed",
+      "label": "確認後の削除",
+      "steps": [
+        "delete"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "d85c718a332f2f82084eaf318d6c761728e5f379",
+      "phase": "core",
+      "role": "詳細画面を既存の削除境界につなぐ",
+      "why": "保存処理には既に個体の再検査とrollbackがあるため、重複実装を避けて画面とテストを追加した。在庫表示の集計は履歴を除くため削除判定には使わない。",
+      "flows": [
+        "confirmed"
+      ],
+      "review": [
+        "履歴と未知状態だけが残った場合も削除できないか。",
+        "キャンセルでは残し、保存成功の場合だけ一覧へ戻るか。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "start": 156,
+          "end": 159,
+          "text": "確認ダイアログの時点で0件でも、保存操作が実行時に再検査する。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "unit",
+      "label": "商品詳細の集計",
+      "file": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift"
+    },
+    {
+      "id": "ui",
+      "label": "商品削除の画面操作",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "empty",
+      "suite": "unit",
+      "name": "productWithoutItemsCanBeDeleted",
+      "techniques": [
+        "boundary"
+      ],
+      "why": "個体0件と未設定を混同せず削除可能と判定する。",
+      "given": "保存済み商品に個体がない",
+      "when": "対象IDで取得して集計",
+      "then": "すべて0件で削除可能",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+        "start": 202,
+        "end": 218,
+        "text": "    @Test func productWithoutItemsCanBeDeleted() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(product)\n        try context.save()\n\n        let reader = ModelContext(container)\n        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))\n        let counts = ProductDeletionCounts(items: items)\n\n        #expect(counts.unopened == 0)\n        #expect(counts.inUse == 0)\n        #expect(counts.history == 0)\n        #expect(counts.unknown == 0)\n        #expect(counts.canDelete)\n    }"
+      },
+      "commit": "d85c718a332f2f82084eaf318d6c761728e5f379"
+    },
+    {
+      "id": "mixed",
+      "suite": "unit",
+      "name": "deletionCountsIncludeEveryStateAndExcludeOtherProducts",
+      "techniques": [
+        "equivalence"
+      ],
+      "why": "同名の別商品や異なる状態の件数を取り違えない。",
+      "given": "2商品と4分類の個体を保存",
+      "when": "別contextで対象商品のみ取得",
+      "then": "未開封2・使用中1・履歴3・未知1、削除不可",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+        "start": 220,
+        "end": 248,
+        "text": "    @Test func deletionCountsIncludeEveryStateAndExcludeOtherProducts() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        let other = Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(product)\n        context.insert(other)\n        let states = [\"unopened\", \"unopened\", \"inUse\", \"consumed\", \"consumed\", \"consumed\", \"future\"]\n        for state in states {\n            let item = Item(product: product)\n            item.statusRawValue = state\n            context.insert(item)\n        }\n        context.insert(Item(product: other))\n        try context.save()\n\n        let reader = ModelContext(container)\n        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))\n        let counts = ProductDeletionCounts(items: items)\n\n        #expect(items.count == states.count)\n        #expect(items.allSatisfy { $0.product?.id == product.id })\n        #expect(counts.unopened == 2)\n        #expect(counts.inUse == 1)\n        #expect(counts.history == 3)\n        #expect(counts.unknown == 1)\n        #expect(!counts.canDelete)\n        #expect(!reader.hasChanges)\n    }"
+      },
+      "commit": "d85c718a332f2f82084eaf318d6c761728e5f379"
+    },
+    {
+      "id": "blocked",
+      "suite": "unit",
+      "name": "historyOrUnknownStateAlonePreventsDeletion",
+      "techniques": [
+        "boundary"
+      ],
+      "why": "在庫が0でも履歴や未知状態があれば削除不可。",
+      "given": "履歴のみ／未知状態のみの個体を保存",
+      "when": "取得して集計",
+      "then": "既知の在庫は0、削除不可、元の状態値を保持",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+        "start": 250,
+        "end": 271,
+        "text": "    @Test(arguments: [(\"consumed\", 1, 0), (\"future\", 0, 1)])\n    func historyOrUnknownStateAlonePreventsDeletion(_ state: String, _ history: Int, _ unknown: Int) throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(product)\n        let item = Item(product: product)\n        item.statusRawValue = state\n        context.insert(item)\n        try context.save()\n\n        let reader = ModelContext(container)\n        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))\n        let counts = ProductDeletionCounts(items: items)\n\n        #expect(counts.unopened == 0)\n        #expect(counts.inUse == 0)\n        #expect(counts.history == history)\n        #expect(counts.unknown == unknown)\n        #expect(!counts.canDelete)\n        #expect(items.first?.statusRawValue == state)\n    }"
+      },
+      "commit": "d85c718a332f2f82084eaf318d6c761728e5f379"
+    },
+    {
+      "id": "confirm-ui",
+      "suite": "ui",
+      "name": "testProductDeletionRequiresConfirmationAndSurvivesRelaunch",
+      "techniques": [
+        "state"
+      ],
+      "why": "キャンセルで保持し、確定後だけ一覧から消える。",
+      "given": "個体0件の商品を登録",
+      "when": "取消後に再度確認して削除し再起動",
+      "then": "取消後は残り、確定後は再起動しても存在しない",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 119,
+        "end": 158,
+        "text": "    @MainActor\n    func testProductDeletionRequiresConfirmationAndSurvivesRelaunch() throws {\n        let app = makeApplication()\n        app.launch()\n        try registerAndOpenDetail(name: \"Delete\", type: \"Type\", in: app)\n\n        let unopened = try detailElement(\"product-detail-unopened\", in: app)\n        XCTAssertEqual(unopened.label, \"未開封、0件\")\n        let inUse = try detailElement(\"product-detail-in-use\", in: app)\n        XCTAssertEqual(inUse.label, \"使用中、0件\")\n        let history = try detailElement(\"product-detail-history\", in: app)\n        XCTAssertEqual(history.label, \"使い切り履歴、0件\")\n        let delete = try detailElement(\"product-detail-delete\", in: app)\n        XCTAssertTrue(delete.isEnabled)\n        delete.tap()\n\n        let confirm = app.buttons[\"product-detail-confirm-delete\"]\n        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n        app.buttons[\"キャンセル\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品詳細\"].exists)\n        app.navigationBars[\"商品詳細\"].buttons[\"商品一覧\"].tap()\n        let row = productRow(name: \"Delete\", type: \"Type\", in: app)\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        row.tap()\n\n        try detailElement(\"product-detail-delete\", in: app).tap()\n        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n        confirm.tap()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(row.exists)\n        app.terminate()\n        app.launch()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(productRow(name: \"Delete\", type: \"Type\", in: app).exists)\n    }"
+      },
+      "commit": "d85c718a332f2f82084eaf318d6c761728e5f379",
+      "covers": [
+        "delete"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "削除する前に件数と理由が分かる",
+    "lead": "使い切った個体も履歴として商品に紐づいているため、在庫がなくても削除できない場合があります。",
+    "changed": {
+      "before": [
+        {
+          "text": "商品詳細から削除を開始する操作がない。"
+        }
+      ],
+      "after": [
+        {
+          "text": "状態別の件数を確認し、0件の場合に確認して削除できる。"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "履歴や不明な状態が残っている",
+        "before": [],
+        "after": [
+          {
+            "text": "件数と削除できない理由を表示し、削除ボタンを無効にする。"
+          }
+        ],
+        "tests": [
+          "mixed",
+          "blocked"
+        ]
+      },
+      {
+        "label": "確認をキャンセルする",
+        "before": [],
+        "after": [
+          {
+            "text": "商品を残したまま詳細画面へ戻る。"
+          }
+        ],
+        "tests": [
+          "confirm-ui"
+        ]
+      },
+      {
+        "label": "削除を確定する",
+        "before": [],
+        "after": [
+          {
+            "text": "保存できたら一覧へ戻り、商品が消える。再起動しても復活しない。"
+          }
+        ],
+        "tests": [
+          "confirm-ui"
+        ]
+      },
+      {
+        "label": "個体の取得や削除の保存が失敗する",
+        "before": [],
+        "after": [
+          {
+            "text": "取得失敗を0件扱いせず削除を無効にする。保存失敗では詳細に理由と再試行案内を表示する。"
+          }
+        ],
+        "text": "エラーの画面表示自体は今回のUI自動テストでは未確認。保存時の復元は既存の単体テストで検証する。"
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "query",
+      "kind": "language",
+      "category": "SwiftUIと保存",
+      "label": "@Queryと取得条件",
+      "gist": "保存データを画面の入力として読み、対象商品の個体だけを集計します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftDataはモデルを保存・取得する仕組みです。SwiftUIの `@Query` は、その取得結果を画面で使うためのプロパティラッパーです。`@` の付いた宣言は、単なる配列変数に加えてフレームワークの管理を受けることを表します。結果の変化は画面更新につながるため、件数を別の状態へコピーして保持する必要がありません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+            "start": 7,
+            "end": 27,
+            "text": "    @Environment(\\.modelContext) private var modelContext\n    @Environment(\\.dismiss) private var dismiss\n    @Query private var products: [Product]\n    @Query private var items: [Item]\n    @State private var showsDeletionConfirmation = false\n    @State private var deletionError: String?\n\n    init(productID: UUID) {\n        _products = Query(Self.descriptor(for: productID))\n        _items = Query(Self.itemDescriptor(for: productID))\n    }\n\n    static func descriptor(for productID: UUID) -> FetchDescriptor<Product> {\n        var descriptor = FetchDescriptor<Product>(predicate: #Predicate { $0.id == productID })\n        descriptor.includePendingChanges = false\n        return descriptor\n    }\n\n    static func itemDescriptor(for productID: UUID) -> FetchDescriptor<Item> {\n        FetchDescriptor<Item>(predicate: #Predicate { $0.product?.id == productID })\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`items` は個体の配列、`_items` はその配列を管理するラッパーです。初期化時に取得条件を渡すので、商品IDごとに別の結果を得られます。`FetchDescriptor<Item>` の山括弧は取得対象の型を指定し、`#Predicate` は条件式を取得用の表現に変換します。`$0` は判定中の個体です。`product?.id` の `?` は商品参照がない場合に無理に属性を読まないための記法です。"
+        },
+        {
+          "kind": "text",
+          "text": "取得に失敗した空配列を「個体0件」と解釈すると誤った削除案内になります。この変更では `_items.fetchError` を先に表示し、削除操作も無効にします。画面の件数だけを最終判断にはせず、削除直前に保存境界でも再照会します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "lineRange": {
+            "start": 7,
+            "end": 27
+          },
+          "text": "@Queryと取得条件"
+        }
+      ]
+    },
+    {
+      "id": "state",
+      "kind": "language",
+      "category": "SwiftUIと保存",
+      "label": "@State・Binding・確認ダイアログ",
+      "gist": "画面が所有する一時状態を、確認ダイアログと共有します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftUIのViewは表示の組み立てを記述する値です。表示の作り直しをまたいで保持する一時的な値には `@State` を使います。今回は確認画面を表示しているかというBoolと、削除に失敗したときの文言を保持します。保存済み商品そのものの代わりには使いません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+            "start": 7,
+            "end": 16,
+            "text": "    @Environment(\\.modelContext) private var modelContext\n    @Environment(\\.dismiss) private var dismiss\n    @Query private var products: [Product]\n    @Query private var items: [Item]\n    @State private var showsDeletionConfirmation = false\n    @State private var deletionError: String?\n\n    init(productID: UUID) {\n        _products = Query(Self.descriptor(for: productID))\n        _items = Query(Self.itemDescriptor(for: productID))"
+          }
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+            "start": 37,
+            "end": 50,
+            "text": "            } else if let product = products.first, let detail = ProductDetailContent(product: product) {\n                details(detail)\n                    .confirmationDialog(\n                        \"商品を削除しますか？\", isPresented: $showsDeletionConfirmation, titleVisibility: .visible\n                    ) {\n                        Button(\"削除する\", role: .destructive) {\n                            deleteProduct()\n                        }\n                        .accessibilityIdentifier(\"product-detail-confirm-delete\")\n\n                        Button(\"キャンセル\", role: .cancel) {}\n                    } message: {\n                        Text(\"「\\(detail.name)」の商品情報と画像を削除します。この操作は取り消せません。\")\n                    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`$showsDeletionConfirmation` はBindingという読み書きの窓口です。値をコピーして渡すだけでなく、ダイアログが閉じる際の変更も元の状態へ伝えられます。`confirmationDialog` の最初のクロージャはボタンを、`message` のクロージャは説明文を組み立てます。末尾に処理を書くこの構文は、関数へクロージャを渡すSwiftの書き方です。"
+        },
+        {
+          "kind": "text",
+          "text": "`role: .destructive` は削除操作であること、`.cancel` はキャンセルであることを標準UIへ伝えます。これだけでデータが削除されるわけではありません。実際の削除関数を呼ぶのは「削除する」のクロージャだけで、キャンセルの処理は空です。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "lineRange": {
+            "start": 37,
+            "end": 50
+          },
+          "text": "@State・Binding・確認ダイアログ"
+        }
+      ]
+    },
+    {
+      "id": "result",
+      "kind": "language",
+      "category": "SwiftUIと保存",
+      "label": "Resultで成功と失敗を分ける",
+      "gist": "画面を閉じてよいかを、保存操作の結果で決めます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "Swiftの `Result<Success, Failure>` は、成功の値か失敗の値のどちらかを持つenumです。今回の成功型は `Void` で、返すデータがなくても保存が成功したことを表せます。失敗型には原因別のケースがあり、失敗を単なるBoolへ潰さず表示に使えます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+            "start": 150,
+            "end": 173,
+            "text": "    private func deleteProduct() {\n        guard let product = products.first, !product.isDeleted, product.modelContext === modelContext else {\n            deletionError = \"商品が見つかりません。一覧に戻って商品を選び直してください。\"\n            return\n        }\n\n        // 確認中に個体が増えていても、保存境界で最新の件数を再検査する。\n        switch ProductActions(context: modelContext).delete(product, confirmed: true) {\n        case .success:\n            dismiss()\n        case .failure(let error):\n            switch error {\n            case .productHasItems(let count):\n                deletionError = \"個体が\\(count)件紐づいているため削除できません。一覧に戻って最新の件数を確認してください。\"\n            case .pendingChanges:\n                deletionError = \"ほかの変更が保存されていません。保存が完了してから、もう一度「商品を削除」を押してください。\"\n            case .productNotInContext:\n                deletionError = \"商品が見つかりません。一覧に戻って商品を選び直してください。\"\n            case .persistence(let underlying):\n                deletionError = \"削除を保存できませんでした。\\(underlying.localizedDescription) もう一度「商品を削除」を押してください。\"\n            case .deletionNotConfirmed, .validation:\n                deletionError = \"削除できませんでした。一覧に戻って商品を選び直し、もう一度確認してください。\"\n            }\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`guard` は処理を続けるための前提を確かめ、満たさなければ早期returnします。`===` は値の一致ではなく同じオブジェクトかを比較するため、ここでは商品が画面と同じ保存コンテキストに属していることを確認します。続く `switch` はResultを分解し、`.success` のときだけ `dismiss()` を呼びます。"
+        },
+        {
+          "kind": "text",
+          "text": "`case .failure(let error)` の `let` は失敗の中身を取り出す記法です。さらにエラーの種類で文言を分けます。保存失敗の元のエラーは `underlying` へ取り出して理由を示します。`dismiss` は `@Environment` で画面の環境から受け取った閉じる操作で、データ削除のAPIではありません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "lineRange": {
+            "start": 150,
+            "end": 173
+          },
+          "text": "Resultで成功と失敗を分ける"
+        }
+      ]
+    },
+    {
+      "id": "counts",
+      "kind": "codebase",
+      "category": "商品削除",
+      "label": "在庫と削除可否を分ける",
+      "gist": "使い切り履歴と未知の状態も、削除を妨げる個体として数えます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "一覧で使う在庫数は未開封と使用中だけを数えます。しかし削除の条件は「紐づく個体が一つもないこと」なので、同じ集計では履歴だけが残った商品を誤って削除可能と案内してしまいます。詳細画面には削除用の集計値を置きました。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+            "start": 177,
+            "end": 201,
+            "text": "/// 在庫だけでなく履歴と未知の状態も、削除を妨げる個体として数える。\nstruct ProductDeletionCounts {\n    private(set) var unopened = 0\n    private(set) var inUse = 0\n    private(set) var history = 0\n    private(set) var unknown = 0\n\n    var canDelete: Bool {\n        unopened + inUse + history + unknown == 0\n    }\n\n    init(items: [Item]) {\n        for item in items {\n            switch item.status {\n            case .unopened?:\n                unopened += 1\n            case .inUse?:\n                inUse += 1\n            case .consumed?:\n                history += 1\n            case nil:\n                unknown += 1\n            }\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`private(set)` は外から読むことを許しながら、書き換えを型の内部に限る指定です。`canDelete` は保存した別のBoolではなく、件数から都度求める計算プロパティです。`case .unopened?` はOptionalに値が入っていて、その値が未開封というパターンを表します。`nil` は未知の保存値を別枠で数え、未開封や0件へ補完しません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+            "start": 111,
+            "end": 146,
+            "text": "    private var deletionSection: some View {\n        let counts = ProductDeletionCounts(items: items)\n\n        return Section(\"個体と削除\") {\n            if let error = _items.fetchError {\n                Text(\"個体の件数を読み込めないため削除できません。\\(error.localizedDescription) 一覧に戻って、もう一度商品を選んでください。\")\n            } else {\n                ProductDetailRow(label: \"未開封\", value: \"\\(counts.unopened)件\")\n                    .accessibilityIdentifier(\"product-detail-unopened\")\n                ProductDetailRow(label: \"使用中\", value: \"\\(counts.inUse)件\")\n                    .accessibilityIdentifier(\"product-detail-in-use\")\n                ProductDetailRow(label: \"使い切り履歴\", value: \"\\(counts.history)件\")\n                    .accessibilityIdentifier(\"product-detail-history\")\n\n                if counts.unknown > 0 {\n                    ProductDetailRow(label: \"不明な状態\", value: \"\\(counts.unknown)件\")\n                }\n\n                if !counts.canDelete {\n                    Text(\"個体が紐づいているため削除できません。使い切り履歴や不明な状態の個体も削除不可の対象です。\")\n                        .accessibilityIdentifier(\"product-detail-deletion-reason\")\n                }\n            }\n\n            if let deletionError {\n                Text(deletionError)\n                    .foregroundStyle(.red)\n                    .accessibilityIdentifier(\"product-detail-deletion-error\")\n            }\n\n            Button(\"商品を削除\", role: .destructive) {\n                deletionError = nil\n                showsDeletionConfirmation = true\n            }\n            .disabled(_items.fetchError != nil || !counts.canDelete)\n            .accessibilityIdentifier(\"product-detail-delete\")"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "取得が成功したときだけ件数を示し、1件以上あれば理由を表示します。画面は利用者への案内を担当し、最終的な削除制約と保存失敗時の復元は既存の保存操作に任せます。モデルの保存形式やCloudKit同期の仕組みは、この変更では追加していません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "lineRange": {
+            "start": 177,
+            "end": 201
+          },
+          "text": "在庫と削除可否を分ける"
+        }
+      ]
+    }
+  ]
+}
