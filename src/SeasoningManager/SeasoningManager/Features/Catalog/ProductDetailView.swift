@@ -36,15 +36,14 @@ struct ProductDetailView: View {
                 )
             } else if let product = products.first, let detail = ProductDetailContent(product: product) {
                 details(detail)
-                    .confirmationDialog(
-                        "商品を削除しますか？", isPresented: $showsDeletionConfirmation, titleVisibility: .visible
-                    ) {
+                    .alert("商品を削除しますか？", isPresented: $showsDeletionConfirmation) {
                         Button("削除する", role: .destructive) {
                             deleteProduct()
                         }
                         .accessibilityIdentifier("product-detail-confirm-delete")
 
                         Button("キャンセル", role: .cancel) {}
+                            .accessibilityIdentifier("product-detail-cancel-delete")
                     } message: {
                         Text("「\(detail.name)」の商品情報と画像を削除します。この操作は取り消せません。")
                     }

@@ -132,10 +132,15 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(delete.isEnabled)
         delete.tap()
 
-        let confirm = app.buttons["product-detail-confirm-delete"]
+        let confirmation = app.alerts["商品を削除しますか？"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        let confirm = confirmation.buttons["product-detail-confirm-delete"]
+        let cancel = confirmation.buttons["product-detail-cancel-delete"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["「Delete」の商品情報と画像を削除します。この操作は取り消せません。"].exists)
-        app.buttons["キャンセル"].tap()
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.staticTexts["「Delete」の商品情報と画像を削除します。この操作は取り消せません。"].exists)
+        cancel.tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.navigationBars["商品詳細"].exists)
         app.navigationBars["商品詳細"].buttons["商品一覧"].tap()
         let row = productRow(name: "Delete", type: "Type", in: app)
@@ -143,7 +148,9 @@ final class SeasoningManagerUITests: XCTestCase {
         row.tap()
 
         try detailElement("product-detail-delete", in: app).tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
         confirm.tap()
 
         XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
@@ -536,10 +543,19 @@ final class SeasoningManagerUITests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value IN %@", expected as NSArray), object: field
         )
-        guard XCTWaiter.wait(for: [expectation], timeout: 5) == .completed else {
-            XCTFail("入力値が反映されない: \(field.identifier)、期待: \(value)、実際: \(String(describing: field.value))")
-            throw FormInputFailure.unavailable
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        if result == .completed {
+            return
         }
+
+        // タイムアウト直前の反映を、診断にも使う同じスナップショットで最後に確認する。
+        let actual = field.value as? String
+        if result == .timedOut, let actual, expected.contains(actual) {
+            return
+        }
+
+        XCTFail("入力値が反映されない: \(field.identifier)、期待: \(value)、実際: \(String(describing: actual))")
+        throw FormInputFailure.unavailable
     }
 
     @MainActor
