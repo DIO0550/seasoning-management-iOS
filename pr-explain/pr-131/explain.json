@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 131,
-  "sha": "1d7c36457c11773c50b1baf519b123e9a03618a7",
+  "sha": "d2b0ea8ffec1f232ba14de0842b1c174499f1b0d",
   "issue": 50,
   "overview": {
     "title": "個体と履歴を確かめてから商品を削除する",
@@ -119,6 +119,23 @@
           "text": "単体の上限は30分を維持し、UIのみ45分。テストの省略や失敗の許容は行わない。"
         }
       ]
+    },
+    {
+      "sha": "d2b0ea8ffec1f232ba14de0842b1c174499f1b0d",
+      "phase": "revise",
+      "role": "確認ボタンの親子要素の重複に対応する",
+      "why": "直前のCIでは単体150件とUI11件が成功し、残る削除テストはキャンセルの同じ識別子・ラベルを持つ親子Buttonの重複で失敗した。アラート内と操作固有の識別子による絞り込みを維持したまま、先頭の一致を操作し、ラベルも検証する。",
+      "review": [
+        "キャンセルと削除のラベルが一致し、それぞれの操作後の商品状態を確認しているか。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "start": 137,
+          "end": 159,
+          "text": "同じ表示ボタンの親子要素の重複を扱う。アプリ全体の先頭ボタンを選ぶ変更ではない。"
+        }
+      ]
     }
   ],
   "suites": [
@@ -209,7 +226,7 @@
       ],
       "why": "キャンセルが操作できることを確認し、取消で保持、確定後だけ一覧から消えることを守る。",
       "given": "個体0件の商品を登録",
-      "when": "対象アラート内の削除・キャンセルを確認し、取消後に再度削除して再起動",
+      "when": "対象アラート内の削除・キャンセルを識別子とラベルで確認し、取消後に再度削除して再起動",
       "then": "取消後は残り、確定後は再起動しても存在しない",
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
@@ -217,10 +234,10 @@
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
         "start": 120,
-        "end": 165,
-        "text": "    func testProductDeletionRequiresConfirmationAndSurvivesRelaunch() throws {\n        let app = makeApplication()\n        app.launch()\n        try registerAndOpenDetail(name: \"Delete\", type: \"Type\", in: app)\n\n        let unopened = try detailElement(\"product-detail-unopened\", in: app)\n        XCTAssertEqual(unopened.label, \"未開封、0件\")\n        let inUse = try detailElement(\"product-detail-in-use\", in: app)\n        XCTAssertEqual(inUse.label, \"使用中、0件\")\n        let history = try detailElement(\"product-detail-history\", in: app)\n        XCTAssertEqual(history.label, \"使い切り履歴、0件\")\n        let delete = try detailElement(\"product-detail-delete\", in: app)\n        XCTAssertTrue(delete.isEnabled)\n        delete.tap()\n\n        let confirmation = app.alerts[\"商品を削除しますか？\"]\n        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n        let confirm = confirmation.buttons[\"product-detail-confirm-delete\"]\n        let cancel = confirmation.buttons[\"product-detail-cancel-delete\"]\n        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n        XCTAssertTrue(confirmation.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n        cancel.tap()\n        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))\n        XCTAssertTrue(app.navigationBars[\"商品詳細\"].exists)\n        app.navigationBars[\"商品詳細\"].buttons[\"商品一覧\"].tap()\n        let row = productRow(name: \"Delete\", type: \"Type\", in: app)\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        row.tap()\n\n        try detailElement(\"product-detail-delete\", in: app).tap()\n        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n        confirm.tap()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(row.exists)\n        app.terminate()\n        app.launch()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(productRow(name: \"Delete\", type: \"Type\", in: app).exists)\n    }"
+        "end": 170,
+        "text": "    func testProductDeletionRequiresConfirmationAndSurvivesRelaunch() throws {\n        let app = makeApplication()\n        app.launch()\n        try registerAndOpenDetail(name: \"Delete\", type: \"Type\", in: app)\n\n        let unopened = try detailElement(\"product-detail-unopened\", in: app)\n        XCTAssertEqual(unopened.label, \"未開封、0件\")\n        let inUse = try detailElement(\"product-detail-in-use\", in: app)\n        XCTAssertEqual(inUse.label, \"使用中、0件\")\n        let history = try detailElement(\"product-detail-history\", in: app)\n        XCTAssertEqual(history.label, \"使い切り履歴、0件\")\n        let delete = try detailElement(\"product-detail-delete\", in: app)\n        XCTAssertTrue(delete.isEnabled)\n        delete.tap()\n\n        let confirmation = app.alerts[\"商品を削除しますか？\"]\n        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n        // 同じ操作ボタンが親子のアクセシビリティ要素として重複するため、先頭の一致を使う。\n        let confirm = confirmation.buttons.matching(identifier: \"product-detail-confirm-delete\").firstMatch\n        let cancel = confirmation.buttons.matching(identifier: \"product-detail-cancel-delete\").firstMatch\n        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n        XCTAssertEqual(confirm.label, \"削除する\")\n        XCTAssertEqual(cancel.label, \"キャンセル\")\n        XCTAssertTrue(confirmation.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n        cancel.tap()\n        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))\n        XCTAssertTrue(app.navigationBars[\"商品詳細\"].exists)\n        app.navigationBars[\"商品詳細\"].buttons[\"商品一覧\"].tap()\n        let row = productRow(name: \"Delete\", type: \"Type\", in: app)\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        row.tap()\n\n        try detailElement(\"product-detail-delete\", in: app).tap()\n        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n        XCTAssertEqual(confirm.label, \"削除する\")\n        XCTAssertEqual(cancel.label, \"キャンセル\")\n        confirm.tap()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(row.exists)\n        app.terminate()\n        app.launch()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(productRow(name: \"Delete\", type: \"Type\", in: app).exists)\n    }"
       },
-      "commit": "1d7c36457c11773c50b1baf519b123e9a03618a7",
+      "commit": "d2b0ea8ffec1f232ba14de0842b1c174499f1b0d",
       "covers": [
         "delete"
       ]
@@ -491,8 +508,8 @@
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
-            "start": 541,
-            "end": 559,
+            "start": 546,
+            "end": 564,
             "text": "    private func waitForFormValue(_ value: String, field: XCUIElement) throws {\n        let expected = value.isEmpty ? [\"\", field.placeholderValue ?? \"\"] : [value]\n        let expectation = XCTNSPredicateExpectation(\n            predicate: NSPredicate(format: \"value IN %@\", expected as NSArray), object: field\n        )\n        let result = XCTWaiter.wait(for: [expectation], timeout: 5)\n        if result == .completed {\n            return\n        }\n\n        // タイムアウト直前の反映を、診断にも使う同じスナップショットで最後に確認する。\n        let actual = field.value as? String\n        if result == .timedOut, let actual, expected.contains(actual) {\n            return\n        }\n\n        XCTFail(\"入力値が反映されない: \\(field.identifier)、期待: \\(value)、実際: \\(String(describing: actual))\")\n        throw FormInputFailure.unavailable\n    }"
           }
         },
@@ -505,10 +522,47 @@
         {
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "lineRange": {
-            "start": 541,
-            "end": 559
+            "start": 546,
+            "end": 564
           },
           "text": "入力値の待機終了と最終確認"
+        }
+      ]
+    },
+    {
+      "id": "alert-query",
+      "kind": "codebase",
+      "category": "UIテスト",
+      "label": "同じボタンの親子要素を区別する",
+      "status": "changed",
+      "gist": "対象アラートと操作固有の識別子で絞り込み、同じ操作の親子要素の重複を扱います。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "CIではキャンセルが表示されましたが、同じ識別子とラベルを持つButtonが親子として現れました。単一要素を要求する問い合わせは、両方に一致してタップ前に失敗します。これは別のキャンセル操作が2つあるという意味ではありません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 135,
+            "end": 159,
+            "text": "        let confirmation = app.alerts[\"商品を削除しますか？\"]\n        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n        // 同じ操作ボタンが親子のアクセシビリティ要素として重複するため、先頭の一致を使う。\n        let confirm = confirmation.buttons.matching(identifier: \"product-detail-confirm-delete\").firstMatch\n        let cancel = confirmation.buttons.matching(identifier: \"product-detail-cancel-delete\").firstMatch\n        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n        XCTAssertEqual(confirm.label, \"削除する\")\n        XCTAssertEqual(cancel.label, \"キャンセル\")\n        XCTAssertTrue(confirmation.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n        cancel.tap()\n        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))\n        XCTAssertTrue(app.navigationBars[\"商品詳細\"].exists)\n        app.navigationBars[\"商品詳細\"].buttons[\"商品一覧\"].tap()\n        let row = productRow(name: \"Delete\", type: \"Type\", in: app)\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        row.tap()\n\n        try detailElement(\"product-detail-delete\", in: app).tap()\n        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n        XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n        XCTAssertEqual(confirm.label, \"削除する\")\n        XCTAssertEqual(cancel.label, \"キャンセル\")\n        confirm.tap()"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`matching(identifier:)` で操作固有の識別子に限定し、`firstMatch` でその問い合わせの最初の要素を使います。検索範囲は確認アラート内のままです。削除とキャンセルのラベルもそれぞれ検証し、取り違えを防ぎます。キャンセルで商品を保持すること、確定後と再起動後に商品が存在しないことは引き続き実際の操作で検証します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "lineRange": {
+            "start": 135,
+            "end": 159
+          },
+          "text": "操作対象の識別子・ラベルとキャンセル後の確認"
         }
       ]
     }
