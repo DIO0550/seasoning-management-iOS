@@ -4,7 +4,7 @@
   "headBranch": "feat/issue-50-product-deletion",
   "baseBranch": "master",
   "mergeBase": "f4a245b88278077d94412b3cf33c197111183f88",
-  "head": "1d7c36457c11773c50b1baf519b123e9a03618a7",
+  "head": "d2b0ea8ffec1f232ba14de0842b1c174499f1b0d",
   "groups": [
     {
       "label": "単体テスト",
@@ -27,7 +27,7 @@
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 76,
+          "additions": 81,
           "deletions": 3,
           "changed": true,
           "target": null
@@ -177,6 +177,26 @@
           "deletions": 6,
           "patch": "@@ -132,10 +132,15 @@ final class SeasoningManagerUITests: XCTestCase {\n         XCTAssertTrue(delete.isEnabled)\n         delete.tap()\n \n-        let confirm = app.buttons[\"product-detail-confirm-delete\"]\n+        let confirmation = app.alerts[\"商品を削除しますか？\"]\n+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n+        let confirm = confirmation.buttons[\"product-detail-confirm-delete\"]\n+        let cancel = confirmation.buttons[\"product-detail-cancel-delete\"]\n         XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n-        XCTAssertTrue(app.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n-        app.buttons[\"キャンセル\"].tap()\n+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n+        XCTAssertTrue(confirmation.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n+        cancel.tap()\n+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))\n         XCTAssertTrue(app.navigationBars[\"商品詳細\"].exists)\n         app.navigationBars[\"商品詳細\"].buttons[\"商品一覧\"].tap()\n         let row = productRow(name: \"Delete\", type: \"Type\", in: app)\n@@ -143,7 +148,9 @@ final class SeasoningManagerUITests: XCTestCase {\n         row.tap()\n \n         try detailElement(\"product-detail-delete\", in: app).tap()\n+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n         XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n         confirm.tap()\n \n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n@@ -536,10 +543,19 @@ final class SeasoningManagerUITests: XCTestCase {\n         let expectation = XCTNSPredicateExpectation(\n             predicate: NSPredicate(format: \"value IN %@\", expected as NSArray), object: field\n         )\n-        guard XCTWaiter.wait(for: [expectation], timeout: 5) == .completed else {\n-            XCTFail(\"入力値が反映されない: \\(field.identifier)、期待: \\(value)、実際: \\(String(describing: field.value))\")\n-            throw FormInputFailure.unavailable\n+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)\n+        if result == .completed {\n+            return\n         }\n+\n+        // タイムアウト直前の反映を、診断にも使う同じスナップショットで最後に確認する。\n+        let actual = field.value as? String\n+        if result == .timedOut, let actual, expected.contains(actual) {\n+            return\n+        }\n+\n+        XCTFail(\"入力値が反映されない: \\(field.identifier)、期待: \\(value)、実際: \\(String(describing: actual))\")\n+        throw FormInputFailure.unavailable\n     }\n \n     @MainActor",
           "patchLines": 52,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "d2b0ea8ffec1f232ba14de0842b1c174499f1b0d",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-01T14:14:27+09:00",
+      "subject": "Disambiguate nested alert buttons in deletion UI test",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 7,
+          "deletions": 2,
+          "patch": "@@ -134,10 +134,13 @@ final class SeasoningManagerUITests: XCTestCase {\n \n         let confirmation = app.alerts[\"商品を削除しますか？\"]\n         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n-        let confirm = confirmation.buttons[\"product-detail-confirm-delete\"]\n-        let cancel = confirmation.buttons[\"product-detail-cancel-delete\"]\n+        // 同じ操作ボタンが親子のアクセシビリティ要素として重複するため、先頭の一致を使う。\n+        let confirm = confirmation.buttons.matching(identifier: \"product-detail-confirm-delete\").firstMatch\n+        let cancel = confirmation.buttons.matching(identifier: \"product-detail-cancel-delete\").firstMatch\n         XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n         XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n+        XCTAssertEqual(confirm.label, \"削除する\")\n+        XCTAssertEqual(cancel.label, \"キャンセル\")\n         XCTAssertTrue(confirmation.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n         cancel.tap()\n         XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))\n@@ -151,6 +154,8 @@ final class SeasoningManagerUITests: XCTestCase {\n         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n         XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n         XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n+        XCTAssertEqual(confirm.label, \"削除する\")\n+        XCTAssertEqual(cancel.label, \"キャンセル\")\n         confirm.tap()\n \n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))",
+          "patchLines": 25,
           "truncated": false
         }
       ]
