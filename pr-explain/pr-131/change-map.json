@@ -4,7 +4,7 @@
   "headBranch": "feat/issue-50-product-deletion",
   "baseBranch": "master",
   "mergeBase": "f4a245b88278077d94412b3cf33c197111183f88",
-  "head": "d85c718a332f2f82084eaf318d6c761728e5f379",
+  "head": "1d7c36457c11773c50b1baf519b123e9a03618a7",
   "groups": [
     {
       "label": "単体テスト",
@@ -27,8 +27,8 @@
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 57,
-          "deletions": 0,
+          "additions": 76,
+          "deletions": 3,
           "changed": true,
           "target": null
         }
@@ -41,10 +41,36 @@
           "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 116,
+          "additions": 115,
           "deletions": 0,
           "changed": true,
           "target": null
+        }
+      ]
+    },
+    {
+      "label": "ハーネス",
+      "files": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "status": "M",
+          "oldPath": null,
+          "additions": 4,
+          "deletions": 1,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "harness/ci-report.py",
+          "changed": false
+        },
+        {
+          "path": "harness/test-ios.sh",
+          "changed": false
+        },
+        {
+          "path": "harness/tests/test_ci_report.py",
+          "changed": false
         }
       ]
     }
@@ -114,7 +140,63 @@
           "truncated": false
         }
       ]
+    },
+    {
+      "sha": "1d7c36457c11773c50b1baf519b123e9a03618a7",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-01T13:51:11+09:00",
+      "subject": "Fix product deletion confirmation and UI test completion",
+      "body": "",
+      "files": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "status": "M",
+          "oldPath": null,
+          "additions": 4,
+          "deletions": 1,
+          "patch": "@@ -26,11 +26,14 @@ jobs:\n         include:\n           - name: Unit tests\n             target: SeasoningManagerTests\n+            timeout: 30\n           - name: UI tests\n             target: SeasoningManagerUITests\n+            timeout: 45\n     # iOS 27.0 is the minimum deployment target decided in #13.\n     runs-on: xcode-27\n-    timeout-minutes: 30\n+    # UI全件とビルドが30分で繰り返し中断されたため、UIジョブだけ余裕を持たせる。\n+    timeout-minutes: ${{ matrix.timeout }}\n     env:\n       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer\n       PROJECT: src/SeasoningManager/SeasoningManager.xcodeproj",
+          "patchLines": 16,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 3,
+          "patch": "@@ -36,15 +36,14 @@ struct ProductDetailView: View {\n                 )\n             } else if let product = products.first, let detail = ProductDetailContent(product: product) {\n                 details(detail)\n-                    .confirmationDialog(\n-                        \"商品を削除しますか？\", isPresented: $showsDeletionConfirmation, titleVisibility: .visible\n-                    ) {\n+                    .alert(\"商品を削除しますか？\", isPresented: $showsDeletionConfirmation) {\n                         Button(\"削除する\", role: .destructive) {\n                             deleteProduct()\n                         }\n                         .accessibilityIdentifier(\"product-detail-confirm-delete\")\n \n                         Button(\"キャンセル\", role: .cancel) {}\n+                            .accessibilityIdentifier(\"product-detail-cancel-delete\")\n                     } message: {\n                         Text(\"「\\(detail.name)」の商品情報と画像を削除します。この操作は取り消せません。\")\n                     }",
+          "patchLines": 18,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 22,
+          "deletions": 6,
+          "patch": "@@ -132,10 +132,15 @@ final class SeasoningManagerUITests: XCTestCase {\n         XCTAssertTrue(delete.isEnabled)\n         delete.tap()\n \n-        let confirm = app.buttons[\"product-detail-confirm-delete\"]\n+        let confirmation = app.alerts[\"商品を削除しますか？\"]\n+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n+        let confirm = confirmation.buttons[\"product-detail-confirm-delete\"]\n+        let cancel = confirmation.buttons[\"product-detail-cancel-delete\"]\n         XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n-        XCTAssertTrue(app.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n-        app.buttons[\"キャンセル\"].tap()\n+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n+        XCTAssertTrue(confirmation.staticTexts[\"「Delete」の商品情報と画像を削除します。この操作は取り消せません。\"].exists)\n+        cancel.tap()\n+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))\n         XCTAssertTrue(app.navigationBars[\"商品詳細\"].exists)\n         app.navigationBars[\"商品詳細\"].buttons[\"商品一覧\"].tap()\n         let row = productRow(name: \"Delete\", type: \"Type\", in: app)\n@@ -143,7 +148,9 @@ final class SeasoningManagerUITests: XCTestCase {\n         row.tap()\n \n         try detailElement(\"product-detail-delete\", in: app).tap()\n+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n         XCTAssertTrue(confirm.waitForExistence(timeout: 5))\n+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))\n         confirm.tap()\n \n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n@@ -536,10 +543,19 @@ final class SeasoningManagerUITests: XCTestCase {\n         let expectation = XCTNSPredicateExpectation(\n             predicate: NSPredicate(format: \"value IN %@\", expected as NSArray), object: field\n         )\n-        guard XCTWaiter.wait(for: [expectation], timeout: 5) == .completed else {\n-            XCTFail(\"入力値が反映されない: \\(field.identifier)、期待: \\(value)、実際: \\(String(describing: field.value))\")\n-            throw FormInputFailure.unavailable\n+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)\n+        if result == .completed {\n+            return\n         }\n+\n+        // タイムアウト直前の反映を、診断にも使う同じスナップショットで最後に確認する。\n+        let actual = field.value as? String\n+        if result == .timedOut, let actual, expected.contains(actual) {\n+            return\n+        }\n+\n+        XCTFail(\"入力値が反映されない: \\(field.identifier)、期待: \\(value)、実際: \\(String(describing: actual))\")\n+        throw FormInputFailure.unavailable\n     }\n \n     @MainActor",
+          "patchLines": 52,
+          "truncated": false
+        }
+      ]
     }
   ],
-  "dependencies": []
+  "dependencies": [
+    {
+      "from": ".github/workflows/ios-tests.yml",
+      "to": "harness/ci-report.py",
+      "status": "kept"
+    },
+    {
+      "from": ".github/workflows/ios-tests.yml",
+      "to": "harness/test-ios.sh",
+      "status": "kept"
+    },
+    {
+      "from": "harness/tests/test_ci_report.py",
+      "to": ".github/workflows/ios-tests.yml",
+      "status": "kept"
+    }
+  ]
 }
