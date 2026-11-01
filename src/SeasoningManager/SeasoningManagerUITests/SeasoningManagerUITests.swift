@@ -134,10 +134,13 @@ final class SeasoningManagerUITests: XCTestCase {
 
         let confirmation = app.alerts["商品を削除しますか？"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
-        let confirm = confirmation.buttons["product-detail-confirm-delete"]
-        let cancel = confirmation.buttons["product-detail-cancel-delete"]
+        // 同じ操作ボタンが親子のアクセシビリティ要素として重複するため、先頭の一致を使う。
+        let confirm = confirmation.buttons.matching(identifier: "product-detail-confirm-delete").firstMatch
+        let cancel = confirmation.buttons.matching(identifier: "product-detail-cancel-delete").firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        XCTAssertEqual(confirm.label, "削除する")
+        XCTAssertEqual(cancel.label, "キャンセル")
         XCTAssertTrue(confirmation.staticTexts["「Delete」の商品情報と画像を削除します。この操作は取り消せません。"].exists)
         cancel.tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
@@ -151,6 +154,8 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        XCTAssertEqual(confirm.label, "削除する")
+        XCTAssertEqual(cancel.label, "キャンセル")
         confirm.tap()
 
         XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
