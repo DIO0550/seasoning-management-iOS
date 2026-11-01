@@ -1,0 +1,163 @@
+{
+  "version": 2,
+  "pr": 132,
+  "headBranch": "feat/issue-35-inventory-list",
+  "baseBranch": "master",
+  "mergeBase": "7e540f0caacd4eb1cbc57338662792ebbe7d5ac7",
+  "head": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+  "groups": [
+    {
+      "label": "画面・起動",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 14,
+          "deletions": 2,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "単体テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 109,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 44,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "アプリ(その他)",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 122,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "ハーネス",
+      "files": [
+        {
+          "path": ".claude/skills/pr-explain/templates/explain.json",
+          "changed": false
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "name": "inventoryIsEmptyWithoutKnownCurrentItems"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "name": "inventoryKeepsEachCurrentItemAndExcludesConsumedAndUnknownStatuses"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "name": "inventoryReflectsSavedOpeningConsumptionAndDeletion"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "name": "missingProductRelationshipDoesNotHideCurrentItem"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testEmptyInventoryOpensPreparationAndCancelsProductRegistration"
+      }
+    ],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-01T18:12:01+09:00",
+      "subject": "feat: add current inventory list and entry navigation",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 14,
+          "deletions": 2,
+          "patch": "@@ -9,8 +9,20 @@ import SwiftUI\n \n struct ContentView: View {\n     var body: some View {\n-        NavigationStack {\n-            ProductListView()\n+        TabView {\n+            NavigationStack {\n+                ProductListView()\n+            }\n+            .tabItem {\n+                Label(\"商品\", systemImage: \"cabinet\")\n+            }\n+\n+            NavigationStack {\n+                InventoryListView()\n+            }\n+            .tabItem {\n+                Label(\"在庫\", systemImage: \"shippingbox\")\n+            }\n         }\n     }\n }",
+          "patchLines": 23,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 122,
+          "deletions": 0,
+          "patch": "@@ -0,0 +1,122 @@\n+import Foundation\n+import SwiftData\n+import SwiftUI\n+\n+struct InventoryListView: View {\n+    @Query private var items: [Item]\n+\n+    init() {\n+        _items = Query(Self.descriptor())\n+    }\n+\n+    static func descriptor() -> FetchDescriptor<Item> {\n+        FetchDescriptor<Item>(\n+            predicate: #Predicate {\n+                $0.statusRawValue == \"unopened\" || $0.statusRawValue == \"inUse\"\n+            },\n+            sortBy: [SortDescriptor(\\Item.updatedAt, order: .reverse)]\n+        )\n+    }\n+\n+    var body: some View {\n+        Group {\n+            if let error = _items.fetchError {\n+                ContentUnavailableView(\n+                    \"在庫を読み込めませんでした\",\n+                    systemImage: \"exclamationmark.triangle\",\n+                    description: Text(\"\\(error.localizedDescription) アプリを開き直してください。\")\n+                )\n+            } else if items.isEmpty {\n+                ContentUnavailableView {\n+                    Label(\"在庫はまだありません\", systemImage: \"shippingbox\")\n+                } description: {\n+                    Text(\"未開封と使用中の個体をここで確認できます。\")\n+                } actions: {\n+                    NavigationLink(\"個体を追加\") {\n+                        ItemRegistrationPreparationView()\n+                    }\n+                    .buttonStyle(.borderedProminent)\n+                    .accessibilityIdentifier(\"inventory-empty-add\")\n+                }\n+            } else {\n+                List {\n+                    inventorySection(for: .unopened)\n+                    inventorySection(for: .inUse)\n+                }\n+            }\n+        }\n+        .navigationTitle(\"在庫一覧\")\n+        .toolbar {\n+            ToolbarItem(placement: .topBarTrailing) {\n+                NavigationLink {\n+                    ItemRegistrationPreparationView()\n+                } label: {\n+                    Label(\"個体を追加\", systemImage: \"plus\")\n+                }\n+                .accessibilityIdentifier(\"inventory-list-add\")\n+            }\n+        }\n+    }\n+\n+    @ViewBuilder\n+    private func inventorySection(for status: ItemStatus) -> some View {\n+        let matchingItems = items.filter { $0.status == status }\n+\n+        if !matchingItems.isEmpty {\n+            Section(status.displayName) {\n+                ForEach(matchingItems, id: \\.persistentModelID) { item in\n+                    InventoryItemRow(item: item, status: status)\n+                }\n+            }\n+        }\n+    }\n+}\n+\n+private struct InventoryItemRow: View {\n+    let item: Item\n+    let status: ItemStatus\n+\n+    private var productName: String {\n+        guard let product = item.product, !product.isDeleted else {\n+            return \"商品情報なし\"\n+        }\n+\n+        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)\n+        guard !name.isEmpty else {\n+            return \"名前未設定\"\n+        }\n+\n+        return name\n+    }\n+\n+    var body: some View {\n+        VStack(alignment: .leading, spacing: 4) {\n+            Text(productName)\n+                .font(.headline)\n+            Text(status.displayName)\n+                .font(.subheadline)\n+                .foregroundStyle(.secondary)\n+        }\n+        .fixedSize(horizontal: false, vertical: true)\n+        .accessibilityElement(children: .combine)\n+    }\n+}\n+\n+// 個体登録フォームと保存の接続は後続の Issue で実装する。\n+private struct ItemRegistrationPreparationView: View {\n+    var body: some View {\n+        ContentUnavailableView {\n+            Label(\"個体登録は準備中\", systemImage: \"shippingbox\")\n+        } description: {\n+            Text(\"個体の登録機能はまだ利用できません。先に商品の情報を登録できます。商品を登録しても在庫は増えません。\")\n+        } actions: {\n+            NavigationLink(\"商品を登録\") {\n+                ProductFormView()\n+            }\n+            .buttonStyle(.borderedProminent)\n+            .accessibilityIdentifier(\"inventory-preparation-register-product\")\n+        }\n+        .navigationTitle(\"個体を追加\")\n+        .navigationBarTitleDisplayMode(.inline)\n+    }\n+}",
+          "patchLines": 123,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 109,
+          "deletions": 0,
+          "patch": "@@ -0,0 +1,109 @@\n+import Foundation\n+import SwiftData\n+import Testing\n+@testable import SeasoningManager\n+\n+@MainActor\n+struct InventoryListTests {\n+    @Test func inventoryKeepsEachCurrentItemAndExcludesConsumedAndUnknownStatuses() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let unopened = Item(product: product)\n+        let secondUnopened = Item(product: product)\n+        let inUse = Item(product: product, status: .inUse)\n+        let consumed = Item(product: product, status: .consumed)\n+        let unknown = Item(product: product)\n+        unknown.statusRawValue = \"futureStatus\"\n+        context.insert(product)\n+        for item in [unopened, secondUnopened, inUse, consumed, unknown] {\n+            context.insert(item)\n+        }\n+        try context.save()\n+\n+        let reader = ModelContext(container)\n+        let items = try reader.fetch(InventoryListView.descriptor())\n+\n+        #expect(Set(items.map(\\.id)) == Set([unopened.id, secondUnopened.id, inUse.id]))\n+        #expect(items.filter { $0.status == .unopened }.count == 2)\n+        #expect(items.filter { $0.status == .inUse }.count == 1)\n+        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 5)\n+        #expect(!reader.hasChanges)\n+    }\n+\n+    @Test(arguments: [[String](), [\"consumed\"], [\"futureStatus\"], [\"\"], [\"consumed\", \"futureStatus\", \"\"]])\n+    func inventoryIsEmptyWithoutKnownCurrentItems(_ rawValues: [String]) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = Product(name: \"みそ\", type: \"調味料\")\n+        context.insert(product)\n+        for rawValue in rawValues {\n+            let item = Item(product: product)\n+            item.statusRawValue = rawValue\n+            context.insert(item)\n+        }\n+        try context.save()\n+\n+        let reader = ModelContext(container)\n+        #expect(try reader.fetch(InventoryListView.descriptor()).isEmpty)\n+        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == rawValues.count)\n+    }\n+\n+    @Test func inventoryReflectsSavedOpeningConsumptionAndDeletion() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let first = Item(product: product)\n+        let second = Item(product: product)\n+        context.insert(product)\n+        context.insert(first)\n+        context.insert(second)\n+        try context.save()\n+        let now = Date(timeIntervalSince1970: 1_700_000_000)\n+        let actions = ItemActions(context: context)\n+\n+        try actions.open(first, openingDate: now, now: now).get()\n+        let openingReader = ModelContext(container)\n+        let afterOpening = try openingReader.fetch(InventoryListView.descriptor())\n+        #expect(Set(afterOpening.map(\\.id)) == Set([first.id, second.id]))\n+        #expect(afterOpening.first { $0.id == first.id }?.status == .inUse)\n+        #expect(afterOpening.first { $0.id == second.id }?.status == .unopened)\n+\n+        try actions.consume(first, consumedDate: now, now: now).get()\n+        let consumptionReader = ModelContext(container)\n+        let afterConsumption = try consumptionReader.fetch(InventoryListView.descriptor())\n+        #expect(afterConsumption.map(\\.id) == [second.id])\n+\n+        try actions.delete(second, confirmed: true).get()\n+        let reader = ModelContext(container)\n+        #expect(try reader.fetch(InventoryListView.descriptor()).isEmpty)\n+        let history = try #require(try reader.fetch(FetchDescriptor<Item>()).first)\n+        #expect(history.id == first.id)\n+        #expect(history.status == .consumed)\n+    }\n+\n+    @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let item = Item(product: product)\n+        context.insert(product)\n+        context.insert(item)\n+        item.product = nil\n+        try context.save()\n+\n+        let reader = ModelContext(container)\n+        let items = try reader.fetch(InventoryListView.descriptor())\n+        #expect(items.map(\\.id) == [item.id])\n+        #expect(items.first?.product == nil)\n+        #expect(!reader.hasChanges)\n+    }\n+\n+    private func makeContainer() throws -> ModelContainer {\n+        let schema = Schema([Product.self, Item.self])\n+        let configuration = ModelConfiguration(\n+            schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none\n+        )\n+        return try ModelContainer(for: schema, configurations: [configuration])\n+    }\n+}",
+          "patchLines": 110,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 44,
+          "deletions": 0,
+          "patch": "@@ -22,6 +22,50 @@ final class SeasoningManagerUITests: XCTestCase {\n         // Put teardown code here. This method is called after the invocation of each test method in the class.\n     }\n \n+    @MainActor\n+    func testEmptyInventoryOpensPreparationAndCancelsProductRegistration() throws {\n+        let app = makeApplication()\n+        app.launch()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        let inventoryTab = app.tabBars.buttons[\"在庫\"]\n+        XCTAssertTrue(inventoryTab.waitForExistence(timeout: 5))\n+        inventoryTab.tap()\n+\n+        XCTAssertTrue(app.navigationBars[\"在庫一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n+        let add = app.buttons.matching(identifier: \"inventory-empty-add\").firstMatch\n+        XCTAssertTrue(add.waitForExistence(timeout: 5))\n+        add.tap()\n+\n+        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].exists)\n+        let register = app.buttons.matching(identifier: \"inventory-preparation-register-product\").firstMatch\n+        XCTAssertTrue(register.waitForExistence(timeout: 5))\n+        register.tap()\n+        XCTAssertTrue(app.navigationBars[\"商品登録\"].waitForExistence(timeout: 5))\n+        try enterProduct(name: \"キャンセルする商品\", type: \"調味料\", in: app)\n+        app.buttons[\"product-form-cancel\"].tap()\n+\n+        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].exists)\n+        app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n+        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n+\n+        let toolbarAdd = app.navigationBars[\"在庫一覧\"].buttons[\"inventory-list-add\"]\n+        XCTAssertTrue(toolbarAdd.isHittable)\n+        toolbarAdd.tap()\n+        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].waitForExistence(timeout: 5))\n+        app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n+\n+        app.tabBars.buttons[\"商品\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+        openRegistration(in: app)\n+        try assertBlankForm(in: app)\n+        app.buttons[\"product-form-cancel\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+    }\n+\n     @MainActor\n     func testProductRegistrationCancelAndBackDiscardInput() throws {\n         let app = makeApplication()",
+          "patchLines": 51,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "from": ".claude/skills/pr-explain/templates/explain.json",
+      "to": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+      "status": "kept"
+    }
+  ]
+}
