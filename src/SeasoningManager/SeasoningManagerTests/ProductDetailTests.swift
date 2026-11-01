@@ -199,6 +199,77 @@ struct ProductDetailTests {
         #expect(detail.price == "398円")
     }
 
+    @Test func productWithoutItemsCanBeDeleted() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = Product(name: "しょうゆ", type: "調味料")
+        context.insert(product)
+        try context.save()
+
+        let reader = ModelContext(container)
+        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))
+        let counts = ProductDeletionCounts(items: items)
+
+        #expect(counts.unopened == 0)
+        #expect(counts.inUse == 0)
+        #expect(counts.history == 0)
+        #expect(counts.unknown == 0)
+        #expect(counts.canDelete)
+    }
+
+    @Test func deletionCountsIncludeEveryStateAndExcludeOtherProducts() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = Product(name: "しょうゆ", type: "調味料")
+        let other = Product(name: "しょうゆ", type: "調味料")
+        context.insert(product)
+        context.insert(other)
+        let states = ["unopened", "unopened", "inUse", "consumed", "consumed", "consumed", "future"]
+        for state in states {
+            let item = Item(product: product)
+            item.statusRawValue = state
+            context.insert(item)
+        }
+        context.insert(Item(product: other))
+        try context.save()
+
+        let reader = ModelContext(container)
+        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))
+        let counts = ProductDeletionCounts(items: items)
+
+        #expect(items.count == states.count)
+        #expect(items.allSatisfy { $0.product?.id == product.id })
+        #expect(counts.unopened == 2)
+        #expect(counts.inUse == 1)
+        #expect(counts.history == 3)
+        #expect(counts.unknown == 1)
+        #expect(!counts.canDelete)
+        #expect(!reader.hasChanges)
+    }
+
+    @Test(arguments: [("consumed", 1, 0), ("future", 0, 1)])
+    func historyOrUnknownStateAlonePreventsDeletion(_ state: String, _ history: Int, _ unknown: Int) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = Product(name: "しょうゆ", type: "調味料")
+        context.insert(product)
+        let item = Item(product: product)
+        item.statusRawValue = state
+        context.insert(item)
+        try context.save()
+
+        let reader = ModelContext(container)
+        let items = try reader.fetch(ProductDetailView.itemDescriptor(for: product.id))
+        let counts = ProductDeletionCounts(items: items)
+
+        #expect(counts.unopened == 0)
+        #expect(counts.inUse == 0)
+        #expect(counts.history == history)
+        #expect(counts.unknown == unknown)
+        #expect(!counts.canDelete)
+        #expect(items.first?.statusRawValue == state)
+    }
+
     private func makeContainer() throws -> ModelContainer {
         let schema = Schema([Product.self, Item.self])
         let configuration = ModelConfiguration(

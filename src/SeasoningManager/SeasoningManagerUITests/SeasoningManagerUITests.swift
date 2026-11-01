@@ -117,6 +117,59 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
+    func testProductDeletionRequiresConfirmationAndSurvivesRelaunch() throws {
+        let app = makeApplication()
+        app.launch()
+        try registerAndOpenDetail(name: "Delete", type: "Type", in: app)
+
+        let unopened = try detailElement("product-detail-unopened", in: app)
+        XCTAssertEqual(unopened.label, "未開封、0件")
+        let inUse = try detailElement("product-detail-in-use", in: app)
+        XCTAssertEqual(inUse.label, "使用中、0件")
+        let history = try detailElement("product-detail-history", in: app)
+        XCTAssertEqual(history.label, "使い切り履歴、0件")
+        let delete = try detailElement("product-detail-delete", in: app)
+        XCTAssertTrue(delete.isEnabled)
+        delete.tap()
+
+        let confirmation = app.alerts["商品を削除しますか？"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        // 同じ操作ボタンが親子のアクセシビリティ要素として重複するため、先頭の一致を使う。
+        let confirm = confirmation.buttons.matching(identifier: "product-detail-confirm-delete").firstMatch
+        let cancel = confirmation.buttons.matching(identifier: "product-detail-cancel-delete").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        XCTAssertEqual(confirm.label, "削除する")
+        XCTAssertEqual(cancel.label, "キャンセル")
+        XCTAssertTrue(confirmation.staticTexts["「Delete」の商品情報と画像を削除します。この操作は取り消せません。"].exists)
+        cancel.tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["商品詳細"].exists)
+        app.navigationBars["商品詳細"].buttons["商品一覧"].tap()
+        let row = productRow(name: "Delete", type: "Type", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+
+        try detailElement("product-detail-delete", in: app).tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        XCTAssertEqual(confirm.label, "削除する")
+        XCTAssertEqual(cancel.label, "キャンセル")
+        confirm.tap()
+
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["商品はまだありません"].waitForExistence(timeout: 5))
+        XCTAssertFalse(row.exists)
+        app.terminate()
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["商品はまだありません"].waitForExistence(timeout: 5))
+        XCTAssertFalse(productRow(name: "Delete", type: "Type", in: app).exists)
+    }
+
+    @MainActor
     func testProductRegistrationShowsRequiredErrorAndPreservesInput() throws {
         let app = makeApplication()
         app.launch()
@@ -327,6 +380,22 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
+    private func detailElement(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
+        let element = app.descendants(matching: .any)[identifier]
+        for _ in 0..<24 {
+            let safeFrame = try formInteractionFrame(in: app)
+            if element.exists, safeFrame.contains(element.frame), element.isHittable {
+                return element
+            }
+
+            try scrollForm(towardTop: false, in: app)
+        }
+
+        XCTFail("商品詳細の項目を操作できない: \(identifier)")
+        throw FormInputFailure.unavailable
+    }
+
+    @MainActor
     private func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
         let field = app.textFields[identifier]
         // 未生成のセルは、上端へ戻してから下へ探す。各操作の前に領域を取り直す。
@@ -479,10 +548,19 @@ final class SeasoningManagerUITests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value IN %@", expected as NSArray), object: field
         )
-        guard XCTWaiter.wait(for: [expectation], timeout: 5) == .completed else {
-            XCTFail("入力値が反映されない: \(field.identifier)、期待: \(value)、実際: \(String(describing: field.value))")
-            throw FormInputFailure.unavailable
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        if result == .completed {
+            return
         }
+
+        // タイムアウト直前の反映を、診断にも使う同じスナップショットで最後に確認する。
+        let actual = field.value as? String
+        if result == .timedOut, let actual, expected.contains(actual) {
+            return
+        }
+
+        XCTFail("入力値が反映されない: \(field.identifier)、期待: \(value)、実際: \(String(describing: actual))")
+        throw FormInputFailure.unavailable
     }
 
     @MainActor

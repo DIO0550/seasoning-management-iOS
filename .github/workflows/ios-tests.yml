@@ -26,11 +26,14 @@ jobs:
         include:
           - name: Unit tests
             target: SeasoningManagerTests
+            timeout: 30
           - name: UI tests
             target: SeasoningManagerUITests
+            timeout: 45
     # iOS 27.0 is the minimum deployment target decided in #13.
     runs-on: xcode-27
-    timeout-minutes: 30
+    # UI全件とビルドが30分で繰り返し中断されたため、UIジョブだけ余裕を持たせる。
+    timeout-minutes: ${{ matrix.timeout }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       PROJECT: src/SeasoningManager/SeasoningManager.xcodeproj
