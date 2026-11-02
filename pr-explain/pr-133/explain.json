@@ -356,6 +356,12 @@
             "30a120c6193392a9323925118d24200f588b3e9f"
           ]
         }
+      ],
+      "status": "changed",
+      "tests": [
+        "two",
+        "empty",
+        "missing"
       ]
     }
   ]
