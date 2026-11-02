@@ -72,30 +72,41 @@ struct InventoryListView: View {
     }
 }
 
-private struct InventoryItemRow: View {
+struct InventoryItemRow: View {
     let item: Item
     let status: ItemStatus
 
-    private var productName: String {
-        guard let product = item.product, !product.isDeleted else {
-            return "商品情報なし"
+    var productLabels: (name: String, type: String) {
+        guard let product = item.product, !product.isDeleted, product.modelContext != nil else {
+            return ("商品情報なし", "種類不明")
         }
 
         let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            return "名前未設定"
+        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (name.isEmpty ? "名前未設定" : name, type.isEmpty ? "種類未設定" : type)
+    }
+
+    var expirationText: String {
+        guard let date = item.expirationDate else {
+            return "期限未設定"
         }
 
-        return name
+        return "賞味期限: \(date.formatted(date: .abbreviated, time: .omitted))"
     }
 
     var body: some View {
+        let product = productLabels
+
         VStack(alignment: .leading, spacing: 4) {
-            Text(productName)
+            Text(product.name)
                 .font(.headline)
-            Text(status.displayName)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Group {
+                Text(product.type)
+                Text(expirationText)
+                Text(status.displayName)
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
         }
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)

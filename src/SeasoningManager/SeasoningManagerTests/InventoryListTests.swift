@@ -82,6 +82,45 @@ struct InventoryListTests {
         #expect(history.status == .consumed)
     }
 
+    @Test func rowsForTheSameProductKeepTheirOwnExpiration() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = Product(name: " しょうゆ ", type: " 調味料 ")
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let dated = Item(product: product, expirationDate: date, status: .inUse)
+        let undated = Item(product: product)
+        context.insert(product)
+        context.insert(dated)
+        context.insert(undated)
+        try context.save()
+
+        let datedRow = InventoryItemRow(item: dated, status: .inUse)
+        let undatedRow = InventoryItemRow(item: undated, status: .unopened)
+        #expect(datedRow.productLabels.name == "しょうゆ")
+        #expect(datedRow.productLabels.type == "調味料")
+        let expectedDate = date.formatted(date: .abbreviated, time: .omitted)
+        #expect(datedRow.expirationText == "賞味期限: \(expectedDate)")
+        #expect(undatedRow.expirationText == "期限未設定")
+    }
+
+    @Test func blankFieldsAndUnavailableProductHaveDistinctLabels() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = Product(name: " \t", type: "　\n")
+        let item = Item(product: product)
+        context.insert(product)
+        context.insert(item)
+        try context.save()
+
+        let row = InventoryItemRow(item: item, status: .unopened)
+        #expect(row.productLabels.name == "名前未設定")
+        #expect(row.productLabels.type == "種類未設定")
+
+        context.delete(product)
+        #expect(row.productLabels.name == "商品情報なし")
+        #expect(row.productLabels.type == "種類不明")
+    }
+
     @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
@@ -89,13 +128,21 @@ struct InventoryListTests {
         let item = Item(product: product)
         context.insert(product)
         context.insert(item)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        item.expirationDate = date
         item.product = nil
         try context.save()
 
         let reader = ModelContext(container)
         let items = try reader.fetch(InventoryListView.descriptor())
         #expect(items.map(\.id) == [item.id])
-        #expect(items.first?.product == nil)
+        let saved = try #require(items.first)
+        #expect(saved.product == nil)
+        let row = InventoryItemRow(item: saved, status: .unopened)
+        #expect(row.productLabels.name == "商品情報なし")
+        #expect(row.productLabels.type == "種類不明")
+        let expectedDate = date.formatted(date: .abbreviated, time: .omitted)
+        #expect(row.expirationText == "賞味期限: \(expectedDate)")
         #expect(!reader.hasChanges)
     }
 
