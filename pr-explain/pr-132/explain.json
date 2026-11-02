@@ -1,0 +1,1106 @@
+{
+  "version": 1,
+  "pr": 132,
+  "sha": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+  "issue": 35,
+  "overview": {
+    "title": "未開封・使用中の在庫一覧と追加の入口を用意する",
+    "lead": "商品一覧に加えて、未開封・使用中の個体を確認する在庫タブを追加します。個体登録は後続の課題で実装するため、追加の入口は準備画面までです。",
+    "before": [
+      {
+        "text": "起動後は商品一覧だけがあり、個体を状態別に確認する画面がなかった。"
+      }
+    ],
+    "after": [
+      {
+        "text": "商品一覧を初期表示に保ち、在庫タブで未開封・使用中を分けて表示する。",
+        "message": "open-inventory"
+      },
+      {
+        "text": "使い切りと未知の保存値は取得対象から除外し、商品参照がない現在在庫は残す。",
+        "message": "read-current"
+      },
+      {
+        "text": "0件では追加の入口を表示する。遷移先には個体登録が準備中であることと、商品登録だけでは在庫が増えないことを明記する。",
+        "message": "open-product-form"
+      },
+      {
+        "text": "読み込み失敗は0件と区別して案内する。"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "取得条件と表示の役割",
+        "text": "保存値の絞り込みと画面上の状態分けを別々に読む。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+        }
+      },
+      {
+        "title": "段階的な追加導線",
+        "text": "今回は個体保存を追加しない。後続の #42・#44・#51 との境界を確認する。",
+        "go": {
+          "kind": "flow",
+          "id": "prepare-add"
+        }
+      },
+      {
+        "title": "検証の範囲",
+        "text": "単体4宣言・引数展開8ケースとUI1件を追加。LinuxではSwift・Xcodeがなく未実行。単体検証だけで実画面の描画確認とはしない。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "inventory",
+      "label": "現在の在庫",
+      "role": "未開封・使用中だけを一覧にし、個体追加の入口を示す。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+      "name": "画面の入口",
+      "role": "商品と在庫のタブを切り替え、それぞれの画面遷移を所有する。",
+      "change": "在庫用のタブと独立した画面遷移を追加。",
+      "feature": "inventory"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "name": "在庫一覧と追加の入口",
+      "role": "現在在庫の取得、状態別表示、空と失敗の案内、追加準備画面を担当する。",
+      "change": "本課題の新規画面。",
+      "feature": "inventory"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "name": "個体",
+      "role": "商品参照、状態の保存文字列、日付と識別子を持つ既存の保存モデル。",
+      "feature": "inventory"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Models/ItemStatus.swift",
+      "name": "個体の状態",
+      "role": "未開封・使用中・使い切りと日本語の表示名を対応付ける既存の型。",
+      "feature": "inventory"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "name": "商品登録",
+      "role": "既存の商品フォーム。準備画面からも開けるが個体は登録しない。",
+      "feature": "inventory"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+      "name": "商品一覧",
+      "role": "既存の商品一覧を初期画面として保持する。",
+      "feature": "inventory"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+      "name": "在庫の取得検証",
+      "role": "実際の保存先と取得条件を使って対象個体を検証する。",
+      "change": "4宣言・引数展開8ケースを追加。",
+      "graph": false
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "画面遷移の検証",
+      "role": "タブ、空状態、追加入口、商品入力のキャンセル、戻る操作を検証する。",
+      "change": "UIテスト1件を追加。",
+      "graph": false
+    }
+  ],
+  "messages": [
+    {
+      "id": "open-inventory",
+      "from": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "kind": "qry",
+      "name": "在庫画面を組み立てる",
+      "code": "InventoryListView()",
+      "via": "call",
+      "returns": "在庫の画面",
+      "status": "added"
+    },
+    {
+      "id": "read-current",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "kind": "qry",
+      "name": "現在の個体を取得する",
+      "code": "Query(Self.descriptor())",
+      "via": "state",
+      "payload": "未開封または使用中という取得条件",
+      "returns": "条件に一致した個体の配列。SwiftDataを介した取得であり、個体自身のメソッド呼び出しではない。",
+      "status": "added"
+    },
+    {
+      "id": "label-status",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Models/ItemStatus.swift",
+      "kind": "qry",
+      "name": "状態の表示名を読む",
+      "code": "status.displayName",
+      "via": "state",
+      "returns": "未開封または使用中という表示名",
+      "status": "added"
+    },
+    {
+      "id": "open-product-form",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+      "kind": "qry",
+      "name": "商品登録画面を開く",
+      "code": "ProductFormView()",
+      "via": "call",
+      "returns": "商品入力画面。個体の作成処理は呼ばない。",
+      "status": "added"
+    },
+    {
+      "id": "open-catalog",
+      "from": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductListView.swift",
+      "kind": "qry",
+      "name": "商品一覧を組み立てる",
+      "code": "ProductListView()",
+      "via": "call",
+      "returns": "既存の商品一覧"
+    }
+  ],
+  "flows": [
+    {
+      "id": "show-inventory",
+      "label": "在庫タブを開く",
+      "steps": [
+        "open-inventory",
+        "read-current",
+        "label-status"
+      ]
+    },
+    {
+      "id": "prepare-add",
+      "label": "追加の入口から商品登録へ進む",
+      "steps": [
+        "open-inventory",
+        "open-product-form"
+      ]
+    },
+    {
+      "id": "show-catalog",
+      "label": "商品一覧へ切り替える",
+      "steps": [
+        "open-catalog"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+      "phase": "core",
+      "role": "在庫の一覧と段階的な追加入口を一緒に用意する",
+      "why": "個体のモデルと保存操作は既にある一方、一覧画面は未実装だった。実装2ファイルに抑え、取得条件と画面遷移を守るためテスト2ファイルを加えた。直接個体を作る案は後続のフォーム・選択・保存接続を取り込むため採用しなかった。",
+      "flows": [
+        "show-inventory",
+        "prepare-add",
+        "show-catalog"
+      ],
+      "review": [
+        "使い切りだけを除く条件にせず、未知の保存値も除外しているか。",
+        "同一商品の複数個体を別の行として扱い、商品参照がない個体も取得対象から消していないか。",
+        "商品登録と個体登録を混同させず、個体の追加はまだ準備中と分かるか。",
+        "Xcode CIで状態別セクション描画とタブ追加後の既存UI操作を確認する。"
+      ],
+      "before": [
+        {
+          "text": "商品一覧の中で個体ごとの状態を確認できなかった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "現在の個体のための独立した一覧と、準備中であることを説明する追加入口ができた。"
+        }
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "start": 12,
+          "end": 18,
+          "text": "取得対象を2つの保存値に限定する。未知値を未開封へ変換しない。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+          "start": 12,
+          "end": 25,
+          "text": "各タブの内側に画面遷移を置き、商品と在庫の戻り先を分ける。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "start": 105,
+          "end": 120,
+          "text": "個体保存は後続課題のため、準備画面の案内と商品登録への入口だけを設ける。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "inventory",
+      "label": "現在在庫の取得",
+      "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+    },
+    {
+      "id": "ui",
+      "label": "空状態と画面遷移",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "mixed",
+      "suite": "inventory",
+      "name": "inventoryKeepsEachCurrentItemAndExcludesConsumedAndUnknownStatuses",
+      "techniques": [
+        "equivalence",
+        "regression"
+      ],
+      "why": "履歴や未知値が現在在庫へ混ざる回帰と、同一商品の個体をまとめる回帰を検出する。",
+      "given": "同じ商品の未開封2本、使用中1本、使い切り1本、未知値1本を保存する。",
+      "when": "新しい保存文脈で本番と同じ取得条件を実行する。",
+      "then": "3本の識別子が一致し、保存済み5本は削除されず、読み込みで変更も起きないことを期待する。",
+      "commit": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 8,
+        "end": 32,
+        "text": "    @Test func inventoryKeepsEachCurrentItemAndExcludesConsumedAndUnknownStatuses() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        let unopened = Item(product: product)\n        let secondUnopened = Item(product: product)\n        let inUse = Item(product: product, status: .inUse)\n        let consumed = Item(product: product, status: .consumed)\n        let unknown = Item(product: product)\n        unknown.statusRawValue = \"futureStatus\"\n        context.insert(product)\n        for item in [unopened, secondUnopened, inUse, consumed, unknown] {\n            context.insert(item)\n        }\n        try context.save()\n\n        let reader = ModelContext(container)\n        let items = try reader.fetch(InventoryListView.descriptor())\n\n        #expect(Set(items.map(\\.id)) == Set([unopened.id, secondUnopened.id, inUse.id]))\n        #expect(items.filter { $0.status == .unopened }.count == 2)\n        #expect(items.filter { $0.status == .inUse }.count == 1)\n        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 5)\n        #expect(!reader.hasChanges)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "read-current"
+      ]
+    },
+    {
+      "id": "empty",
+      "suite": "inventory",
+      "name": "inventoryIsEmptyWithoutKnownCurrentItems",
+      "techniques": [
+        "boundary",
+        "equivalence"
+      ],
+      "why": "0件表示に進む対象が正しいことを確認する。",
+      "given": "個体なし、使い切りだけ、未知値だけ、空文字だけ、それらの混在という5ケース。",
+      "when": "保存後に本番の取得条件を実行する。",
+      "then": "すべて取得結果は0件となり、元の保存件数は維持されることを期待する。",
+      "commit": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 34,
+        "end": 50,
+        "text": "    @Test(arguments: [[String](), [\"consumed\"], [\"futureStatus\"], [\"\"], [\"consumed\", \"futureStatus\", \"\"]])\n    func inventoryIsEmptyWithoutKnownCurrentItems(_ rawValues: [String]) throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"みそ\", type: \"調味料\")\n        context.insert(product)\n        for rawValue in rawValues {\n            let item = Item(product: product)\n            item.statusRawValue = rawValue\n            context.insert(item)\n        }\n        try context.save()\n\n        let reader = ModelContext(container)\n        #expect(try reader.fetch(InventoryListView.descriptor()).isEmpty)\n        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == rawValues.count)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "read-current"
+      ],
+      "values": {
+        "columns": [
+          "保存された状態",
+          "取得件数"
+        ],
+        "rows": [
+          {
+            "cells": [
+              "個体なし",
+              "0"
+            ],
+            "boundary": true
+          },
+          {
+            "cells": [
+              "使い切り",
+              "0"
+            ]
+          },
+          {
+            "cells": [
+              "未知値",
+              "0"
+            ]
+          },
+          {
+            "cells": [
+              "空文字",
+              "0"
+            ]
+          },
+          {
+            "cells": [
+              "使い切り・未知値・空文字",
+              "0"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "transitions",
+      "suite": "inventory",
+      "name": "inventoryReflectsSavedOpeningConsumptionAndDeletion",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "既存の状態変更・削除の結果が次の取得に反映されることを確認する。",
+      "given": "未開封2本を保存し、固定日時を用意する。",
+      "when": "既存の保存操作で1本を開封して使い切り、もう1本を削除する。各段階で別の文脈から取得する。",
+      "then": "開封後は2本、使い切り後は1本、削除後は0本になる。使い切り履歴自体は保存先に残ることを期待する。",
+      "commit": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 52,
+        "end": 83,
+        "text": "    @Test func inventoryReflectsSavedOpeningConsumptionAndDeletion() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        let first = Item(product: product)\n        let second = Item(product: product)\n        context.insert(product)\n        context.insert(first)\n        context.insert(second)\n        try context.save()\n        let now = Date(timeIntervalSince1970: 1_700_000_000)\n        let actions = ItemActions(context: context)\n\n        try actions.open(first, openingDate: now, now: now).get()\n        let openingReader = ModelContext(container)\n        let afterOpening = try openingReader.fetch(InventoryListView.descriptor())\n        #expect(Set(afterOpening.map(\\.id)) == Set([first.id, second.id]))\n        #expect(afterOpening.first { $0.id == first.id }?.status == .inUse)\n        #expect(afterOpening.first { $0.id == second.id }?.status == .unopened)\n\n        try actions.consume(first, consumedDate: now, now: now).get()\n        let consumptionReader = ModelContext(container)\n        let afterConsumption = try consumptionReader.fetch(InventoryListView.descriptor())\n        #expect(afterConsumption.map(\\.id) == [second.id])\n\n        try actions.delete(second, confirmed: true).get()\n        let reader = ModelContext(container)\n        #expect(try reader.fetch(InventoryListView.descriptor()).isEmpty)\n        let history = try #require(try reader.fetch(FetchDescriptor<Item>()).first)\n        #expect(history.id == first.id)\n        #expect(history.status == .consumed)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "read-current"
+      ]
+    },
+    {
+      "id": "missing-product",
+      "suite": "inventory",
+      "name": "missingProductRelationshipDoesNotHideCurrentItem",
+      "techniques": [
+        "boundary",
+        "regression"
+      ],
+      "why": "商品参照の欠損だけで、所有している個体を消したように見せない。",
+      "given": "未開封個体の商品参照を外して保存する。",
+      "when": "本番の取得条件で読み込む。",
+      "then": "参照がないまま同じ個体を取得し、読み込みはデータを書き換えないことを期待する。表示文言の描画はこの単体テストの検証外。",
+      "commit": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 85,
+        "end": 100,
+        "text": "    @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        let item = Item(product: product)\n        context.insert(product)\n        context.insert(item)\n        item.product = nil\n        try context.save()\n\n        let reader = ModelContext(container)\n        let items = try reader.fetch(InventoryListView.descriptor())\n        #expect(items.map(\\.id) == [item.id])\n        #expect(items.first?.product == nil)\n        #expect(!reader.hasChanges)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "read-current"
+      ]
+    },
+    {
+      "id": "navigation",
+      "suite": "ui",
+      "name": "testEmptyInventoryOpensPreparationAndCancelsProductRegistration",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "タブ追加で既存の商品操作や戻り先が壊れないようにする。",
+      "given": "テスト専用の空の保存先で起動する。",
+      "when": "在庫へ切り替え、空状態とツールバーの追加入口を開き、商品入力をキャンセルして戻る。最後に商品タブから登録を開く。",
+      "then": "準備中の案内、在庫の0件、未保存の商品がないこと、商品登録の空入力を期待する。",
+      "commit": "5571c71f0b716f3ad4f7240be9896d3c7f8979a2",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 25,
+        "end": 67,
+        "text": "    @MainActor\n    func testEmptyInventoryOpensPreparationAndCancelsProductRegistration() throws {\n        let app = makeApplication()\n        app.launch()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        let inventoryTab = app.tabBars.buttons[\"在庫\"]\n        XCTAssertTrue(inventoryTab.waitForExistence(timeout: 5))\n        inventoryTab.tap()\n\n        XCTAssertTrue(app.navigationBars[\"在庫一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n        let add = app.buttons.matching(identifier: \"inventory-empty-add\").firstMatch\n        XCTAssertTrue(add.waitForExistence(timeout: 5))\n        add.tap()\n\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].exists)\n        let register = app.buttons.matching(identifier: \"inventory-preparation-register-product\").firstMatch\n        XCTAssertTrue(register.waitForExistence(timeout: 5))\n        register.tap()\n        XCTAssertTrue(app.navigationBars[\"商品登録\"].waitForExistence(timeout: 5))\n        try enterProduct(name: \"キャンセルする商品\", type: \"調味料\", in: app)\n        app.buttons[\"product-form-cancel\"].tap()\n\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].exists)\n        app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n\n        let toolbarAdd = app.navigationBars[\"在庫一覧\"].buttons[\"inventory-list-add\"]\n        XCTAssertTrue(toolbarAdd.isHittable)\n        toolbarAdd.tap()\n        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].waitForExistence(timeout: 5))\n        app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n\n        app.tabBars.buttons[\"商品\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        openRegistration(in: app)\n        try assertBlankForm(in: app)\n        app.buttons[\"product-form-cancel\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/ContentView.swift"
+      ],
+      "covers": [
+        "open-inventory",
+        "open-product-form",
+        "open-catalog"
+      ]
+    },
+    {
+      "id": "rendered-sections",
+      "suite": "ui",
+      "name": "状態別セクションと保存後の画面更新",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "取得条件の単体検証だけでは実画面のセクション描画を保証できない。",
+      "given": "未開封・使用中・使い切りを含む画面用データ。",
+      "when": "一覧を開き、状態を変更した後の画面を見る。",
+      "then": "現在在庫だけが適切な見出しに表示される。現時点ではこのUIテストは未実装。",
+      "todo": true,
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+      ],
+      "covers": [
+        "label-status"
+      ]
+    },
+    {
+      "id": "fetch-error",
+      "suite": "ui",
+      "name": "読み込み失敗の画面表示",
+      "techniques": [
+        "error"
+      ],
+      "why": "取得に失敗した際に在庫0件と誤認させない。",
+      "given": "在庫の取得が失敗する状況。",
+      "when": "在庫画面を表示する。",
+      "then": "失敗の案内が表示される。現時点ではこのUIテストは未実装。",
+      "todo": true,
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "未開封と使用中を在庫タブで確認する",
+    "lead": "商品一覧はこれまでどおり最初に開きます。在庫の追加操作は準備画面までで、まだ個体を保存することはできません。",
+    "changed": {
+      "before": [
+        {
+          "text": "商品一覧だけがあり、所有する個体の一覧は開けなかった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "在庫タブから、未開封と使用中を見出しと文字で区別して確認できる。",
+          "message": "open-inventory"
+        },
+        {
+          "text": "使い切った個体と判別できない状態の個体は通常の在庫一覧に出さない。",
+          "message": "read-current"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "在庫が0件のとき",
+        "before": [],
+        "after": [
+          {
+            "text": "在庫がない案内と「個体を追加」の入口が表示される。"
+          }
+        ],
+        "tests": [
+          "empty",
+          "navigation"
+        ]
+      },
+      {
+        "label": "個体追加の入口を開いたとき",
+        "before": [],
+        "after": [
+          {
+            "text": "個体登録は準備中と案内される。先に商品を登録する画面へ進めるが、それだけでは在庫は増えない。"
+          }
+        ],
+        "tests": [
+          "navigation"
+        ]
+      },
+      {
+        "label": "同じ商品を複数本持っているとき",
+        "before": [],
+        "after": [
+          {
+            "text": "同じ商品の個体も、1本ずつ別の行で扱う。"
+          }
+        ],
+        "tests": [
+          "mixed",
+          "rendered-sections"
+        ]
+      },
+      {
+        "label": "商品の情報が見つからないとき",
+        "before": [],
+        "after": [
+          {
+            "text": "未開封・使用中なら一覧から消さず、「商品情報なし」と表示する。"
+          }
+        ],
+        "text": "取得対象に残ることは単体検証の対象。代替文言を含む実画面の確認は未実施。",
+        "tests": [
+          "missing-product"
+        ]
+      },
+      {
+        "label": "在庫を読み込めないとき",
+        "before": [],
+        "after": [
+          {
+            "text": "0件とは表示せず、読み込みに失敗したことを案内する。"
+          }
+        ],
+        "tests": [
+          "fetch-error"
+        ]
+      }
+    ],
+    "kept": [
+      {
+        "text": "商品登録で入力をキャンセルした場合、入力した商品は保存されない。",
+        "tests": [
+          "navigation"
+        ]
+      },
+      {
+        "text": "使い切りの履歴は、一覧から外れても保存先には残る。",
+        "tests": [
+          "transitions"
+        ]
+      },
+      {
+        "text": "商品の種類、期限の詳しい表示、個体の詳細と編集は今回の変更に含めない。"
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "query",
+      "kind": "language",
+      "category": "SwiftData・取得",
+      "label": "`@Query` と `FetchDescriptor<Item>`",
+      "gist": "取得条件の指定と、その条件で得た配列を画面へ渡す役割を組み合わせる。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftDataは、アプリのモデルを保存し、必要な条件で読み出す仕組みです。取得条件を表す `FetchDescriptor<Item>` は「どの個体を、どんな順で取得するか」という設定値で、作成しただけでは取得は実行されません。山括弧の `Item` は、この条件が個体モデルを対象にすることを表します。"
+        },
+        {
+          "kind": "text",
+          "text": "`@Query` は、保存先から得た配列をSwiftUIの画面で扱うためのプロパティラッパーです。プロパティラッパーとは、通常の変数に取得や状態管理などの振る舞いを加えるSwiftの仕組みです。この画面では自前で配列を持ち続ける代わりに、環境の保存文脈に接続した取得結果を利用します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 5,
+            "end": 19,
+            "text": "struct InventoryListView: View {\n    @Query private var items: [Item]\n\n    init() {\n        _items = Query(Self.descriptor())\n    }\n\n    static func descriptor() -> FetchDescriptor<Item> {\n        FetchDescriptor<Item>(\n            predicate: #Predicate {\n                $0.statusRawValue == \"unopened\" || $0.statusRawValue == \"inUse\"\n            },\n            sortBy: [SortDescriptor(\\Item.updatedAt, order: .reverse)]\n        )\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`items` は画面が読む個体の配列、先頭にアンダースコアがある `_items` はその配列を管理するラッパー側の保存プロパティです。初期化時の `_items = Query(Self.descriptor())` はラッパーへ取得条件を渡しています。ここで `Self` は現在の型である画面を指します。"
+        },
+        {
+          "kind": "text",
+          "text": "並び順の `SortDescriptor(\\Item.updatedAt, order: .reverse)` は、更新日時を新しい順にします。`\\Item.updatedAt` は個体の更新日時を指すキーパスです。同じ取得条件をテストでも使うため、条件作成を `descriptor()` にまとめています。"
+        },
+        {
+          "kind": "caution",
+          "text": "取得条件のテストと、保存変更後に実際の画面が更新されることの確認は別です。今回の単体テストは新しい保存文脈から再取得します。画面での自動更新まで実行確認したことにはなりません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 5,
+            "end": 19
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "predicate",
+        "current-items"
+      ]
+    },
+    {
+      "id": "predicate",
+      "kind": "language",
+      "category": "Swift・条件式",
+      "label": "`#Predicate`・`$0`・保存文字列",
+      "gist": "保存先で扱える条件として、未開封または使用中を明示する。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "述語は、ある値が条件を満たすかどうかを表すものです。`#Predicate` は、Swiftで書いた条件を取得処理へ渡せる表現に組み立てるマクロです。`#` はこのマクロ呼び出しの記法で、単なるコメントや文字列ではありません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 12,
+            "end": 18,
+            "text": "    static func descriptor() -> FetchDescriptor<Item> {\n        FetchDescriptor<Item>(\n            predicate: #Predicate {\n                $0.statusRawValue == \"unopened\" || $0.statusRawValue == \"inUse\"\n            },\n            sortBy: [SortDescriptor(\\Item.updatedAt, order: .reverse)]\n        )"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "波括弧の中は条件を記述するクロージャです。クロージャは処理を値として渡すための小さな関数で、引数名を省略すると最初の引数を `$0` で参照できます。この `$0` は判定中の1個体です。`==` は一致の判定、`||` は左右どちらかが成立すればよいという論理和です。"
+        },
+        {
+          "kind": "text",
+          "text": "したがって条件全体は「保存された状態文字列が未開封、または使用中」を意味します。型を推論できる `FetchDescriptor<Item>` の中なので、対象は個体だと分かります。状態の計算プロパティではなく保存属性 `statusRawValue` を条件に使っています。"
+        },
+        {
+          "kind": "caution",
+          "text": "使い切り以外ならよい、という条件にすると将来追加された未知の状態も混ざります。既知の2値を列挙することで、空文字や未知値を未開封と誤認しません。除外は読み込みの条件であり、保存済みデータを削除する処理ではありません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 12,
+            "end": 18
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "query",
+        "current-items"
+      ]
+    },
+    {
+      "id": "view-builder",
+      "kind": "language",
+      "category": "SwiftUI・表示の組み立て",
+      "label": "`body`・`some View`・`@ViewBuilder`",
+      "gist": "画面を命令で描くのではなく、状態に応じた表示の構成を値として記述する。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftUIの `View` は、現在の状態なら何を表示するかを表す型です。`body` は表示構成を返す計算プロパティで、毎回保存する値ではありません。`some View` は「具体的な型名はここで公開しないが、表示として使える一定の型を返す」という戻り値の表現です。"
+        },
+        {
+          "kind": "text",
+          "text": "複数の表示や条件分岐をまとめるために使うのが結果ビルダーです。`@ViewBuilder` は、並べた表示式や `if` をSwiftUIの表示構造へ組み立てる規則を関数に付けます。通常の関数の早期終了とは違い、条件が偽なら表示が存在しない構成も扱えます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 61,
+            "end": 72,
+            "text": "    @ViewBuilder\n    private func inventorySection(for status: ItemStatus) -> some View {\n        let matchingItems = items.filter { $0.status == status }\n\n        if !matchingItems.isEmpty {\n            Section(status.displayName) {\n                ForEach(matchingItems, id: \\.persistentModelID) { item in\n                    InventoryItemRow(item: item, status: status)\n                }\n            }\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "この補助関数では引数 `status` に一致した個体を配列から選び、1本以上あるときだけ見出し付きの区画を作ります。`Section` が見出しを持つ区画、`ForEach` が個体ごとの表示を組み立てる部分です。条件に合わない区画へ空の見出しだけを残さない構造です。"
+        },
+        {
+          "kind": "caution",
+          "text": "表示の評価中に保存や削除は行いません。`body` は状態の変化に伴って再評価され得るため、保存処理を置くと表示回数に応じた副作用が起こります。今回の画面は取得結果を読むだけです。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 61,
+            "end": 72
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "identity",
+        "current-items"
+      ]
+    },
+    {
+      "id": "navigation",
+      "kind": "language",
+      "category": "SwiftUI・画面遷移",
+      "label": "`TabView`・`NavigationStack`・`NavigationLink`",
+      "gist": "タブの切り替えと、画面を順に開いて戻る操作を別の構造として持つ。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`TabView` は複数の大きな画面領域を切り替える容器です。`NavigationStack` は、ある領域の中で詳細や入力画面を順に開き、直前の画面へ戻る関係を持つ容器です。タブ切り替えは領域の選択、ナビゲーションは選んだ領域の中の移動です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+            "start": 10,
+            "end": 28,
+            "text": "struct ContentView: View {\n    var body: some View {\n        TabView {\n            NavigationStack {\n                ProductListView()\n            }\n            .tabItem {\n                Label(\"商品\", systemImage: \"cabinet\")\n            }\n\n            NavigationStack {\n                InventoryListView()\n            }\n            .tabItem {\n                Label(\"在庫\", systemImage: \"shippingbox\")\n            }\n        }\n    }\n}"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "この実装では商品と在庫それぞれの内側に `NavigationStack` を置きます。商品側で開いたフォームと在庫側から開いたフォームは、呼び出し元の画面遷移に属します。商品一覧は最初のタブとして残します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 105,
+            "end": 120,
+            "text": "// 個体登録フォームと保存の接続は後続の Issue で実装する。\nprivate struct ItemRegistrationPreparationView: View {\n    var body: some View {\n        ContentUnavailableView {\n            Label(\"個体登録は準備中\", systemImage: \"shippingbox\")\n        } description: {\n            Text(\"個体の登録機能はまだ利用できません。先に商品の情報を登録できます。商品を登録しても在庫は増えません。\")\n        } actions: {\n            NavigationLink(\"商品を登録\") {\n                ProductFormView()\n            }\n            .buttonStyle(.borderedProminent)\n            .accessibilityIdentifier(\"inventory-preparation-register-product\")\n        }\n        .navigationTitle(\"個体を追加\")\n        .navigationBarTitleDisplayMode(.inline)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`NavigationLink` は押されたときに指定した遷移先を開く表示です。`NavigationLink(\"商品を登録\") { ProductFormView() }` の文字列が入口の表示、波括弧の中が開く画面です。準備画面から商品入力を開くと、入力のキャンセルは呼び出し元の準備画面へ戻る経路になります。"
+        },
+        {
+          "kind": "caution",
+          "text": "画面を開くこと自体は、商品や個体を保存することではありません。この追加入口はまだ個体フォームへ接続していないため、個体を作れないことを本文で伝えています。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/ContentView.swift",
+          "lineRange": {
+            "start": 10,
+            "end": 28
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "preparation"
+      ]
+    },
+    {
+      "id": "identity",
+      "kind": "language",
+      "category": "SwiftUI・一覧",
+      "label": "`ForEach` と `persistentModelID`",
+      "gist": "表示名や配列の位置ではなく、どの保存モデルの行かで対応付ける。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "一覧が更新されたとき、SwiftUIは前の行と新しい行を対応付ける必要があります。そのための手掛かりが識別子です。同じ商品名の個体が複数ある場合、商品名だけではどの1本の行か判断できません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 61,
+            "end": 72,
+            "text": "    @ViewBuilder\n    private func inventorySection(for status: ItemStatus) -> some View {\n        let matchingItems = items.filter { $0.status == status }\n\n        if !matchingItems.isEmpty {\n            Section(status.displayName) {\n                ForEach(matchingItems, id: \\.persistentModelID) { item in\n                    InventoryItemRow(item: item, status: status)\n                }\n            }\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`ForEach(matchingItems, id: \\.persistentModelID)` は、各個体の保存モデル識別子を行の識別に使います。先頭のバックスラッシュから始まる形はキーパスで、「各要素のこのプロパティを読む」という指定です。後ろの `{ item in ... }` では、その1個体を行の表示へ渡します。"
+        },
+        {
+          "kind": "text",
+          "text": "ここで使う識別子はSwiftDataのモデル管理用で、個体モデルに定義済みの業務用 `id: UUID` とは役割が違います。今回の単体テストは、取得された個体を業務用の識別子で照合し、同一商品の2本が失われないことを確認します。"
+        },
+        {
+          "kind": "caution",
+          "text": "未保存の挿入時には保存モデル識別子が変化し得ます。今回の画面は描画ごとに識別子を生成せず、取得したモデルが持つ識別子を使っています。単体検証も保存後の個体を取得しています。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 61,
+            "end": 72
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "view-builder",
+        "verification"
+      ]
+    },
+    {
+      "id": "main-actor",
+      "kind": "language",
+      "category": "Swift・テストの実行場所",
+      "label": "`@MainActor` と保存文脈",
+      "gist": "画面と保存モデルの操作を、決められた実行場所で扱う。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "actorは、管理する状態へ同時に無秩序なアクセスが起きないよう、アクセス先を分けるSwiftの仕組みです。メインスレッドはアプリの画面処理に使われる実行の流れです。MainActorは、UIと関係する処理をメインの実行場所へ結び付ける特別なactorです。"
+        },
+        {
+          "kind": "text",
+          "text": "`@MainActor` の `@` は宣言に属性を付ける記法です。この属性をテストの型へ付けると、その型のテストや補助処理をMainActorに所属させます。保存文脈はモデルを取得・変更・保存する操作の窓口で、どこからでも無条件に同時使用できる共有配列とは違います。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+            "start": 6,
+            "end": 25,
+            "text": "@MainActor\nstruct InventoryListTests {\n    @Test func inventoryKeepsEachCurrentItemAndExcludesConsumedAndUnknownStatuses() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        let unopened = Item(product: product)\n        let secondUnopened = Item(product: product)\n        let inUse = Item(product: product, status: .inUse)\n        let consumed = Item(product: product, status: .consumed)\n        let unknown = Item(product: product)\n        unknown.statusRawValue = \"futureStatus\"\n        context.insert(product)\n        for item in [unopened, secondUnopened, inUse, consumed, unknown] {\n            context.insert(item)\n        }\n        try context.save()\n\n        let reader = ModelContext(container)\n        let items = try reader.fetch(InventoryListView.descriptor())"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "このテストでは `ModelContainer` が管理する保存先に対して `ModelContext` を作り、商品と個体を登録してから保存します。画面側と同じactorで取得条件や既存の保存操作を使うことを明示するため、型全体へ属性を付けています。"
+        },
+        {
+          "kind": "caution",
+          "text": "この属性を付けても、テストを実行したことやスレッド安全性の全体を証明したことにはなりません。今回のLinux環境にはXcodeがなく、Swift TestingとUIテストは未実行です。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+          "lineRange": {
+            "start": 6,
+            "end": 10
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "verification"
+      ]
+    },
+    {
+      "id": "current-items",
+      "kind": "codebase",
+      "category": "在庫・取得と表示",
+      "label": "現在在庫だけを読み、表示を三つに分ける",
+      "gist": "既知の所有状態を取得してから、失敗・0件・一覧を区別する。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "まず取得条件で未開封と使用中に対象を絞ります。その結果を描画するときには、件数より先に取得エラーを確認します。取得に失敗して配列が空である場合を、本当に在庫がない状態と混同しないためです。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 21,
+            "end": 46,
+            "text": "    var body: some View {\n        Group {\n            if let error = _items.fetchError {\n                ContentUnavailableView(\n                    \"在庫を読み込めませんでした\",\n                    systemImage: \"exclamationmark.triangle\",\n                    description: Text(\"\\(error.localizedDescription) アプリを開き直してください。\")\n                )\n            } else if items.isEmpty {\n                ContentUnavailableView {\n                    Label(\"在庫はまだありません\", systemImage: \"shippingbox\")\n                } description: {\n                    Text(\"未開封と使用中の個体をここで確認できます。\")\n                } actions: {\n                    NavigationLink(\"個体を追加\") {\n                        ItemRegistrationPreparationView()\n                    }\n                    .buttonStyle(.borderedProminent)\n                    .accessibilityIdentifier(\"inventory-empty-add\")\n                }\n            } else {\n                List {\n                    inventorySection(for: .unopened)\n                    inventorySection(for: .inUse)\n                }\n            }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`if let error = _items.fetchError` はエラーがある場合だけ値を取り出す分岐です。エラーがなければ0件かを確認し、0件なら追加の入口、1件以上なら未開封と使用中の区画を作ります。区画内は状態を日本語の文字で表示し、色だけに頼りません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 79,
+            "end": 101,
+            "text": "    private var productName: String {\n        guard let product = item.product, !product.isDeleted else {\n            return \"商品情報なし\"\n        }\n\n        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)\n        guard !name.isEmpty else {\n            return \"名前未設定\"\n        }\n\n        return name\n    }\n\n    var body: some View {\n        VStack(alignment: .leading, spacing: 4) {\n            Text(productName)\n                .font(.headline)\n            Text(status.displayName)\n                .font(.subheadline)\n                .foregroundStyle(.secondary)\n        }\n        .fixedSize(horizontal: false, vertical: true)\n        .accessibilityElement(children: .combine)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "商品への参照がないか削除予定なら「商品情報なし」、商品名が空白だけなら「名前未設定」を表示します。これらは表示用の代替で、商品名や個体の状態を保存し直す処理ではありません。"
+        },
+        {
+          "kind": "history",
+          "text": "期限・種類を含む詳しい行は #39、個体詳細は #52、期限の強調は #56 の対象です。ここでそれらをまとめて実装せず、取得と一覧の基礎に限定しました。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 21,
+            "end": 46
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "mixed",
+        "empty",
+        "missing-product",
+        "rendered-sections",
+        "fetch-error"
+      ],
+      "flows": [
+        "show-inventory"
+      ],
+      "seeAlso": [
+        "query",
+        "predicate",
+        "view-builder"
+      ]
+    },
+    {
+      "id": "preparation",
+      "kind": "codebase",
+      "category": "在庫・追加の入口",
+      "label": "準備画面で後続の個体登録と境界を分ける",
+      "gist": "操作できる入口を用意しつつ、現在は個体保存ができないことを正確に伝える。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "今回の完了範囲は、0件でも個体追加の入口を見つけられる一覧です。一方、個体フォームは #42、商品選択は #44、保存との接続は #51 に分かれていて、フォームはこの一覧の後に実装する予定です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 105,
+            "end": 120,
+            "text": "// 個体登録フォームと保存の接続は後続の Issue で実装する。\nprivate struct ItemRegistrationPreparationView: View {\n    var body: some View {\n        ContentUnavailableView {\n            Label(\"個体登録は準備中\", systemImage: \"shippingbox\")\n        } description: {\n            Text(\"個体の登録機能はまだ利用できません。先に商品の情報を登録できます。商品を登録しても在庫は増えません。\")\n        } actions: {\n            NavigationLink(\"商品を登録\") {\n                ProductFormView()\n            }\n            .buttonStyle(.borderedProminent)\n            .accessibilityIdentifier(\"inventory-preparation-register-product\")\n        }\n        .navigationTitle(\"個体を追加\")\n        .navigationBarTitleDisplayMode(.inline)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "未実装の個体保存を利用できるように見せないため、入口の先を専用の準備画面にしています。本文は「個体の登録機能はまだ利用できません」と伝え、別操作である既存の商品登録だけを正しく名付けた入口として置きます。"
+        },
+        {
+          "kind": "history",
+          "text": "既存の `ItemActions.create` をここから直接呼ぶ案も考えられますが、商品選択や保存失敗時の扱いまで必要になり、後続の課題を一緒に取り込んでしまいます。小さく独立した変更を続ける方針に合わせて採用しませんでした。"
+        },
+        {
+          "kind": "caution",
+          "text": "入口が動くことと個体を登録できることは別です。このPRの実装によって在庫を新しく作成できるようになったとは説明しません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 105,
+            "end": 120
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "navigation"
+      ],
+      "flows": [
+        "prepare-add"
+      ],
+      "seeAlso": [
+        "navigation"
+      ]
+    },
+    {
+      "id": "verification",
+      "kind": "codebase",
+      "category": "検証・対象と限界",
+      "label": "取得条件と画面操作を別々に検証する",
+      "gist": "保存先から得る結果と、利用者が辿る画面の経路を別のテストで守る。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "単体テストでは本番と同じ取得条件を、実際のSwiftDataのメモリ内保存先へ適用します。単に同じ条件式をテスト内で書き直すのではなく、保存・再取得した個体の識別子を期待した値と比較します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+            "start": 24,
+            "end": 31,
+            "text": "        let reader = ModelContext(container)\n        let items = try reader.fetch(InventoryListView.descriptor())\n\n        #expect(Set(items.map(\\.id)) == Set([unopened.id, secondUnopened.id, inUse.id]))\n        #expect(items.filter { $0.status == .unopened }.count == 2)\n        #expect(items.filter { $0.status == .inUse }.count == 1)\n        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 5)\n        #expect(!reader.hasChanges)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "保存された5本のうち現在在庫の3本だけを返し、元の5本が消されていないことを同時に確認します。別のテストでは、既存の保存操作を使った開封・使い切り・削除の後に、新しい保存文脈から読み直します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 25,
+            "end": 52,
+            "text": "    @MainActor\n    func testEmptyInventoryOpensPreparationAndCancelsProductRegistration() throws {\n        let app = makeApplication()\n        app.launch()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        let inventoryTab = app.tabBars.buttons[\"在庫\"]\n        XCTAssertTrue(inventoryTab.waitForExistence(timeout: 5))\n        inventoryTab.tap()\n\n        XCTAssertTrue(app.navigationBars[\"在庫一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n        let add = app.buttons.matching(identifier: \"inventory-empty-add\").firstMatch\n        XCTAssertTrue(add.waitForExistence(timeout: 5))\n        add.tap()\n\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].exists)\n        let register = app.buttons.matching(identifier: \"inventory-preparation-register-product\").firstMatch\n        XCTAssertTrue(register.waitForExistence(timeout: 5))\n        register.tap()\n        XCTAssertTrue(app.navigationBars[\"商品登録\"].waitForExistence(timeout: 5))\n        try enterProduct(name: \"キャンセルする商品\", type: \"調味料\", in: app)\n        app.buttons[\"product-form-cancel\"].tap()\n\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].exists)\n        app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "UIテストは専用の空の保存先を使い、タブ切り替え、空状態、追加準備、商品入力のキャンセルと戻り先を操作します。状態別セクションの実描画や、取得失敗の画面表示を実行するUIテストはまだありません。宣言済みテストは単体4宣言・引数展開8ケースとUI1件です。"
+        },
+        {
+          "kind": "caution",
+          "text": "このセッションのLinux検証では、pre-push内のハーネステスト84件中82件成功・2件スキップ。配置検査と差分の空白検査も成功しましたが、pre-pushはSwiftがなく整形検査で終了コード2です。Swiftのlint、iOSビルド、単体8ケース、UI1件は未実行で、これらの合格を示す数値ではありません。CIの最新結果はPRの検証コメントを参照してください。"
+        },
+        {
+          "kind": "memo",
+          "text": "計画レビュー、Swiftの差分レビュー、テストレビューで必須修正はありませんでした。ただし、読取レビューはコンパイル・シミュレータ実行・Dynamic TypeやVoiceOverの目視確認を代替しません。"
+        },
+        {
+          "kind": "memo",
+          "text": "解説作成時点のCIではSwift整形検査とAgent harnessは成功、iOSテストは実行中です。これはローカルで未実施だったSwift整形をCIで確認できたことを意味します。iOSテストやカバレッジの成功値を先取りして記載していません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+          "lineRange": {
+            "start": 24,
+            "end": 31
+          },
+          "text": "本文で説明した実装箇所。",
+          "shas": [
+            "5571c71f0b716f3ad4f7240be9896d3c7f8979a2"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "mixed",
+        "empty",
+        "transitions",
+        "missing-product",
+        "navigation",
+        "rendered-sections",
+        "fetch-error"
+      ],
+      "seeAlso": [
+        "main-actor",
+        "identity"
+      ]
+    }
+  ]
+}
