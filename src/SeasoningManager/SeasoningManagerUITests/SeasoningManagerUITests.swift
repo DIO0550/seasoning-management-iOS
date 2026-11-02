@@ -23,6 +23,50 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
+    func testEmptyInventoryOpensPreparationAndCancelsProductRegistration() throws {
+        let app = makeApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        let inventoryTab = app.tabBars.buttons["在庫"]
+        XCTAssertTrue(inventoryTab.waitForExistence(timeout: 5))
+        inventoryTab.tap()
+
+        XCTAssertTrue(app.navigationBars["在庫一覧"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
+        let add = app.buttons.matching(identifier: "inventory-empty-add").firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+
+        XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["個体登録は準備中"].exists)
+        let register = app.buttons.matching(identifier: "inventory-preparation-register-product").firstMatch
+        XCTAssertTrue(register.waitForExistence(timeout: 5))
+        register.tap()
+        XCTAssertTrue(app.navigationBars["商品登録"].waitForExistence(timeout: 5))
+        try enterProduct(name: "キャンセルする商品", type: "調味料", in: app)
+        app.buttons["product-form-cancel"].tap()
+
+        XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["個体登録は準備中"].exists)
+        app.navigationBars["個体を追加"].buttons["在庫一覧"].tap()
+        XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
+
+        let toolbarAdd = app.navigationBars["在庫一覧"].buttons["inventory-list-add"]
+        XCTAssertTrue(toolbarAdd.isHittable)
+        toolbarAdd.tap()
+        XCTAssertTrue(app.staticTexts["個体登録は準備中"].waitForExistence(timeout: 5))
+        app.navigationBars["個体を追加"].buttons["在庫一覧"].tap()
+
+        app.tabBars.buttons["商品"].tap()
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["商品はまだありません"].waitForExistence(timeout: 5))
+        openRegistration(in: app)
+        try assertBlankForm(in: app)
+        app.buttons["product-form-cancel"].tap()
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testProductRegistrationCancelAndBackDiscardInput() throws {
         let app = makeApplication()
         app.launch()
