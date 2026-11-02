@@ -1,0 +1,362 @@
+{
+  "version": 1,
+  "pr": 133,
+  "sha": "30a120c6193392a9323925118d24200f588b3e9f",
+  "issue": 39,
+  "overview": {
+    "title": "在庫の1行で種類と賞味期限を読む",
+    "lead": "1本のしょうゆに期限を入れても、もう1本には別の期限を持たせられる。在庫の行にこの違いを表示する。",
+    "before": [
+      {
+        "text": "同じ商品の行には商品名と使用状態が並び、一覧からは各個体の期限を確認できなかった。"
+      }
+    ],
+    "after": [
+      {
+        "text": "種類と賞味期限が各行に並ぶ。期限を入力していない個体には「期限未設定」と表示する。"
+      },
+      {
+        "text": "商品情報を取得できない間も、その個体の期限と使用状態を読める。"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "商品情報が欠けた行",
+        "text": "商品側の欠落が個体の期限表示へ波及しない仕組みを見る。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "inventory",
+      "label": "個体別の在庫表示",
+      "role": "在庫1本につき1行を組み立てる。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "name": "在庫一覧と個体行",
+      "role": "商品と個体の保存値から行の文字を組み立てる。",
+      "feature": "inventory"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+      "name": "在庫一覧のテスト",
+      "role": "独立した保存領域で個体ごとの表示値を確かめる。",
+      "feature": "inventory"
+    }
+  ],
+  "messages": [
+    {
+      "id": "read",
+      "name": "行の表示値を読む",
+      "kind": "qry",
+      "via": "call",
+      "code": "productLabels / expirationText",
+      "status": "added",
+      "from": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+    }
+  ],
+  "flows": [
+    {
+      "id": "check",
+      "label": "保存済みの個体を行として確認する",
+      "steps": [
+        "read"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "30a120c6193392a9323925118d24200f588b3e9f",
+      "phase": "core",
+      "role": "個体の行へ種類と期限を追加",
+      "why": "商品に共通する属性と、1本ごとに異なる期限を同じ行で確認するため。",
+      "before": [
+        {
+          "text": "同じ商品の行には商品名と使用状態が並び、一覧からは各個体の期限を確認できなかった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "種類と賞味期限が各行に並ぶ。期限を入力していない個体には「期限未設定」と表示する。"
+        },
+        {
+          "text": "商品情報を取得できない間も、その個体の期限と使用状態を読める。"
+        }
+      ],
+      "review": [
+        "商品との関係が切れたときに、個体自身の期限まで非表示にならないか。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "start": 79,
+          "end": 86,
+          "text": "商品が利用できることを確認してから、名前と種類をまとめて読む。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "rows",
+      "label": "個体行の表示値",
+      "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "two",
+      "suite": "rows",
+      "name": "rowsForTheSameProductKeepTheirOwnExpiration",
+      "why": "同じ商品でも片方の期限をもう一方へ流用しない。",
+      "given": "同じしょうゆの使用中・未開封を1本ずつ保存する。",
+      "when": "期限あり・なしの2つの行から表示値を読む。",
+      "then": "商品名と種類は前後の空白が取り除かれ、片方は日付、もう片方は「期限未設定」になる。",
+      "techniques": [
+        "boundary",
+        "regression"
+      ],
+      "commit": "30a120c6193392a9323925118d24200f588b3e9f",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+      ],
+      "covers": [
+        "read"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 85,
+        "end": 104,
+        "text": "    @Test func rowsForTheSameProductKeepTheirOwnExpiration() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \" しょうゆ \", type: \" 調味料 \")\n        let date = Date(timeIntervalSince1970: 1_700_000_000)\n        let dated = Item(product: product, expirationDate: date, status: .inUse)\n        let undated = Item(product: product)\n        context.insert(product)\n        context.insert(dated)\n        context.insert(undated)\n        try context.save()\n\n        let datedRow = InventoryItemRow(item: dated, status: .inUse)\n        let undatedRow = InventoryItemRow(item: undated, status: .unopened)\n        #expect(datedRow.productLabels.name == \"しょうゆ\")\n        #expect(datedRow.productLabels.type == \"調味料\")\n        let expectedDate = date.formatted(date: .abbreviated, time: .omitted)\n        #expect(datedRow.expirationText == \"賞味期限: \\(expectedDate)\")\n        #expect(undatedRow.expirationText == \"期限未設定\")\n    }"
+      }
+    },
+    {
+      "id": "empty",
+      "suite": "rows",
+      "name": "blankFieldsAndUnavailableProductHaveDistinctLabels",
+      "why": "空欄と削除中の商品を区別する。",
+      "given": "名前・種類が空白だけの商品を保存する。",
+      "when": "その商品の表示を読み、削除を要求して同じ行の表示を再度読む。",
+      "then": "最初は「名前未設定」「種類未設定」、次は「商品情報なし」「種類不明」になる。",
+      "techniques": [
+        "boundary",
+        "regression"
+      ],
+      "commit": "30a120c6193392a9323925118d24200f588b3e9f",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+      ],
+      "covers": [
+        "read"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 106,
+        "end": 122,
+        "text": "    @Test func blankFieldsAndUnavailableProductHaveDistinctLabels() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \" \\t\", type: \"　\\n\")\n        let item = Item(product: product)\n        context.insert(product)\n        context.insert(item)\n        try context.save()\n\n        let row = InventoryItemRow(item: item, status: .unopened)\n        #expect(row.productLabels.name == \"名前未設定\")\n        #expect(row.productLabels.type == \"種類未設定\")\n\n        context.delete(product)\n        #expect(row.productLabels.name == \"商品情報なし\")\n        #expect(row.productLabels.type == \"種類不明\")\n    }"
+      }
+    },
+    {
+      "id": "missing",
+      "suite": "rows",
+      "name": "missingProductRelationshipDoesNotHideCurrentItem",
+      "why": "同期中に商品を参照できなくても期限が読める。",
+      "given": "期限付きの個体で商品との関連だけを外して保存する。",
+      "when": "別のコンテキストで一覧を取得して行の表示値を読む。",
+      "then": "商品は不明表示でも、同じ個体と期限が残り、読み取りによる保存変更もない。",
+      "techniques": [
+        "boundary",
+        "regression"
+      ],
+      "commit": "30a120c6193392a9323925118d24200f588b3e9f",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+      ],
+      "covers": [
+        "read"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 124,
+        "end": 147,
+        "text": "    @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n        let item = Item(product: product)\n        context.insert(product)\n        context.insert(item)\n        let date = Date(timeIntervalSince1970: 1_700_000_000)\n        item.expirationDate = date\n        item.product = nil\n        try context.save()\n\n        let reader = ModelContext(container)\n        let items = try reader.fetch(InventoryListView.descriptor())\n        #expect(items.map(\\.id) == [item.id])\n        let saved = try #require(items.first)\n        #expect(saved.product == nil)\n        let row = InventoryItemRow(item: saved, status: .unopened)\n        #expect(row.productLabels.name == \"商品情報なし\")\n        #expect(row.productLabels.type == \"種類不明\")\n        let expectedDate = date.formatted(date: .abbreviated, time: .omitted)\n        #expect(row.expirationText == \"賞味期限: \\(expectedDate)\")\n        #expect(!reader.hasChanges)\n    }"
+      }
+    }
+  ],
+  "impact": {
+    "title": "しょうゆ2本を在庫一覧で見分ける",
+    "lead": "同じ商品でも、賞味期限を書いたボトルとまだ書いていないボトルを一覧で区別できる。",
+    "changed": {
+      "before": [
+        {
+          "text": "同じ商品の行には商品名と使用状態が並び、一覧からは各個体の期限を確認できなかった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "種類と賞味期限が各行に並ぶ。期限を入力していない個体には「期限未設定」と表示する。"
+        },
+        {
+          "text": "商品情報を取得できない間も、その個体の期限と使用状態を読める。"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "商品の情報を読み込めないとき",
+        "before": [
+          {
+            "text": "行には商品情報がないことと使用状態が表示された。"
+          }
+        ],
+        "after": [
+          {
+            "text": "商品名と種類が不明でも、そのボトルの賞味期限を読める。"
+          }
+        ],
+        "tests": [
+          "missing"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "guard",
+      "kind": "language",
+      "category": "Swift と SwiftData",
+      "label": "Optional と guard let で参照を取り出す",
+      "gist": "個体は存在しても、結び付いた商品が届いているとは限らない。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "Swift の Optional は、値がある場合と値がない場合を一つの型で表す。ここでは個体からたどる商品が Optional なので、商品名や種類を読むには商品が存在する場合を取り出す必要がある。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 80,
+            "end": 86,
+            "text": "        guard let product = item.product, !product.isDeleted, product.modelContext != nil else {\n            return (\"商品情報なし\", \"種類不明\")\n        }\n\n        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)\n        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)\n        return (name.isEmpty ? \"名前未設定\" : name, type.isEmpty ? \"種類未設定\" : type)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "guard let は、値があればその値に名前を付けて先へ進む。カンマで並べた条件を順に確かめ、参照がない・削除中・保存を管理するコンテキストから外れている、のどれかなら代替文言を返す。下の2行が商品属性を読むのは、すべての条件を通過した場合だけ。"
+        },
+        {
+          "kind": "memo",
+          "text": "参照できる商品の種類が空白なら「種類未設定」。参照自体を利用できなければ、種類が登録されているか判断できないので「種類不明」とする。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 80,
+            "end": 86
+          },
+          "text": "Optional と guard let で参照を取り出す",
+          "shas": [
+            "30a120c6193392a9323925118d24200f588b3e9f"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "date",
+      "kind": "language",
+      "category": "Swift と SwiftData",
+      "label": "Date と日付の書式を分ける",
+      "gist": "保存値は時点を表し、画面でどの部分を見せるかは書式が決める。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "Date は時点を保持する型で、文字列の年月日を保持する型ではない。formatted はその時点から端末の設定に応じた読みやすい文字列を作る。表示のために保存値を書き換える必要はない。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 89,
+            "end": 95,
+            "text": "    var expirationText: String {\n        guard let date = item.expirationDate else {\n            return \"期限未設定\"\n        }\n\n        return \"賞味期限: \\(date.formatted(date: .abbreviated, time: .omitted))\"\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "date: .abbreviated は年・月・日を含む短い日付、time: .omitted は時刻を省く指定。guard で期限がなければ先に「期限未設定」を返すので、作成日や今日の日付で穴埋めされない。"
+        },
+        {
+          "kind": "memo",
+          "text": "同じ時点でもタイムゾーンによって暦日が変わる。テストも端末の書式を使うため、英語の月名や日本式の並びを固定しない。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 89,
+            "end": 95
+          },
+          "text": "Date と日付の書式を分ける",
+          "shas": [
+            "30a120c6193392a9323925118d24200f588b3e9f"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "row",
+      "kind": "codebase",
+      "category": "在庫一覧",
+      "label": "商品が欠けても1本分の行を残す",
+      "gist": "商品から読む名前・種類と、個体から読む期限・状態を別々に組み立てる。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "商品には同じ銘柄で共有する名前と種類がある。個体には買った1本だけの期限と使用状態がある。SwiftUI の body は、それぞれの表示値を読むテキストを縦に並べる。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 97,
+            "end": 112,
+            "text": "    var body: some View {\n        let product = productLabels\n\n        VStack(alignment: .leading, spacing: 4) {\n            Text(product.name)\n                .font(.headline)\n            Group {\n                Text(product.type)\n                Text(expirationText)\n                Text(status.displayName)\n            }\n            .font(.subheadline)\n            .foregroundStyle(.secondary)\n        }\n        .fixedSize(horizontal: false, vertical: true)\n        .accessibilityElement(children: .combine)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "productLabels から得た組を product.name と product.type で取り出す。一方、expirationText は行の item を読み、status は一覧が個体を振り分けたセクションの状態を受け取る。商品を取得できた場合だけ行全体を描くような条件は置かない。"
+        },
+        {
+          "kind": "memo",
+          "text": "末尾の accessibilityElement(children: .combine) は複数のテキストを行単位で扱う指定。テストが検証するのは表示値で、読み上げ順序までは検証しない。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 97,
+            "end": 112
+          },
+          "text": "商品が欠けても1本分の行を残す",
+          "shas": [
+            "30a120c6193392a9323925118d24200f588b3e9f"
+          ]
+        }
+      ]
+    }
+  ]
+}
