@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 import Testing
 import UIKit
+
 @testable import SeasoningManager
 
 @MainActor
@@ -11,8 +12,8 @@ struct ProductDetailTests {
         let context = ModelContext(container)
         let first = Product(name: "しょうゆ", type: "調味料")
         let second = Product(name: "しょうゆ", type: "調味料")
-        first.priceYen = 100
-        second.priceYen = 200
+        first.setValue(forKey: \.priceYen, to: 100)
+        second.setValue(forKey: \.priceYen, to: 200)
         context.insert(first)
         context.insert(second)
         try context.save()
@@ -103,14 +104,14 @@ struct ProductDetailTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = Product(name: "  だし \n", type: " 和風 だし　")
-        product.priceYen = 0
-        product.calories = 1234
-        product.protein = 1
-        product.fat = 0
-        product.sugar = 456
-        product.carbohydrates = Int64.max
-        product.nutrientBasisAmount = 1500
-        product.nutrientBasisUnit = " mL　"
+        product.setValue(forKey: \.priceYen, to: 0)
+        product.setValue(forKey: \.calories, to: 1234)
+        product.setValue(forKey: \.protein, to: 1)
+        product.setValue(forKey: \.fat, to: 0)
+        product.setValue(forKey: \.sugar, to: 456)
+        product.setValue(forKey: \.carbohydrates, to: Int64.max)
+        product.setValue(forKey: \.nutrientBasisAmount, to: 1500)
+        product.setValue(forKey: \.nutrientBasisUnit, to: " mL　")
         product.image = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { context in
             UIColor.systemTeal.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
@@ -143,9 +144,9 @@ struct ProductDetailTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = Product(name: "しょうゆ", type: "調味料")
-        product.calories = value
-        product.nutrientBasisAmount = 10000
-        product.nutrientBasisUnit = "g"
+        product.setValue(forKey: \.calories, to: value)
+        product.setValue(forKey: \.nutrientBasisAmount, to: 10000)
+        product.setValue(forKey: \.nutrientBasisUnit, to: "g")
         context.insert(product)
         try context.save()
 
@@ -159,9 +160,9 @@ struct ProductDetailTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = Product(name: "しょうゆ", type: "調味料")
-        product.calories = 0
-        product.nutrientBasisAmount = amount
-        product.nutrientBasisUnit = "g"
+        product.setValue(forKey: \.calories, to: 0)
+        product.setValue(forKey: \.nutrientBasisAmount, to: amount)
+        product.setValue(forKey: \.nutrientBasisUnit, to: "g")
         context.insert(product)
         try context.save()
 
@@ -175,8 +176,8 @@ struct ProductDetailTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = Product(name: "しょうゆ", type: "調味料")
-        product.nutrientBasisAmount = 10000
-        product.nutrientBasisUnit = unit
+        product.setValue(forKey: \.nutrientBasisAmount, to: 10000)
+        product.setValue(forKey: \.nutrientBasisUnit, to: unit)
         context.insert(product)
         try context.save()
 
@@ -189,7 +190,7 @@ struct ProductDetailTests {
         let context = ModelContext(container)
         let product = Product(name: "画像が壊れた商品", type: "みそ")
         product.image = Data([0, 1, 2, 3])
-        product.priceYen = 398
+        product.setValue(forKey: \.priceYen, to: 398)
         context.insert(product)
         try context.save()
 

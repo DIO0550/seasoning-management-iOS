@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
+
 @testable import SeasoningManager
 
 @MainActor
@@ -210,7 +211,7 @@ struct ItemActionsTests {
         context.autosaveEnabled = false
         let product = try makeSavedProduct(in: context)
         let other = try makeSavedProduct(in: context, name: "みそ")
-        other.name = "編集中のみそ"
+        try other.editFixture { $0.name = "編集中のみそ" }
         var saveCalls = 0
         let actions = ItemActions(context: context) { context in
             saveCalls += 1
@@ -472,7 +473,7 @@ struct ItemActionsTests {
             target.expirationDate = expirationDate
         case .unrelatedProduct:
             target = savedItem
-            other.name = "編集中のみそ"
+            try other.editFixture { $0.name = "編集中のみそ" }
         case .insertedItem:
             target = makeExistingItem(product: product)
             context.insert(target)
@@ -894,7 +895,7 @@ struct ItemActionsTests {
             target.statusRawValue = "futureStatus"
         case .unrelatedProduct:
             target = savedItem
-            other.name = "編集中のみそ"
+            try other.editFixture { $0.name = "編集中のみそ" }
         case .insertedItem:
             target = Item(product: product, status: transition.source, updatedAt: originalDate)
             context.insert(target)
@@ -1322,7 +1323,7 @@ struct ItemActionsTests {
             target.expirationDate = expirationDate
         case .unrelatedProduct:
             target = saved
-            other.name = "編集中のみそ"
+            try other.editFixture { $0.name = "編集中のみそ" }
         case .insertedItem:
             target = makeExistingItem(product: product)
             context.insert(target)
@@ -1615,16 +1616,12 @@ struct ItemActionsTests {
     }
 
     private func makeSavedProduct(in context: ModelContext, name: String = "しょうゆ") throws -> Product {
-        let product = Product(name: name, type: "調味料", updatedAt: originalDate)
-        product.image = originalImage
-        product.priceYen = 398
-        product.calories = 1234
-        product.protein = 1
-        product.fat = 120
-        product.sugar = 2
-        product.carbohydrates = 456
-        product.nutrientBasisAmount = 1500
-        product.nutrientBasisUnit = "mL"
+        let values = try ProductDraft(
+            name: name, type: "調味料", priceYen: "398",
+            calories: "12.34", protein: "0.01", fat: "1.20", sugar: "0.02", carbohydrates: "4.56",
+            nutrientBasisAmount: "15", nutrientBasisUnit: "mL"
+        ).validated().get()
+        let product = Product(values: values, image: originalImage, updatedAt: originalDate)
         context.insert(product)
         try context.save()
         return product
