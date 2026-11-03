@@ -101,7 +101,7 @@ struct InventoryItemRow: View {
             Text(product.name)
                 .font(.headline)
             Group {
-                Text(product.type)
+                Text("種類: \(product.type)")
                 Text(expirationText)
                 Text(status.displayName)
             }
