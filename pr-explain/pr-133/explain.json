@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 133,
-  "sha": "30a120c6193392a9323925118d24200f588b3e9f",
+  "sha": "5e7405e3d927769520b5d865cacfde3be2240c55",
   "issue": 39,
   "overview": {
     "title": "在庫の1行で種類と賞味期限を読む",
@@ -100,6 +100,30 @@
           "start": 79,
           "end": 86,
           "text": "商品が利用できることを確認してから、名前と種類をまとめて読む。"
+        }
+      ]
+    },
+    {
+      "sha": "5e7405e3d927769520b5d865cacfde3be2240c55",
+      "phase": "revise",
+      "role": "種類に項目名を付ける",
+      "why": "種類の値だけを読み上げると、商品名に続く「調味料」が何を示しているのか分かりづらいため。",
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "start": 104,
+          "end": 104,
+          "text": "商品行に「種類: 」を付け、値が何を表すかを明示する。"
+        }
+      ],
+      "before": [
+        {
+          "text": "種類の値だけを表示していた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "種類が調味料なら「種類: 調味料」と表示する。"
         }
       ]
     }
@@ -206,6 +230,9 @@
         },
         {
           "text": "商品情報を取得できない間も、その個体の期限と使用状態を読める。"
+        },
+        {
+          "text": "種類には「種類: 」が付くので、行を読み上げるときにも項目名が伝わる。"
         }
       ]
     },
@@ -332,7 +359,7 @@
             "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
             "start": 97,
             "end": 112,
-            "text": "    var body: some View {\n        let product = productLabels\n\n        VStack(alignment: .leading, spacing: 4) {\n            Text(product.name)\n                .font(.headline)\n            Group {\n                Text(product.type)\n                Text(expirationText)\n                Text(status.displayName)\n            }\n            .font(.subheadline)\n            .foregroundStyle(.secondary)\n        }\n        .fixedSize(horizontal: false, vertical: true)\n        .accessibilityElement(children: .combine)"
+            "text": "    var body: some View {\n        let product = productLabels\n\n        VStack(alignment: .leading, spacing: 4) {\n            Text(product.name)\n                .font(.headline)\n            Group {\n                Text(\"種類: \\(product.type)\")\n                Text(expirationText)\n                Text(status.displayName)\n            }\n            .font(.subheadline)\n            .foregroundStyle(.secondary)\n        }\n        .fixedSize(horizontal: false, vertical: true)\n        .accessibilityElement(children: .combine)"
           }
         },
         {
@@ -342,6 +369,10 @@
         {
           "kind": "memo",
           "text": "末尾の accessibilityElement(children: .combine) は複数のテキストを行単位で扱う指定。テストが検証するのは表示値で、読み上げ順序までは検証しない。"
+        },
+        {
+          "kind": "text",
+          "text": "種類のテキストには、商品一覧と同じ「種類: 」を付ける。しょうゆの行では「しょうゆ」「種類: 調味料」「期限未設定」「未開封」と項目の意味をたどれる。子要素を行単位で結合するため、読み上げにも項目名を含められる。"
         }
       ],
       "occurrences": [
@@ -353,7 +384,8 @@
           },
           "text": "商品が欠けても1本分の行を残す",
           "shas": [
-            "30a120c6193392a9323925118d24200f588b3e9f"
+            "30a120c6193392a9323925118d24200f588b3e9f",
+            "5e7405e3d927769520b5d865cacfde3be2240c55"
           ]
         }
       ],
