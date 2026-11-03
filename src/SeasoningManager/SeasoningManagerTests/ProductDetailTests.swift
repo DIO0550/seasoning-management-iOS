@@ -228,7 +228,7 @@ struct ProductDetailTests {
         let states = ["unopened", "unopened", "inUse", "consumed", "consumed", "consumed", "future"]
         for state in states {
             let item = Item(product: product)
-            item.statusRawValue = state
+            item.setValue(forKey: \.statusRawValue, to: state)
             context.insert(item)
         }
         context.insert(Item(product: other))
@@ -255,7 +255,7 @@ struct ProductDetailTests {
         let product = Product(name: "しょうゆ", type: "調味料")
         context.insert(product)
         let item = Item(product: product)
-        item.statusRawValue = state
+        item.setValue(forKey: \.statusRawValue, to: state)
         context.insert(item)
         try context.save()
 

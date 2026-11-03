@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
+
 @testable import SeasoningManager
 
 @MainActor
@@ -361,7 +362,7 @@ struct ProductActionsTests {
         let actions = ProductActions(context: context)
         let product = try actions.create(from: populatedDraft(), image: originalImage, now: originalDate).get()
         let item = Item(product: product, updatedAt: originalDate)
-        item.statusRawValue = rawValue
+        item.setValue(forKey: \.statusRawValue, to: rawValue)
         context.insert(item)
         try context.save()
 
@@ -648,19 +649,11 @@ struct ProductActionsTests {
     }
 
     private func makeItem(product: Product, status: ItemStatus) -> Item {
-        let item = Item(product: product, expirationDate: editedDate, status: status, updatedAt: originalDate)
-
-        switch status {
-        case .unopened:
-            break
-        case .inUse:
-            item.openingDate = originalDate
-        case .consumed:
-            item.openingDate = originalDate
-            item.consumedDate = editedDate
-        }
-
-        return item
+        Item(
+            product: product, expirationDate: editedDate, status: status,
+            openingDate: status == .unopened ? nil : originalDate,
+            consumedDate: status == .consumed ? editedDate : nil, updatedAt: originalDate
+        )
     }
 
     private func makeContainer(at url: URL? = nil) throws -> ModelContainer {

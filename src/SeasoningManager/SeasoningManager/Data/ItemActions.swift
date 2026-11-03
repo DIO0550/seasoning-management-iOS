@@ -55,50 +55,21 @@ struct ItemActions {
         _ item: Item, expirationDate: Date?, openingDate: Date?,
         now: Date = Date(), calendar: Calendar = .current
     ) -> Result<Void, ActionError> {
-        // rollbackで他の入力を失わないよう、モデルへ反映する前に保存境界を確認する。
-        guard !context.hasChanges else {
-            return .failure(.pendingChanges)
-        }
-
-        guard item.modelContext === context else {
-            return .failure(.itemNotInContext)
-        }
-
-        guard let status = item.status else {
-            return .failure(.validation(.unknownCurrentStatus))
-        }
-
-        let rules = ItemRules(status: status, openingDate: openingDate, consumedDate: item.consumedDate)
-        switch item.updateState(using: rules, now: now, calendar: calendar) {
-        case .success:
-            break
-        case .failure(let error):
-            return .failure(.validation(error))
-        }
-
-        item.expirationDate = expirationDate
-
-        switch save(context) {
-        case .success:
-            return .success(())
-        case .failure(let error):
-            context.rollback()
-            return .failure(.persistence(error))
+        update(item) {
+            item.updateDates(expirationDate: expirationDate, openingDate: openingDate, now: now, calendar: calendar)
         }
     }
 
     func open(
         _ item: Item, openingDate: Date, now: Date = Date(), calendar: Calendar = .current
     ) -> Result<Void, ActionError> {
-        let rules = ItemRules(status: .inUse, openingDate: openingDate, consumedDate: item.consumedDate)
-        return transition(item, from: .unopened, using: rules, now: now, calendar: calendar)
+        update(item) { item.open(on: openingDate, now: now, calendar: calendar) }
     }
 
     func consume(
         _ item: Item, consumedDate: Date, now: Date = Date(), calendar: Calendar = .current
     ) -> Result<Void, ActionError> {
-        let rules = ItemRules(status: .consumed, openingDate: item.openingDate, consumedDate: consumedDate)
-        return transition(item, from: .inUse, using: rules, now: now, calendar: calendar)
+        update(item) { item.consume(on: consumedDate, now: now, calendar: calendar) }
     }
 
     /// 同じcontextの保存済み個体を、状態にかかわらず確認済みの場合だけ削除する。
@@ -126,8 +97,8 @@ struct ItemActions {
         }
     }
 
-    private func transition(
-        _ item: Item, from source: ItemStatus, using rules: ItemRules, now: Date, calendar: Calendar
+    private func update(
+        _ item: Item, change: () -> Result<Void, ItemRules.ValidationError>
     ) -> Result<Void, ActionError> {
         guard !context.hasChanges else {
             return .failure(.pendingChanges)
@@ -137,16 +108,7 @@ struct ItemActions {
             return .failure(.itemNotInContext)
         }
 
-        guard let status = item.status else {
-            return .failure(.validation(.unknownCurrentStatus))
-        }
-
-        // 日付編集と異なり、同状態への再操作も許可しない。
-        guard status == source else {
-            return .failure(.validation(.invalidTransition))
-        }
-
-        switch item.updateState(using: rules, now: now, calendar: calendar) {
+        switch change() {
         case .success:
             break
         case .failure(let error):

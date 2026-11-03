@@ -203,24 +203,20 @@ private struct ProductListRow: View {
             let openingDate = Date(timeIntervalSince1970: 1_700_000_000)
             let consumedDate = openingDate.addingTimeInterval(86_400)
             let unknown = Item(product: pictured)
-            unknown.statusRawValue = "futureStatus"
+            unknown.setValue(forKey: \.statusRawValue, to: "futureStatus")
+            let inUse = Item(product: pictured)
+            try inUse.open(on: openingDate, now: consumedDate).get()
+
+            let consumed = Item(product: pictured)
+            let otherConsumed = Item(product: corrupt)
+            for item in [consumed, otherConsumed] {
+                try item.open(on: openingDate, now: consumedDate).get()
+                try item.consume(on: consumedDate, now: consumedDate).get()
+            }
 
             return (
                 [pictured, missing, corrupt],
-                [
-                    Item(product: pictured),
-                    Item(product: pictured),
-                    Item(product: pictured, status: .inUse, openingDate: openingDate),
-                    Item(
-                        product: pictured, status: .consumed,
-                        openingDate: openingDate, consumedDate: consumedDate
-                    ),
-                    unknown,
-                    Item(
-                        product: corrupt, status: .consumed,
-                        openingDate: openingDate, consumedDate: consumedDate
-                    ),
-                ]
+                [Item(product: pictured), Item(product: pictured), inUse, consumed, unknown, otherConsumed]
             )
         }
     }
