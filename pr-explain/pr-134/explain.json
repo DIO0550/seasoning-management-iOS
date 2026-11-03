@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "pr": 134,
+  "sha": "dde5d6a7b2bb8f1c5742e1eb47d0fcfe4b0eea1e",
+  "overview": {
+    "title": "商品情報の保存境界",
+    "lead": "商品名・種類・価格・栄養表示をまとめて検証し、検証に成功した商品情報だけを登録・編集に使う。",
+    "before": [
+      {
+        "text": "保存処理は検証後に、商品へ栄養値や基準量を個別に代入していた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "商品の生成と更新は、商品情報の全項目を検証した値だけを受け取る。"
+      }
+    ]
+  },
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Domain/ProductValues.swift",
+      "name": "検証済みの商品情報",
+      "role": "商品名・種類・価格・栄養表示をまとめて検証し、検証に成功した商品情報だけを登録・編集に使う。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+      "name": "保存商品",
+      "role": "商品の生成と更新は、商品情報の全項目を検証した値だけを受け取る。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "name": "商品保存",
+      "role": "保存先の確認、保存、失敗時の取り消しを行う。"
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "dde5d6a7b2bb8f1c5742e1eb47d0fcfe4b0eea1e",
+      "phase": "core",
+      "role": "商品情報の保存境界",
+      "why": "商品名・種類・価格・栄養表示をまとめて検証し、検証に成功した商品情報だけを登録・編集に使う。",
+      "review": [
+        "栄養値、基準量、単位がすべて未設定になり、更新日時も反映される。"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "id": "save",
+      "from": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Models/Product.swift",
+      "kind": "cmd",
+      "name": "商品を生成する",
+      "code": "Product(values: values, image: image, updatedAt: now)",
+      "via": "call",
+      "status": "changed"
+    }
+  ],
+  "flows": [
+    {
+      "id": "create",
+      "label": "商品の登録",
+      "steps": [
+        "save"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "model",
+      "label": "商品モデル",
+      "file": "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "boundary",
+      "suite": "model",
+      "name": "removingLastNutrientClearsStoredBasisOnModelUpdate",
+      "why": "栄養値、基準量、単位がすべて未設定になり、更新日時も反映される。",
+      "given": "カロリーにゼロ、基準に100 gを入力した商品がある。",
+      "when": "カロリーを空欄にして商品を更新する。",
+      "then": "栄養値、基準量、単位がすべて未設定になり、更新日時も反映される。",
+      "techniques": [
+        "state",
+        "boundary"
+      ],
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Domain/ProductValues.swift",
+        "src/SeasoningManager/SeasoningManager/Models/Product.swift"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift",
+        "start": 102,
+        "end": 118,
+        "text": "    @Test func removingLastNutrientClearsStoredBasisOnModelUpdate() throws {\n        var draft = ProductDraft(\n            name: \"しょうゆ\", type: \"調味料\", calories: \"0\",\n            nutrientBasisAmount: \"100\", nutrientBasisUnit: \" g　\"\n        )\n        let product = Product(values: try draft.validated().get())\n        #expect(product.calories == 0)\n        #expect(product.nutrientBasisAmount == 10000)\n        #expect(product.nutrientBasisUnit == \"g\")\n\n        draft.calories = \"\"\n        let editedAt = Date(timeIntervalSince1970: 1_700_000_000)\n        product.update(values: try draft.validated().get(), image: nil, updatedAt: editedAt)\n\n        #expect(product.updatedAt == editedAt)\n        expectUnsetValues(product)\n    }"
+      }
+    }
+  ],
+  "impact": {
+    "title": "栄養表示の編集",
+    "lead": "画面の入力ルールはこれまでと同じです。",
+    "kept": [
+      {
+        "text": "栄養値、基準量、単位がすべて未設定になり、更新日時も反映される。",
+        "tests": [
+          "boundary"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "language",
+      "kind": "language",
+      "category": "商品管理",
+      "label": "struct と private init",
+      "gist": "Swift の構造体は、関連する値に一つの名前を付ける仕組み。作り方を限定すると、その型を引数に取るだけで呼び出し側に検証を求められる。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "構造体の各プロパティを let で宣言すると、そのインスタンスを作った後から別の値を代入できない。さらに初期化子を private にすると、外側から各欄を渡して構造体を直接作れなくなる。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ProductValues.swift",
+            "start": 10,
+            "end": 15,
+            "text": "    private init(name: String, type: String, priceYen: Int64?, nutrition: ProductNutrition?) {\n        self.name = name\n        self.type = type\n        self.priceYen = priceYen\n        self.nutrition = nutrition\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "抜粋の代入自体は検証をしない。型が公開する生成操作が名前・種類・価格・栄養情報を順に調べ、成功したときだけこの初期化子を呼ぶことで保証が成立する。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Domain/ProductValues.swift",
+          "lineRange": {
+            "start": 10,
+            "end": 15
+          },
+          "text": "struct と private init"
+        }
+      ],
+      "seeAlso": [
+        "domain"
+      ]
+    },
+    {
+      "id": "domain",
+      "kind": "codebase",
+      "category": "商品管理",
+      "label": "栄養値と共通基準",
+      "gist": "栄養表示がある商品には、全栄養値に共通の正の基準量と空白でない単位が必要になる。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "入力欄の文字列は編集中に空にできる。保存時には各欄を順に読み、栄養値が一つもないなら栄養表示全体を空にする。ゼロは有効な栄養値なので、基準の検査へ進む。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ProductValues.swift",
+            "start": 132,
+            "end": 144,
+            "text": "        guard amount > 0 else {\n            return .failure(.init(field: .nutrientBasisAmount, reason: .mustBePositive))\n        }\n\n        return Input.requiredText(draft.nutrientBasisUnit, field: .nutrientBasisUnit).map { unit in\n            Self(\n                calories: validatedCalories, protein: validatedProtein, fat: validatedFat,\n                sugar: validatedSugar, carbohydrates: validatedCarbohydrates,\n                basisAmount: amount, basisUnit: unit\n            )\n        }\n    }\n}"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "抜粋では正の基準量を通した後、単位の周辺空白を取り除く。単位が空なら失敗を返し、全体がそろったときだけ栄養表示を作る。保存側はこの一つの値から従来の各列へ書き出す。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Domain/ProductValues.swift",
+          "lineRange": {
+            "start": 132,
+            "end": 144
+          },
+          "text": "栄養値と共通基準"
+        }
+      ],
+      "seeAlso": [
+        "language"
+      ]
+    }
+  ]
+}
