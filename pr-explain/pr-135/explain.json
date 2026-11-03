@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "pr": 135,
+  "sha": "cd7871ce9338df587037d4252955d3f3686dfd80",
+  "overview": {
+    "title": "未開封・使用中・使い切りと日付",
+    "lead": "個体の状態と必要な日付を一つの値として検証し、成功したときだけ全項目を個体に反映する。",
+    "before": [
+      {
+        "text": "保存操作が遷移元を調べ、状態と日付はモデルの別々の属性として書き換えられた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "開封・使い切り・日付編集を個体の操作として呼び出し、検証済みの状態だけをモデルへ書き込む。"
+      }
+    ]
+  },
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+      "name": "状態と日付の検証",
+      "role": "個体の状態と必要な日付を一つの値として検証し、成功したときだけ全項目を個体に反映する。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "name": "個体",
+      "role": "各操作で必要な日付を受け取り、成功したときだけ個体を更新する。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "name": "個体の保存",
+      "role": "保存先を確認し、保存の失敗時に変更を取り消す。"
+    }
+  ],
+  "messages": [
+    {
+      "id": "open",
+      "from": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "kind": "cmd",
+      "name": "開封する",
+      "code": "item.open(on: openingDate, now: now, calendar: calendar)",
+      "via": "call",
+      "status": "changed"
+    },
+    {
+      "id": "check",
+      "from": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+      "kind": "qry",
+      "name": "遷移できる状態を求める",
+      "code": "rules.validate(from: status, requiring: source, now: now, calendar: calendar)",
+      "via": "call",
+      "status": "changed"
+    }
+  ],
+  "flows": [
+    {
+      "id": "open-item",
+      "label": "開封の流れ",
+      "steps": [
+        "open",
+        "check"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "cd7871ce9338df587037d4252955d3f3686dfd80",
+      "phase": "core",
+      "role": "未開封・使用中・使い切りと日付",
+      "why": "開封・使い切りを別の画面や処理から呼んでも、同じ順序と日付の条件を求めるため。",
+      "review": [
+        "再開封を拒否した後で開封日と更新日時を保持しているか。"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "model",
+      "label": "個体の操作",
+      "file": "src/SeasoningManager/SeasoningManagerTests/ItemRulesTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "repeat",
+      "suite": "model",
+      "name": "repeatedOpeningAndConsumptionLeaveDatesUnchanged",
+      "why": "二度目の操作で日付を書き換えない。",
+      "given": "開封済み、または使い切った個体がある。",
+      "when": "別の日付で同じ操作を繰り返す。",
+      "then": "失敗を返し、状態・日付・更新日時を保持する。",
+      "techniques": [
+        "state",
+        "error"
+      ],
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "check"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ItemRulesTests.swift",
+        "start": 47,
+        "end": 67,
+        "text": "    @Test func repeatedOpeningAndConsumptionLeaveDatesUnchanged() throws {\n        let item = Item(product: Product(name: \"しょうゆ\", type: \"調味料\"))\n        try item.open(on: date(day: 2), now: date(day: 4), calendar: calendar()).get()\n        let opened = Snapshot(item)\n        guard case .failure(.invalidTransition) = item.open(on: date(day: 3), now: date(day: 5), calendar: calendar())\n        else {\n            Issue.record(\"使用中の個体の再開封を拒否しなかった\")\n            return\n        }\n        #expect(Snapshot(item) == opened)\n\n        try item.consume(on: date(day: 6), now: date(day: 7), calendar: calendar()).get()\n        let consumed = Snapshot(item)\n        guard\n            case .failure(.invalidTransition) = item.consume(on: date(day: 7), now: date(day: 8), calendar: calendar())\n        else {\n            Issue.record(\"使い切った個体の再操作を拒否しなかった\")\n            return\n        }\n        #expect(Snapshot(item) == consumed)\n    }"
+      }
+    }
+  ],
+  "impact": {
+    "title": "在庫の開封と使い切り",
+    "lead": "開封してから使い切る順序と、入力した日付を扱うルールを個体に集めました。",
+    "kept": [
+      {
+        "text": "一度開封した個体をもう一度開封しても、最初の開封日を保持します。使い切った日付も同様です。",
+        "tests": [
+          "repeat"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "language",
+      "kind": "language",
+      "category": "個体の状態管理",
+      "label": "enum の関連値",
+      "gist": "Swiftの列挙型では、取り得る状態を case で列挙し、状態ごとに異なる値を持たせられる。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "日付をすべて任意にすると、未開封なのに開封日があるなど、意味のない組み合わせも表現できる。次の型では、各状態に属する日付をその状態と一緒に表す。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+            "start": 37,
+            "end": 41,
+            "text": "    enum Stage {\n        case unopened\n        case inUse(openingDate: Date)\n        case consumed(openingDate: Date, consumedDate: Date)\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "開封していない状態には引数がない。使用中の状態を作るには開封日が必要で、使い切りには開封日と使い切り日の両方が必要になる。日付の前後関係は実際の日付を比較して決まるため、値の組み合わせを検証してからモデルへ渡す。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+          "lineRange": {
+            "start": 37,
+            "end": 41
+          },
+          "text": "enum の関連値"
+        }
+      ],
+      "seeAlso": [
+        "domain"
+      ]
+    },
+    {
+      "id": "domain",
+      "kind": "codebase",
+      "category": "個体の状態管理",
+      "label": "同じ個体の二度目の開封",
+      "gist": "開封できるのは未開封の個体だけ。日付編集には同じ状態のまま日付を変える操作もある。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "保存された状態が未知なら、開封してよいか判断できない。まず現在の状態を確認し、個別の操作に必要な遷移元があれば照合する。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+            "start": 53,
+            "end": 69,
+            "text": "        guard let currentStatus else {\n            return .failure(.unknownCurrentStatus)\n        }\n\n        // 開封・使い切りでは同状態への再操作を拒否する。日付編集は同状態を許す。\n        if let source, currentStatus != source {\n            return .failure(.invalidTransition)\n        }\n\n        switch (currentStatus, rules.status) {\n        case (.unopened, .unopened), (.unopened, .inUse), (.inUse, .inUse), (.inUse, .consumed), (.consumed, .consumed):\n            break\n        default:\n            return .failure(.invalidTransition)\n        }\n\n        switch rules.status {"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "開封が要求する遷移元は未開封なので、使用中になった個体にもう一度開封を指定すると、日付を変更する前に失敗する。日付編集では同一状態への変更を許し、未来の開封日や開封日より前の使い切り日を後段で検査する。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+          "lineRange": {
+            "start": 53,
+            "end": 69
+          },
+          "text": "同じ個体の二度目の開封"
+        }
+      ],
+      "seeAlso": [
+        "language"
+      ]
+    }
+  ]
+}
