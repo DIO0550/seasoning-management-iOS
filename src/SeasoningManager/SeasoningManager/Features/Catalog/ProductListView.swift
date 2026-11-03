@@ -113,97 +113,115 @@ private struct ProductListRow: View {
     }
 }
 
-private struct ProductListPreview: View {
-    private let containerResult: Result<ModelContainer, Error>
+#if DEBUG
+    private struct ProductListPreview: View {
+        private let containerResult: Result<ModelContainer, Error>
 
-    init(products: [Product], items: [Item] = []) {
-        do {
-            let schema = Schema([Product.self, Item.self])
-            let configuration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: true,
-                cloudKitDatabase: .none
-            )
-            let container = try ModelContainer(for: schema, configurations: [configuration])
+        init(seed: () throws -> (products: [Product], items: [Item])) {
+            do {
+                let (products, items) = try seed()
+                let schema = Schema([Product.self, Item.self])
+                let configuration = ModelConfiguration(
+                    schema: schema,
+                    isStoredInMemoryOnly: true,
+                    cloudKitDatabase: .none
+                )
+                let container = try ModelContainer(for: schema, configurations: [configuration])
 
-            for product in products {
-                container.mainContext.insert(product)
+                for product in products {
+                    container.mainContext.insert(product)
+                }
+                for item in items {
+                    container.mainContext.insert(item)
+                }
+                try container.mainContext.save()
+
+                containerResult = .success(container)
+            } catch {
+                containerResult = .failure(error)
             }
-            for item in items {
-                container.mainContext.insert(item)
-            }
-            try container.mainContext.save()
+        }
 
-            containerResult = .success(container)
-        } catch {
-            containerResult = .failure(error)
+        var body: some View {
+            switch containerResult {
+            case .success(let container):
+                ContentView()
+                    .modelContainer(container)
+            case .failure(let error):
+                ContentUnavailableView(
+                    "プレビューの準備に失敗しました",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(error.localizedDescription)
+                )
+            }
         }
     }
 
-    var body: some View {
-        switch containerResult {
-        case .success(let container):
-            ContentView()
-                .modelContainer(container)
-        case .failure(let error):
-            ContentUnavailableView(
-                "プレビューの準備に失敗しました",
-                systemImage: "exclamationmark.triangle",
-                description: Text(error.localizedDescription)
+    // 旧ストアの欠損表示も確認できるよう、プレビュー専用のデータに保存当時の文字列を復元する。
+    private func previewProduct(name: String, type: String) throws -> Product {
+        let seed = try ProductDraft(name: "プレビュー", type: "プレビュー").validated().get()
+        let product = Product(values: seed)
+        product.setValue(forKey: \.name, to: name)
+        product.setValue(forKey: \.type, to: type)
+        return product
+    }
+
+    #Preview("商品なし") {
+        ProductListPreview { ([], []) }
+    }
+
+    #Preview("商品あり・欠損・同名・長い名前") {
+        ProductListPreview {
+            (
+                [
+                    try previewProduct(name: "丸大豆しょうゆ", type: "しょうゆ"),
+                    try previewProduct(name: "丸大豆しょうゆ", type: "しょうゆ"),
+                    try previewProduct(name: "  米みそ  ", type: "  みそ  "),
+                    try previewProduct(name: " \n\t ", type: "　\n"),
+                    try previewProduct(name: "　\t", type: "しお"),
+                    try previewProduct(name: "本みりん", type: " \n"),
+                    try previewProduct(name: "商品名が長くても最後まで確認できる、国産丸大豆を使った減塩しょうゆ", type: "しょうゆ"),
+                ], []
             )
         }
     }
-}
 
-#Preview("商品なし") {
-    ProductListPreview(products: [])
-}
+    #Preview("画像あり・なし・破損と在庫") {
+        ProductListPreview {
+            let pictured = try previewProduct(name: "丸大豆しょうゆ", type: "しょうゆ")
+            pictured.image = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 80)).image { context in
+                UIColor.systemTeal.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 80, height: 80))
+                UIColor.white.setFill()
+                context.fill(CGRect(x: 29, y: 14, width: 22, height: 8))
+                context.fill(CGRect(x: 22, y: 24, width: 36, height: 44))
+            }.pngData()
 
-#Preview("商品あり・欠損・同名・長い名前") {
-    ProductListPreview(products: [
-        Product(name: "丸大豆しょうゆ", type: "しょうゆ"),
-        Product(name: "丸大豆しょうゆ", type: "しょうゆ"),
-        Product(name: "  米みそ  ", type: "  みそ  "),
-        Product(name: " \n\t ", type: "　\n"),
-        Product(name: "　\t", type: "しお"),
-        Product(name: "本みりん", type: " \n"),
-        Product(name: "商品名が長くても最後まで確認できる、国産丸大豆を使った減塩しょうゆ", type: "しょうゆ"),
-    ])
-}
+            let missing = try previewProduct(name: "米みそ", type: "みそ")
+            let corrupt = try previewProduct(name: "本みりん", type: "みりん")
+            corrupt.image = Data([0, 1, 2, 3])
+            let openingDate = Date(timeIntervalSince1970: 1_700_000_000)
+            let consumedDate = openingDate.addingTimeInterval(86_400)
+            let unknown = Item(product: pictured)
+            unknown.statusRawValue = "futureStatus"
 
-#Preview("画像あり・なし・破損と在庫") {
-    let pictured = Product(name: "丸大豆しょうゆ", type: "しょうゆ")
-    pictured.image = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 80)).image { context in
-        UIColor.systemTeal.setFill()
-        context.fill(CGRect(x: 0, y: 0, width: 80, height: 80))
-        UIColor.white.setFill()
-        context.fill(CGRect(x: 29, y: 14, width: 22, height: 8))
-        context.fill(CGRect(x: 22, y: 24, width: 36, height: 44))
-    }.pngData()
-
-    let missing = Product(name: "米みそ", type: "みそ")
-    let corrupt = Product(name: "本みりん", type: "みりん")
-    corrupt.image = Data([0, 1, 2, 3])
-    let openingDate = Date(timeIntervalSince1970: 1_700_000_000)
-    let consumedDate = openingDate.addingTimeInterval(86_400)
-    let unknown = Item(product: pictured)
-    unknown.statusRawValue = "futureStatus"
-
-    return ProductListPreview(
-        products: [pictured, missing, corrupt],
-        items: [
-            Item(product: pictured),
-            Item(product: pictured),
-            Item(product: pictured, status: .inUse, openingDate: openingDate),
-            Item(
-                product: pictured, status: .consumed,
-                openingDate: openingDate, consumedDate: consumedDate
-            ),
-            unknown,
-            Item(
-                product: corrupt, status: .consumed,
-                openingDate: openingDate, consumedDate: consumedDate
-            ),
-        ]
-    )
-}
+            return (
+                [pictured, missing, corrupt],
+                [
+                    Item(product: pictured),
+                    Item(product: pictured),
+                    Item(product: pictured, status: .inUse, openingDate: openingDate),
+                    Item(
+                        product: pictured, status: .consumed,
+                        openingDate: openingDate, consumedDate: consumedDate
+                    ),
+                    unknown,
+                    Item(
+                        product: corrupt, status: .consumed,
+                        openingDate: openingDate, consumedDate: consumedDate
+                    ),
+                ]
+            )
+        }
+    }
+#endif

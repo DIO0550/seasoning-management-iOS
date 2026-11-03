@@ -28,7 +28,7 @@ struct ProductActions {
     }
 
     func create(from draft: ProductDraft, image: Data? = nil, now: Date = Date()) -> Result<Product, ActionError> {
-        let values: ProductDraft.ValidatedValues
+        let values: ProductValues
         switch draft.validated() {
         case .success(let validated):
             values = validated
@@ -40,8 +40,7 @@ struct ProductActions {
             return .failure(error)
         }
 
-        let product = Product(name: values.name, type: values.type, updatedAt: now)
-        apply(values, image: image, now: now, to: product)
+        let product = Product(values: values, image: image, updatedAt: now)
         context.insert(product)
 
         return saveOrRollback().map { product }
@@ -51,7 +50,7 @@ struct ProductActions {
     func update(
         _ product: Product, from draft: ProductDraft, image: Data?, now: Date = Date()
     ) -> Result<Void, ActionError> {
-        let values: ProductDraft.ValidatedValues
+        let values: ProductValues
         switch draft.validated() {
         case .success(let validated):
             values = validated
@@ -67,7 +66,7 @@ struct ProductActions {
             return .failure(.productNotInContext)
         }
 
-        apply(values, image: image, now: now, to: product)
+        product.update(values: values, image: image, updatedAt: now)
         return saveOrRollback()
     }
 
@@ -110,21 +109,6 @@ struct ProductActions {
         }
 
         return .success(())
-    }
-
-    private func apply(_ values: ProductDraft.ValidatedValues, image: Data?, now: Date, to product: Product) {
-        product.name = values.name
-        product.type = values.type
-        product.image = image
-        product.priceYen = values.priceYen
-        product.calories = values.calories
-        product.protein = values.protein
-        product.fat = values.fat
-        product.sugar = values.sugar
-        product.carbohydrates = values.carbohydrates
-        product.nutrientBasisAmount = values.nutrientBasisAmount
-        product.nutrientBasisUnit = values.nutrientBasisUnit
-        product.updatedAt = now
     }
 
     private func saveOrRollback() -> Result<Void, ActionError> {
