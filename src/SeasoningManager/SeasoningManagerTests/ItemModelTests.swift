@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
+
 @testable import SeasoningManager
 
 @MainActor
@@ -119,8 +120,8 @@ struct ItemModelTests {
             try writer.save()
 
             // 同期途中の欠落や将来の保存値を、正常な状態へ置き換えない。
-            item.product = nil
-            item.statusRawValue = rawValue
+            item.setValue(forKey: \.product, to: nil)
+            item.setValue(forKey: \.statusRawValue, to: rawValue)
             try writer.save()
         }
 
@@ -151,9 +152,9 @@ struct ItemModelTests {
         context.insert(item)
         try context.save()
 
-        item.product = nil
+        item.setValue(forKey: \.product, to: nil)
         try context.save()
-        item.product = replacement
+        item.setValue(forKey: \.product, to: replacement)
         try context.save()
 
         let reader = ModelContext(container)
@@ -217,5 +218,19 @@ struct ItemModelTests {
             schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none
         )
         return try ModelContainer(for: schema, configurations: [configuration])
+    }
+}
+
+// 保存済みの状態を再現するテスト用の入口。日付の欠損など旧データも作れるようにする。
+@MainActor
+extension Item {
+    convenience init(
+        id: UUID = UUID(), product: Product, expirationDate: Date? = nil,
+        status: ItemStatus, openingDate: Date? = nil, consumedDate: Date? = nil, updatedAt: Date = Date()
+    ) {
+        self.init(id: id, product: product, expirationDate: expirationDate, updatedAt: updatedAt)
+        setValue(forKey: \.statusRawValue, to: status.rawValue)
+        setValue(forKey: \.openingDate, to: openingDate)
+        setValue(forKey: \.consumedDate, to: consumedDate)
     }
 }

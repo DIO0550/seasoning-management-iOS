@@ -23,7 +23,7 @@ final class Product {
 
     // 個体がある商品の削除拒否は保存操作側で行う。
     @Relationship(deleteRule: .nullify)
-    var items: [Item]?
+    private(set) var items: [Item]?
 
     /// 在庫は個体から都度求め、使い切りと未知の状態は本数に含めない。
     var stockCounts: (unopened: Int, inUse: Int) {

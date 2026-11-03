@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
+
 @testable import SeasoningManager
 
 @MainActor
@@ -17,10 +18,7 @@ struct ItemRulesTests {
 
         let opening = date(day: 2)
         let openingUpdate = date(day: 4, hour: 12)
-        try item.updateState(
-            using: ItemRules(status: .inUse, openingDate: opening),
-            now: openingUpdate, calendar: calendar()
-        ).get()
+        try item.open(on: opening, now: openingUpdate, calendar: calendar()).get()
         try context.save()
 
         let openedReader = ModelContext(container)
@@ -32,10 +30,7 @@ struct ItemRulesTests {
 
         let consumed = date(day: 6)
         let consumedUpdate = date(day: 7, hour: 12)
-        try item.updateState(
-            using: ItemRules(status: .consumed, openingDate: opening, consumedDate: consumed),
-            now: consumedUpdate, calendar: calendar()
-        ).get()
+        try item.consume(on: consumed, now: consumedUpdate, calendar: calendar()).get()
         try context.save()
 
         let consumedReader = ModelContext(container)
@@ -49,26 +44,75 @@ struct ItemRulesTests {
         #expect(saved.expirationDate == original.expirationDate)
     }
 
+    @Test func repeatedOpeningAndConsumptionLeaveDatesUnchanged() throws {
+        let item = Item(product: Product(name: "しょうゆ", type: "調味料"))
+        try item.open(on: date(day: 2), now: date(day: 4), calendar: calendar()).get()
+        let opened = Snapshot(item)
+        guard case .failure(.invalidTransition) = item.open(on: date(day: 3), now: date(day: 5), calendar: calendar())
+        else {
+            Issue.record("使用中の個体の再開封を拒否しなかった")
+            return
+        }
+        #expect(Snapshot(item) == opened)
+
+        try item.consume(on: date(day: 6), now: date(day: 7), calendar: calendar()).get()
+        let consumed = Snapshot(item)
+        guard
+            case .failure(.invalidTransition) = item.consume(on: date(day: 7), now: date(day: 8), calendar: calendar())
+        else {
+            Issue.record("使い切った個体の再操作を拒否しなかった")
+            return
+        }
+        #expect(Snapshot(item) == consumed)
+    }
+
+    @Test func editingCanRepairMissingOpeningDateWithoutPartiallyApplyingAnInvalidEdit() throws {
+        let item = Item(
+            product: Product(name: "しょうゆ", type: "調味料"), expirationDate: date(day: 1),
+            status: .inUse, openingDate: nil, updatedAt: date(day: 2)
+        )
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        context.insert(item)
+        try context.save()
+        let original = Snapshot(item)
+        let expiration = date(day: 20)
+        guard
+            case .failure(.futureOpeningDate) = item.updateDates(
+                expirationDate: expiration, openingDate: date(day: 11), now: date(day: 10), calendar: calendar()
+            )
+        else {
+            Issue.record("未来の開封日を拒否しなかった")
+            return
+        }
+        #expect(Snapshot(item) == original)
+        #expect(!context.hasChanges)
+        try context.save()
+        let reader = ModelContext(container)
+        let saved = try #require(try reader.fetch(FetchDescriptor<Item>()).first)
+        #expect(Snapshot(saved) == original)
+
+        try item.updateDates(
+            expirationDate: expiration, openingDate: date(day: 4), now: date(day: 10), calendar: calendar()
+        ).get()
+        #expect(item.status == .inUse)
+        #expect(item.openingDate == date(day: 4))
+        #expect(item.expirationDate == expiration)
+        #expect(item.updatedAt == date(day: 10))
+    }
+
     @Test(arguments: [ItemStatus.unopened, .inUse, .consumed])
     func allowsEditingDatesWithoutChangingStatus(_ status: ItemStatus) throws {
         let item = makeItem(status: status)
-        var opening: Date?
-        var consumed: Date?
-
-        switch status {
-        case .unopened:
-            break
-        case .inUse:
-            opening = date(day: 4)
-        case .consumed:
-            opening = date(day: 4)
-            consumed = date(day: 5)
-        }
-
-        let rules = ItemRules(status: status, openingDate: opening, consumedDate: consumed)
+        let consumed = item.consumedDate
+        let opening = status == .unopened ? nil : date(day: 1)
         let now = date(day: 10, hour: 12)
-        try item.updateState(using: rules, now: now, calendar: calendar()).get()
+        try item.updateDates(
+            expirationDate: date(day: 12), openingDate: opening, now: now, calendar: calendar()
+        ).get()
 
+        #expect(item.expirationDate == date(day: 12))
         #expect(item.status == status)
         #expect(item.openingDate == opening)
         #expect(item.consumedDate == consumed)
@@ -94,51 +138,30 @@ struct ItemRulesTests {
             (.consumed, .consumed, 4, 3, .consumedDateBeforeOpeningDate),
         ] as [(ItemStatus, ItemStatus, Int?, Int?, ValidationError)]
     )
-    func rejectedChangesLeaveModelAndSavedFieldsUntouched(
+    func invalidTargetDatesAndTransitionsReturnTheExpectedError(
         _ input: (source: ItemStatus, target: ItemStatus, openingDay: Int?, consumedDay: Int?, error: ValidationError)
-    ) throws {
-        let container = try makeContainer()
-        let context = ModelContext(container)
-        context.autosaveEnabled = false
-        let item = makeItem(status: input.source)
-        context.insert(item)
-        try context.save()
-        let original = Snapshot(item)
+    ) {
         let rules = ItemRules(
             status: input.target,
             openingDate: input.openingDay.map { date(day: $0) },
             consumedDate: input.consumedDay.map { date(day: $0) }
         )
 
-        let updateResult = item.updateState(
-            using: rules, now: date(day: 10, hour: 12), calendar: calendar()
-        )
-
-        guard case .failure(let error) = updateResult else {
+        let result = rules.validate(from: input.source, now: date(day: 10, hour: 12), calendar: calendar())
+        guard case .failure(let error) = result else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
         #expect(error == input.error)
-
-        #expect(Snapshot(item) == original)
-        #expect(!context.hasChanges)
-        // 失敗後に保存を呼んでも、部分更新された値がストアに入らない。
-        try context.save()
-        let reader = ModelContext(container)
-        let saved = try #require(try reader.fetch(FetchDescriptor<Item>()).first)
-        #expect(Snapshot(saved) == original)
     }
 
     @Test(arguments: ["", "futureStatus"])
     func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) {
         let item = makeItem(status: .unopened)
-        item.statusRawValue = rawValue
+        item.setValue(forKey: \.statusRawValue, to: rawValue)
         let original = Snapshot(item)
 
-        let updateResult = item.updateState(
-            using: ItemRules(status: .inUse, openingDate: date(day: 2)),
-            now: date(day: 10), calendar: calendar()
-        )
+        let updateResult = item.open(on: date(day: 2), now: date(day: 10), calendar: calendar())
 
         guard case .failure(let error) = updateResult else {
             Issue.record("期待した失敗結果が返されなかった")
@@ -154,15 +177,9 @@ struct ItemRulesTests {
         let item = makeItem(status: .unopened)
         let opening = date(day: 10, hour: 23)
         let now = date(day: 10, hour: 1)
-        try item.updateState(
-            using: ItemRules(status: .inUse, openingDate: opening),
-            now: now, calendar: calendar()
-        ).get()
+        try item.open(on: opening, now: now, calendar: calendar()).get()
         let consumed = date(day: 10)
-        try item.updateState(
-            using: ItemRules(status: .consumed, openingDate: opening, consumedDate: consumed),
-            now: now, calendar: calendar()
-        ).get()
+        try item.consume(on: consumed, now: now, calendar: calendar()).get()
 
         #expect(item.openingDate == opening)
         #expect(item.consumedDate == consumed)
@@ -172,31 +189,26 @@ struct ItemRulesTests {
     @Test func openingDateUsesTheInjectedLocalDay() throws {
         let item = makeItem(status: .unopened)
         let now = date(day: 10, hour: 16)
-        let rules = ItemRules(status: .inUse, openingDate: date(day: 11, hour: 1))
+        let opening = date(day: 11, hour: 1)
 
-        guard case .failure(let error) = item.updateState(using: rules, now: now, calendar: calendar()) else {
+        guard case .failure(let error) = item.open(on: opening, now: now, calendar: calendar()) else {
             Issue.record("期待した失敗結果が返されなかった")
             return
         }
         #expect(error == ValidationError.futureOpeningDate)
 
-        try item.updateState(using: rules, now: now, calendar: calendar(offset: 9 * 3_600)).get()
+        try item.open(on: opening, now: now, calendar: calendar(offset: 9 * 3_600)).get()
         #expect(item.status == .inUse)
-        #expect(item.openingDate == rules.openingDate)
+        #expect(item.openingDate == opening)
     }
 
     @Test func consumingOnAnEarlierLocalDayIsRejectedAcrossMidnight() throws {
-        let item = makeItem(status: .inUse)
+        let item = makeItem(status: .unopened)
+        let now = date(day: 10)
+        try item.open(on: date(day: 2, hour: 16), now: now, calendar: calendar()).get()
         let original = Snapshot(item)
-        let rules = ItemRules(
-            status: .consumed,
-            openingDate: date(day: 2, hour: 16),
-            consumedDate: date(day: 2, hour: 14)
-        )
-
-        let updateResult = item.updateState(
-            using: rules, now: date(day: 10), calendar: calendar(offset: 9 * 3_600)
-        )
+        let consumed = date(day: 2, hour: 14)
+        let updateResult = item.consume(on: consumed, now: now, calendar: calendar(offset: 9 * 3_600))
 
         guard case .failure(let error) = updateResult else {
             Issue.record("期待した失敗結果が返されなかった")
@@ -205,17 +217,14 @@ struct ItemRulesTests {
         #expect(error == ValidationError.consumedDateBeforeOpeningDate)
         #expect(Snapshot(item) == original)
 
-        try item.updateState(using: rules, now: date(day: 10), calendar: calendar()).get()
+        try item.consume(on: consumed, now: now, calendar: calendar()).get()
         #expect(item.status == .consumed)
     }
 
     @Test func futureConsumedDateIsAllowedByTheCurrentSpecification() throws {
         let item = makeItem(status: .inUse)
         let future = date(day: 20)
-        try item.updateState(
-            using: ItemRules(status: .consumed, openingDate: item.openingDate, consumedDate: future),
-            now: date(day: 10), calendar: calendar()
-        ).get()
+        try item.consume(on: future, now: date(day: 10), calendar: calendar()).get()
 
         #expect(item.status == .consumed)
         #expect(item.consumedDate == future)

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
+
 @testable import SeasoningManager
 
 @MainActor
@@ -16,7 +17,7 @@ struct ProductStockTests {
             context.insert(Item(product: product, status: status))
         }
         let unknown = Item(product: product)
-        unknown.statusRawValue = rawValue
+        unknown.setValue(forKey: \.statusRawValue, to: rawValue)
         context.insert(unknown)
         try context.save()
 
@@ -67,7 +68,7 @@ struct ProductStockTests {
 
         for rawValue in rawValues {
             let item = Item(product: product)
-            item.statusRawValue = rawValue
+            item.setValue(forKey: \.statusRawValue, to: rawValue)
             context.insert(item)
         }
         try context.save()
@@ -92,8 +93,10 @@ struct ProductStockTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = Product(name: "しょうゆ", type: "調味料")
+        let today = Date(timeIntervalSince1970: 1_700_000_000)
         let unopened = Item(product: product)
-        let inUse = Item(product: product, status: .inUse)
+        let inUse = Item(product: product)
+        try inUse.open(on: today, now: today).get()
         context.insert(product)
         context.insert(unopened)
         context.insert(inUse)
@@ -102,13 +105,13 @@ struct ProductStockTests {
         #expect(product.stockCounts.unopened == 1)
         #expect(product.stockCounts.inUse == 1)
 
-        unopened.statusRawValue = ItemStatus.inUse.rawValue
+        try unopened.open(on: today, now: today).get()
         try context.save()
 
         #expect(product.stockCounts.unopened == 0)
         #expect(product.stockCounts.inUse == 2)
 
-        inUse.statusRawValue = ItemStatus.consumed.rawValue
+        try inUse.consume(on: today, now: today).get()
         try context.save()
 
         #expect(product.stockCounts.unopened == 0)
