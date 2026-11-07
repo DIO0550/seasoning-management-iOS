@@ -4,7 +4,7 @@
   "headBranch": "refactor/product-domain-values",
   "baseBranch": "master",
   "mergeBase": "d40d3a4b0246e698ca9d05a526378dfd47795c78",
-  "head": "dde5d6a7b2bb8f1c5742e1eb47d0fcfe4b0eea1e",
+  "head": "2111094679dd5c21925f7a470707c5256982f306",
   "groups": [
     {
       "label": "Models",
@@ -61,20 +61,56 @@
       "label": "単体テスト",
       "files": [
         {
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 7,
+          "deletions": 6,
+          "changed": true,
+          "target": null
+        },
+        {
           "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 11,
-          "deletions": 14,
+          "additions": 16,
+          "deletions": 19,
           "changed": true,
           "target": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemModelTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 7,
+          "deletions": 6,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemRulesTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 12,
+          "deletions": 11,
+          "changed": true,
+          "target": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductActionsTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 4,
+          "deletions": 3,
+          "changed": true,
+          "target": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift"
         },
         {
           "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 20,
-          "deletions": 19,
+          "additions": 35,
+          "deletions": 34,
           "changed": true,
           "target": null
         },
@@ -91,8 +127,8 @@
           "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 9,
-          "deletions": 6,
+          "additions": 12,
+          "deletions": 9,
           "changed": true,
           "target": null
         },
@@ -100,8 +136,17 @@
           "path": "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 52,
-          "deletions": 24,
+          "additions": 53,
+          "deletions": 25,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 8,
+          "deletions": 7,
           "changed": true,
           "target": null
         }
@@ -140,11 +185,16 @@
     ],
     "removed": [],
     "files": [
+      "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
       "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+      "src/SeasoningManager/SeasoningManagerTests/ItemModelTests.swift",
+      "src/SeasoningManager/SeasoningManagerTests/ItemRulesTests.swift",
+      "src/SeasoningManager/SeasoningManagerTests/ProductActionsTests.swift",
       "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
       "src/SeasoningManager/SeasoningManagerTests/ProductDraftTests.swift",
       "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
-      "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift"
+      "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift",
+      "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift"
     ]
   },
   "commits": [
@@ -254,6 +304,106 @@
           "deletions": 24,
           "patch": "@@ -1,13 +1,15 @@\n import Foundation\n import SwiftData\n import Testing\n+\n @testable import SeasoningManager\n \n @MainActor\n struct ProductModelTests {\n-    @Test func newProductStartsWithUnsetOptionalValues() {\n+    @Test func newProductStartsWithUnsetOptionalValues() throws {\n         let beforeCreation = Date()\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let values = try ProductDraft(name: \" しょうゆ　\", type: \" 調味料 \").validated().get()\n+        let product = Product(values: values)\n \n         #expect(product.name == \"しょうゆ\")\n         #expect(product.type == \"調味料\")\n@@ -33,32 +35,22 @@ struct ProductModelTests {\n             let container = try makeContainer(at: storeURL)\n             let writer = ModelContext(container)\n             let unset = Product(name: \"しょうゆ\", type: \"調味料\", updatedAt: updatedAt)\n-            let zero = Product(name: \"しょうゆ\", type: \"調味料\", updatedAt: updatedAt)\n+            let zeroValues = try ProductDraft(\n+                name: \"しょうゆ\", type: \"調味料\", priceYen: \"0\",\n+                calories: \"0\", protein: \"0\", fat: \"0\", sugar: \"0\", carbohydrates: \"0\",\n+                nutrientBasisAmount: \"100\", nutrientBasisUnit: \"g\"\n+            ).validated().get()\n+            let zero = Product(values: zeroValues, updatedAt: updatedAt)\n             unsetID = unset.id\n             zeroID = zero.id\n             #expect(unset.id != zero.id)\n \n-            zero.priceYen = 0\n-            zero.calories = 0\n-            zero.protein = 0\n-            zero.fat = 0\n-            zero.sugar = 0\n-            zero.carbohydrates = 0\n-            zero.nutrientBasisAmount = 10000\n-            zero.nutrientBasisUnit = \"g\"\n-\n-            let populated = Product(\n-                id: populatedID, name: \"だし\", type: \"和風 だし\", updatedAt: updatedAt\n-            )\n-            populated.image = image\n-            populated.priceYen = 398\n-            populated.calories = 1234\n-            populated.protein = 1\n-            populated.fat = 250\n-            // 糖質は未設定のまま、炭水化物と独立して保存する。\n-            populated.carbohydrates = Int64.max\n-            populated.nutrientBasisAmount = 1500\n-            populated.nutrientBasisUnit = \"mL\"\n+            let populatedValues = try ProductDraft(\n+                name: \"だし\", type: \"和風 だし\", priceYen: \"398\",\n+                calories: \"12.34\", protein: \"0.01\", fat: \"2.50\", carbohydrates: \"92233720368547758.07\",\n+                nutrientBasisAmount: \"15\", nutrientBasisUnit: \"mL\"\n+            ).validated().get()\n+            let populated = Product(id: populatedID, values: populatedValues, image: image, updatedAt: updatedAt)\n \n             writer.insert(unset)\n             writer.insert(zero)\n@@ -107,6 +99,24 @@ struct ProductModelTests {\n         }\n     }\n \n+    @Test func removingLastNutrientClearsStoredBasisOnModelUpdate() throws {\n+        var draft = ProductDraft(\n+            name: \"しょうゆ\", type: \"調味料\", calories: \"0\",\n+            nutrientBasisAmount: \"100\", nutrientBasisUnit: \" g　\"\n+        )\n+        let product = Product(values: try draft.validated().get())\n+        #expect(product.calories == 0)\n+        #expect(product.nutrientBasisAmount == 10000)\n+        #expect(product.nutrientBasisUnit == \"g\")\n+\n+        draft.calories = \"\"\n+        let editedAt = Date(timeIntervalSince1970: 1_700_000_000)\n+        product.update(values: try draft.validated().get(), image: nil, updatedAt: editedAt)\n+\n+        #expect(product.updatedAt == editedAt)\n+        expectUnsetValues(product)\n+    }\n+\n     private func makeContainer(at url: URL) throws -> ModelContainer {\n         let schema = Schema([Product.self])\n         let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)\n@@ -125,3 +135,21 @@ struct ProductModelTests {\n         #expect(product.nutrientBasisUnit == nil)\n     }\n }\n+\n+// 表示・保存テスト用。旧データに含まれる未正規化の文字列や欠損もそのまま再現する。\n+@MainActor\n+extension Product {\n+    convenience init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) {\n+        let draft = ProductDraft(name: \"テスト商品\", type: \"調味料\")\n+        self.init(id: id, values: try! draft.validated().get(), updatedAt: updatedAt)\n+        setValue(forKey: \\.name, to: name)\n+        setValue(forKey: \\.type, to: type)\n+    }\n+\n+    /// 保存済み商品に別の画面から編集が入った状況を、モデルの更新経路で作る。\n+    func editFixture(_ edit: (inout ProductDraft) -> Void) throws {\n+        var draft = ProductFormState(product: self).draft\n+        edit(&draft)\n+        update(values: try draft.validated().get(), image: image, updatedAt: updatedAt)\n+    }\n+}",
           "patchLines": 110,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "2111094679dd5c21925f7a470707c5256982f306",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-07T22:52:55+09:00",
+      "subject": "Propagate product fixture validation errors to tests",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 7,
+          "deletions": 6,
+          "patch": "@@ -1,6 +1,7 @@\n import Foundation\n import SwiftData\n import Testing\n+\n @testable import SeasoningManager\n \n @MainActor\n@@ -8,7 +9,7 @@ struct InventoryListTests {\n     @Test func inventoryKeepsEachCurrentItemAndExcludesConsumedAndUnknownStatuses() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         let unopened = Item(product: product)\n         let secondUnopened = Item(product: product)\n         let inUse = Item(product: product, status: .inUse)\n@@ -35,7 +36,7 @@ struct InventoryListTests {\n     func inventoryIsEmptyWithoutKnownCurrentItems(_ rawValues: [String]) throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"みそ\", type: \"調味料\")\n+        let product = try Product(name: \"みそ\", type: \"調味料\")\n         context.insert(product)\n         for rawValue in rawValues {\n             let item = Item(product: product)\n@@ -52,7 +53,7 @@ struct InventoryListTests {\n     @Test func inventoryReflectsSavedOpeningConsumptionAndDeletion() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         let first = Item(product: product)\n         let second = Item(product: product)\n         context.insert(product)\n@@ -85,7 +86,7 @@ struct InventoryListTests {\n     @Test func rowsForTheSameProductKeepTheirOwnExpiration() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \" しょうゆ \", type: \" 調味料 \")\n+        let product = try Product(name: \" しょうゆ \", type: \" 調味料 \")\n         let date = Date(timeIntervalSince1970: 1_700_000_000)\n         let dated = Item(product: product, expirationDate: date, status: .inUse)\n         let undated = Item(product: product)\n@@ -106,7 +107,7 @@ struct InventoryListTests {\n     @Test func blankFieldsAndUnavailableProductHaveDistinctLabels() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \" \\t\", type: \"　\\n\")\n+        let product = try Product(name: \" \\t\", type: \"　\\n\")\n         let item = Item(product: product)\n         context.insert(product)\n         context.insert(item)\n@@ -124,7 +125,7 @@ struct InventoryListTests {\n     @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         let item = Item(product: product)\n         context.insert(product)\n         context.insert(item)",
+          "patchLines": 62,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 5,
+          "deletions": 5,
+          "patch": "@@ -136,7 +136,7 @@ struct ItemActionsTests {\n         let context = ModelContext(container)\n         let owner = ModelContext(container)\n         let saved = try makeSavedProduct(in: owner)\n-        let unmanaged = Product(name: \"未登録\", type: \"調味料\", updatedAt: originalDate)\n+        let unmanaged = try Product(name: \"未登録\", type: \"調味料\", updatedAt: originalDate)\n         let unmanagedID = unmanaged.id\n         var saveCalls = 0\n         let actions = ItemActions(context: context) { context in\n@@ -176,7 +176,7 @@ struct ItemActionsTests {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n         context.autosaveEnabled = false\n-        let pending = Product(name: \"未保存\", type: \"調味料\", updatedAt: originalDate)\n+        let pending = try Product(name: \"未保存\", type: \"調味料\", updatedAt: originalDate)\n         let productID = pending.id\n         context.insert(pending)\n         var saveCalls = 0\n@@ -412,7 +412,7 @@ struct ItemActionsTests {\n         let owner = ModelContext(container)\n         let product = try makeSavedProduct(in: owner)\n         let saved = try makeSavedItem(in: owner, product: product)\n-        let unmanaged = makeExistingItem(product: Product(name: \"未登録\", type: \"調味料\"))\n+        let unmanaged = makeExistingItem(product: try Product(name: \"未登録\", type: \"調味料\"))\n         let savedSnapshot = ItemSnapshot(saved)\n         let unmanagedSnapshot = ItemSnapshot(unmanaged)\n         var saveCalls = 0\n@@ -843,7 +843,7 @@ struct ItemActionsTests {\n         let owner = ModelContext(container)\n         let product = try makeSavedProduct(in: owner)\n         let saved = try makeSavedItem(in: owner, product: product, status: transition.source)\n-        let unmanaged = Item(product: Product(name: \"未登録\", type: \"調味料\"), status: transition.source)\n+        let unmanaged = Item(product: try Product(name: \"未登録\", type: \"調味料\"), status: transition.source)\n         let savedSnapshot = ItemSnapshot(saved)\n         let unmanagedSnapshot = ItemSnapshot(unmanaged)\n         var saveCalls = 0\n@@ -1274,7 +1274,7 @@ struct ItemActionsTests {\n         let owner = ModelContext(container)\n         let product = try makeSavedProduct(in: owner)\n         let saved = try makeSavedItem(in: owner, product: product)\n-        let unmanaged = makeExistingItem(product: Product(name: \"未登録\", type: \"調味料\"))\n+        let unmanaged = makeExistingItem(product: try Product(name: \"未登録\", type: \"調味料\"))\n         let savedSnapshot = ItemSnapshot(saved)\n         let unmanagedSnapshot = ItemSnapshot(unmanaged)\n         var saveCalls = 0",
+          "patchLines": 45,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemModelTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 7,
+          "deletions": 6,
+          "patch": "@@ -1,6 +1,7 @@\n import Foundation\n import SwiftData\n import Testing\n+\n @testable import SeasoningManager\n \n @MainActor\n@@ -8,7 +9,7 @@ struct ItemModelTests {\n     @Test func freshContainerKeepsNewIndividualsDistinct() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         let updatedAt = Date(timeIntervalSince1970: 1_700_000_000)\n         let first = Item(product: product, updatedAt: updatedAt)\n         let second = Item(product: product, updatedAt: updatedAt)\n@@ -50,7 +51,7 @@ struct ItemModelTests {\n         do {\n             let container = try makeContainer(url: url)\n             let context = ModelContext(container)\n-            let product = Product(id: productID, name: \"しょうゆ\", type: \"調味料\")\n+            let product = try Product(id: productID, name: \"しょうゆ\", type: \"調味料\")\n             let unopened = Item(id: unopenedID, product: product, updatedAt: updatedAt)\n             let inUse = Item(\n                 id: inUseID, product: product, expirationDate: expiration,\n@@ -112,7 +113,7 @@ struct ItemModelTests {\n         do {\n             let container = try makeContainer(url: url)\n             let writer = ModelContext(container)\n-            let product = Product(id: productID, name: \"しょうゆ\", type: \"調味料\")\n+            let product = try Product(id: productID, name: \"しょうゆ\", type: \"調味料\")\n             let item = Item(id: itemID, product: product)\n             writer.insert(product)\n             writer.insert(item)\n@@ -143,8 +144,8 @@ struct ItemModelTests {\n     @Test func replacingProductUpdatesBothInverseRelationships() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let original = Product(name: \"しょうゆ\", type: \"調味料\")\n-        let replacement = Product(name: \"だし\", type: \"調味料\")\n+        let original = try Product(name: \"しょうゆ\", type: \"調味料\")\n+        let replacement = try Product(name: \"だし\", type: \"調味料\")\n         let item = Item(product: original)\n         context.insert(original)\n         context.insert(replacement)\n@@ -171,7 +172,7 @@ struct ItemModelTests {\n     @Test func deletingItemPreservesProductAndOtherItem() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         let deleted = Item(product: product)\n         let opening = Date(timeIntervalSince1970: 1_700_000_000)\n         let remaining = Item(product: product, status: .inUse, openingDate: opening)",
+          "patchLines": 55,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemRulesTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 12,
+          "deletions": 11,
+          "patch": "@@ -1,6 +1,7 @@\n import Foundation\n import SwiftData\n import Testing\n+\n @testable import SeasoningManager\n \n @MainActor\n@@ -10,7 +11,7 @@ struct ItemRulesTests {\n     @Test func openingAndConsumingPersistAllFieldsTogether() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let item = makeItem(status: .unopened)\n+        let item = try makeItem(status: .unopened)\n         let original = Snapshot(item)\n         context.insert(item)\n         try context.save()\n@@ -51,7 +52,7 @@ struct ItemRulesTests {\n \n     @Test(arguments: [ItemStatus.unopened, .inUse, .consumed])\n     func allowsEditingDatesWithoutChangingStatus(_ status: ItemStatus) throws {\n-        let item = makeItem(status: status)\n+        let item = try makeItem(status: status)\n         var opening: Date?\n         var consumed: Date?\n \n@@ -100,7 +101,7 @@ struct ItemRulesTests {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n         context.autosaveEnabled = false\n-        let item = makeItem(status: input.source)\n+        let item = try makeItem(status: input.source)\n         context.insert(item)\n         try context.save()\n         let original = Snapshot(item)\n@@ -130,8 +131,8 @@ struct ItemRulesTests {\n     }\n \n     @Test(arguments: [\"\", \"futureStatus\"])\n-    func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) {\n-        let item = makeItem(status: .unopened)\n+    func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) throws {\n+        let item = try makeItem(status: .unopened)\n         item.statusRawValue = rawValue\n         let original = Snapshot(item)\n \n@@ -151,7 +152,7 @@ struct ItemRulesTests {\n     }\n \n     @Test func comparesCalendarDaysInsteadOfTimesWithinTheSameDay() throws {\n-        let item = makeItem(status: .unopened)\n+        let item = try makeItem(status: .unopened)\n         let opening = date(day: 10, hour: 23)\n         let now = date(day: 10, hour: 1)\n         try item.updateState(\n@@ -170,7 +171,7 @@ struct ItemRulesTests {\n     }\n \n     @Test func openingDateUsesTheInjectedLocalDay() throws {\n-        let item = makeItem(status: .unopened)\n+        let item = try makeItem(status: .unopened)\n         let now = date(day: 10, hour: 16)\n         let rules = ItemRules(status: .inUse, openingDate: date(day: 11, hour: 1))\n \n@@ -186,7 +187,7 @@ struct ItemRulesTests {\n     }\n \n     @Test func consumingOnAnEarlierLocalDayIsRejectedAcrossMidnight() throws {\n-        let item = makeItem(status: .inUse)\n+        let item = try makeItem(status: .inUse)\n         let original = Snapshot(item)\n         let rules = ItemRules(\n             status: .consumed,\n@@ -210,7 +211,7 @@ struct ItemRulesTests {\n     }\n \n     @Test func futureConsumedDateIsAllowedByTheCurrentSpecification() throws {\n-        let item = makeItem(status: .inUse)\n+        let item = try makeItem(status: .inUse)\n         let future = date(day: 20)\n         try item.updateState(\n             using: ItemRules(status: .consumed, openingDate: item.openingDate, consumedDate: future),\n@@ -258,7 +259,7 @@ struct ItemRulesTests {\n         return calendar\n     }\n \n-    private func makeItem(status: ItemStatus) -> Item {\n+    private func makeItem(status: ItemStatus) throws -> Item {\n         var opening: Date?\n         var consumed: Date?\n \n@@ -273,7 +274,7 @@ struct ItemRulesTests {\n         }\n \n         return Item(\n-            product: Product(name: \"しょうゆ\", type: \"調味料\"), expirationDate: date(day: 0),\n+            product: try Product(name: \"しょうゆ\", type: \"調味料\"), expirationDate: date(day: 0),\n             status: status, openingDate: opening, consumedDate: consumed, updatedAt: date(day: 1)\n         )\n     }",
+          "patchLines": 100,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductActionsTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 4,
+          "deletions": 3,
+          "patch": "@@ -1,6 +1,7 @@\n import Foundation\n import SwiftData\n import Testing\n+\n @testable import SeasoningManager\n \n @MainActor\n@@ -535,7 +536,7 @@ struct ProductActionsTests {\n             saveCalls += 1\n             return Result { try context.save() }\n         }\n-        let pending = Product(name: \"未保存\", type: \"調味料\")\n+        let pending = try Product(name: \"未保存\", type: \"調味料\")\n         context.insert(pending)\n         let draft = ProductDraft(name: \"別の商品\", type: \"調味料\")\n \n@@ -568,7 +569,7 @@ struct ProductActionsTests {\n         let product = try ProductActions(context: context).create(\n             from: populatedDraft(), image: originalImage, now: originalDate\n         ).get()\n-        let pending = Product(name: \"未保存\", type: \"調味料\")\n+        let pending = try Product(name: \"未保存\", type: \"調味料\")\n         context.insert(pending)\n         var saveCalls = 0\n         let actions = ProductActions(context: context) { context in\n@@ -611,7 +612,7 @@ struct ProductActionsTests {\n         let saved = try ProductActions(context: owner).create(\n             from: populatedDraft(), image: originalImage, now: originalDate\n         ).get()\n-        let unmanaged = Product(name: \"未登録\", type: \"調味料\", updatedAt: originalDate)\n+        let unmanaged = try Product(name: \"未登録\", type: \"調味料\", updatedAt: originalDate)\n         let actions = ProductActions(context: context)\n         let draft = ProductDraft(name: \"編集後\", type: \"調味料\")\n ",
+          "patchLines": 35,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductDetailTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 15,
+          "deletions": 15,
+          "patch": "@@ -10,8 +10,8 @@ struct ProductDetailTests {\n     @Test func savedProductIsSelectedByIDAmongSameNameProducts() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let first = Product(name: \"しょうゆ\", type: \"調味料\")\n-        let second = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let first = try Product(name: \"しょうゆ\", type: \"調味料\")\n+        let second = try Product(name: \"しょうゆ\", type: \"調味料\")\n         first.setValue(forKey: \\.priceYen, to: 100)\n         second.setValue(forKey: \\.priceYen, to: 200)\n         context.insert(first)\n@@ -34,7 +34,7 @@ struct ProductDetailTests {\n     @Test func uninsertedProductHasNoDetail() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"保存前\", type: \"しょうゆ\")\n+        let product = try Product(name: \"保存前\", type: \"しょうゆ\")\n \n         #expect(ProductDetailContent(product: product) == nil)\n         #expect(try context.fetch(ProductDetailView.descriptor(for: product.id)).isEmpty)\n@@ -44,7 +44,7 @@ struct ProductDetailTests {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n         context.autosaveEnabled = false\n-        let product = Product(name: \"保存前\", type: \"しょうゆ\")\n+        let product = try Product(name: \"保存前\", type: \"しょうゆ\")\n         context.insert(product)\n \n         #expect(ProductDetailContent(product: product) == nil)\n@@ -62,7 +62,7 @@ struct ProductDetailTests {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n         context.autosaveEnabled = false\n-        let product = Product(name: \"削除する商品\", type: \"みそ\")\n+        let product = try Product(name: \"削除する商品\", type: \"みそ\")\n         let productID = product.id\n         context.insert(product)\n         try context.save()\n@@ -83,7 +83,7 @@ struct ProductDetailTests {\n     @Test func unsetOptionalValuesRemainUnset() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \" \\t\\n　\", type: \"　\\n\")\n+        let product = try Product(name: \" \\t\\n　\", type: \"　\\n\")\n         context.insert(product)\n         try context.save()\n \n@@ -103,7 +103,7 @@ struct ProductDetailTests {\n     @Test func registeredValuesKeepTheirOwnFieldsAndUnits() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"  だし \\n\", type: \" 和風 だし　\")\n+        let product = try Product(name: \"  だし \\n\", type: \" 和風 だし　\")\n         product.setValue(forKey: \\.priceYen, to: 0)\n         product.setValue(forKey: \\.calories, to: 1234)\n         product.setValue(forKey: \\.protein, to: 1)\n@@ -143,7 +143,7 @@ struct ProductDetailTests {\n     func hundredthsAreDisplayedWithoutRounding(_ value: Int64, _ expected: String) throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         product.setValue(forKey: \\.calories, to: value)\n         product.setValue(forKey: \\.nutrientBasisAmount, to: 10000)\n         product.setValue(forKey: \\.nutrientBasisUnit, to: \"g\")\n@@ -159,7 +159,7 @@ struct ProductDetailTests {\n     func missingOrInvalidBasisAmountIsNotReplacedWithDefault(_ amount: Int64?) throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         product.setValue(forKey: \\.calories, to: 0)\n         product.setValue(forKey: \\.nutrientBasisAmount, to: amount)\n         product.setValue(forKey: \\.nutrientBasisUnit, to: \"g\")\n@@ -175,7 +175,7 @@ struct ProductDetailTests {\n     func missingBasisUnitIsNotInferred(_ unit: String?) throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         product.setValue(forKey: \\.nutrientBasisAmount, to: 10000)\n         product.setValue(forKey: \\.nutrientBasisUnit, to: unit)\n         context.insert(product)\n@@ -188,7 +188,7 @@ struct ProductDetailTests {\n     @Test func corruptImageUsesPlaceholderWithoutHidingOtherValues() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"画像が壊れた商品\", type: \"みそ\")\n+        let product = try Product(name: \"画像が壊れた商品\", type: \"みそ\")\n         product.image = Data([0, 1, 2, 3])\n         product.setValue(forKey: \\.priceYen, to: 398)\n         context.insert(product)\n@@ -203,7 +203,7 @@ struct ProductDetailTests {\n     @Test func productWithoutItemsCanBeDeleted() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         context.insert(product)\n         try context.save()\n \n@@ -221,8 +221,8 @@ struct ProductDetailTests {\n     @Test func deletionCountsIncludeEveryStateAndExcludeOtherProducts() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n-        let other = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n+        let other = try Product(name: \"しょうゆ\", type: \"調味料\")\n         context.insert(product)\n         context.insert(other)\n         let states = [\"unopened\", \"unopened\", \"inUse\", \"consumed\", \"consumed\", \"consumed\", \"future\"]\n@@ -252,7 +252,7 @@ struct ProductDetailTests {\n     func historyOrUnknownStateAlonePreventsDeletion(_ state: String, _ history: Int, _ unknown: Int) throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         context.insert(product)\n         let item = Item(product: product)\n         item.statusRawValue = state",
+          "patchLines": 121,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductFormStateTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 3,
+          "deletions": 3,
+          "patch": "@@ -144,7 +144,7 @@ struct ProductFormStateTests {\n     @Test func unrelatedUnsavedChangesSurviveInputAndRejectedSave() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let existing = Product(name: \"元の商品\", type: \"みそ\")\n+        let existing = try Product(name: \"元の商品\", type: \"みそ\")\n         context.insert(existing)\n         try context.save()\n         try existing.editFixture { $0.name = \"ほかの画面で編集中\" }\n@@ -218,7 +218,7 @@ struct ProductFormStateTests {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n         let product = try makeSavedProduct(in: context)\n-        let other = Product(name: product.name, type: product.type)\n+        let other = try Product(name: product.name, type: product.type)\n         let item = Item(product: product)\n         context.insert(other)\n         context.insert(item)\n@@ -268,7 +268,7 @@ struct ProductFormStateTests {\n     func editingPreservesUnsetZeroAndMaximumPrice(_ price: Int64?) throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"元の商品\", type: \"しょうゆ\")\n+        let product = try Product(name: \"元の商品\", type: \"しょうゆ\")\n         product.setValue(forKey: \\.priceYen, to: price)\n         context.insert(product)\n         try context.save()",
+          "patchLines": 27,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 3,
+          "deletions": 3,
+          "patch": "@@ -34,7 +34,7 @@ struct ProductModelTests {\n         do {\n             let container = try makeContainer(at: storeURL)\n             let writer = ModelContext(container)\n-            let unset = Product(name: \"しょうゆ\", type: \"調味料\", updatedAt: updatedAt)\n+            let unset = try Product(name: \"しょうゆ\", type: \"調味料\", updatedAt: updatedAt)\n             let zeroValues = try ProductDraft(\n                 name: \"しょうゆ\", type: \"調味料\", priceYen: \"0\",\n                 calories: \"0\", protein: \"0\", fat: \"0\", sugar: \"0\", carbohydrates: \"0\",\n@@ -139,9 +139,9 @@ struct ProductModelTests {\n // 表示・保存テスト用。旧データに含まれる未正規化の文字列や欠損もそのまま再現する。\n @MainActor\n extension Product {\n-    convenience init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) {\n+    convenience init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) throws {\n         let draft = ProductDraft(name: \"テスト商品\", type: \"調味料\")\n-        self.init(id: id, values: try! draft.validated().get(), updatedAt: updatedAt)\n+        self.init(id: id, values: try draft.validated().get(), updatedAt: updatedAt)\n         setValue(forKey: \\.name, to: name)\n         setValue(forKey: \\.type, to: type)\n     }",
+          "patchLines": 21,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 8,
+          "deletions": 7,
+          "patch": "@@ -1,6 +1,7 @@\n import Foundation\n import SwiftData\n import Testing\n+\n @testable import SeasoningManager\n \n @MainActor\n@@ -9,7 +10,7 @@ struct ProductStockTests {\n     func savedStockExcludesConsumedAndUnknownStatuses(_ rawValue: String) throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         context.insert(product)\n \n         for status in [ItemStatus.unopened, .unopened, .inUse, .consumed] {\n@@ -38,8 +39,8 @@ struct ProductStockTests {\n     @Test func sameNameProductsKeepTheirOwnStock() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let first = Product(name: \"しょうゆ\", type: \"調味料\")\n-        let second = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let first = try Product(name: \"しょうゆ\", type: \"調味料\")\n+        let second = try Product(name: \"しょうゆ\", type: \"調味料\")\n         context.insert(first)\n         context.insert(second)\n         context.insert(Item(product: first))\n@@ -62,7 +63,7 @@ struct ProductStockTests {\n     func productsWithoutCurrentStockReportBothZeros(_ rawValues: [String]) throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         context.insert(product)\n \n         for rawValue in rawValues {\n@@ -80,8 +81,8 @@ struct ProductStockTests {\n         #expect(saved.stockCounts.inUse == 0)\n     }\n \n-    @Test func missingItemRelationshipReportsBothZeros() {\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+    @Test func missingItemRelationshipReportsBothZeros() throws {\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n \n         #expect(product.items == nil)\n         #expect(product.stockCounts.unopened == 0)\n@@ -91,7 +92,7 @@ struct ProductStockTests {\n     @Test func stockRecalculatesAfterStatusChangesAndDeletion() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n-        let product = Product(name: \"しょうゆ\", type: \"調味料\")\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n         let unopened = Item(product: product)\n         let inUse = Item(product: product, status: .inUse)\n         context.insert(product)",
+          "patchLines": 57,
           "truncated": false
         }
       ]
