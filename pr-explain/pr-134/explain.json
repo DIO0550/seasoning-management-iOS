@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 134,
-  "sha": "dde5d6a7b2bb8f1c5742e1eb47d0fcfe4b0eea1e",
+  "sha": "2111094679dd5c21925f7a470707c5256982f306",
   "overview": {
     "title": "商品情報の保存境界",
     "lead": "商品名・種類・価格・栄養表示をまとめて検証し、検証に成功した商品情報だけを登録・編集に使う。",
@@ -41,6 +41,34 @@
       "why": "商品名・種類・価格・栄養表示をまとめて検証し、検証に成功した商品情報だけを登録・編集に使う。",
       "review": [
         "栄養値、基準量、単位がすべて未設定になり、更新日時も反映される。"
+      ]
+    },
+    {
+      "sha": "2111094679dd5c21925f7a470707c5256982f306",
+      "phase": "revise",
+      "role": "テスト準備の失敗を伝える",
+      "why": "テスト用の商品生成で強制的に成功値を取り出すと、将来の検証条件変更でテストプロセスが停止し得る。生成エラーを元のまま該当テストへ伝える。",
+      "review": [
+        "テスト用 initializer と呼び出し元が throws / try でつながっている。",
+        "固定の有効な入力から生成した後、旧データの未正規化の名前・種類を復元する処理は維持している。"
+      ],
+      "before": [
+        {
+          "text": "テスト用の固定入力が検証に失敗すると try! がプロセスを停止させる。"
+        }
+      ],
+      "after": [
+        {
+          "text": "検証エラーを Swift Testing が該当テストの失敗として記録する。"
+        }
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift",
+          "start": 142,
+          "end": 146,
+          "text": "成功の強制ではなく、検証エラーを呼び出し元へ伝播させる。"
+        }
       ]
     }
   ],
@@ -186,6 +214,49 @@
       ],
       "seeAlso": [
         "language"
+      ]
+    },
+    {
+      "id": "fixture-errors",
+      "kind": "language",
+      "category": "テスト準備",
+      "label": "throws と try",
+      "gist": "失敗し得る処理は throws で宣言し、呼び出しを try で明示する。テスト準備が失敗しても、原因を失わず該当テストの失敗として報告できる。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`throws` は関数や initializer がエラーを呼び出し元に渡し得るという宣言。`try` はその失敗する呼び出しを明示する。`Result.get()` は成功値を返し、失敗時には元のエラーを投げる。このテスト用 initializer はそのエラーを受け止めず、`throws` を持つテスト関数まで伝播させる。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift",
+            "start": 139,
+            "end": 147,
+            "text": "// 表示・保存テスト用。旧データに含まれる未正規化の文字列や欠損もそのまま再現する。\n@MainActor\nextension Product {\n    convenience init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) throws {\n        let draft = ProductDraft(name: \"テスト商品\", type: \"調味料\")\n        self.init(id: id, values: try draft.validated().get(), updatedAt: updatedAt)\n        setValue(forKey: \\.name, to: name)\n        setValue(forKey: \\.type, to: type)\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "まず固定の有効な入力を検証して商品を作り、その後でテスト対象の未正規化の名前と種類を復元する。ここで `try!` を使うと検証失敗時にプロセスが停止するため、通常の `try` に置き換えた。呼び出し元の9つのテストファイルにも `try` を伝播させた。"
+        },
+        {
+          "kind": "caution",
+          "text": "本番の業務APIは引き続き型付きの `Result` を返す。今回の `throws` はテストの準備に限り、エラーを `try?` で捨てたり、不正な値を本番の生成経路で許可したりしない。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ProductModelTests.swift",
+          "lineRange": {
+            "start": 142,
+            "end": 146
+          },
+          "text": "テスト用の商品生成で検証エラーを伝える。",
+          "shas": [
+            "2111094679dd5c21925f7a470707c5256982f306"
+          ]
+        }
       ]
     }
   ]
