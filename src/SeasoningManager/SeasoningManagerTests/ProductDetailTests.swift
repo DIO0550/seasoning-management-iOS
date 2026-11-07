@@ -10,8 +10,8 @@ struct ProductDetailTests {
     @Test func savedProductIsSelectedByIDAmongSameNameProducts() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let first = Product(name: "しょうゆ", type: "調味料")
-        let second = Product(name: "しょうゆ", type: "調味料")
+        let first = try Product(name: "しょうゆ", type: "調味料")
+        let second = try Product(name: "しょうゆ", type: "調味料")
         first.setValue(forKey: \.priceYen, to: 100)
         second.setValue(forKey: \.priceYen, to: 200)
         context.insert(first)
@@ -34,7 +34,7 @@ struct ProductDetailTests {
     @Test func uninsertedProductHasNoDetail() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "保存前", type: "しょうゆ")
+        let product = try Product(name: "保存前", type: "しょうゆ")
 
         #expect(ProductDetailContent(product: product) == nil)
         #expect(try context.fetch(ProductDetailView.descriptor(for: product.id)).isEmpty)
@@ -44,7 +44,7 @@ struct ProductDetailTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         context.autosaveEnabled = false
-        let product = Product(name: "保存前", type: "しょうゆ")
+        let product = try Product(name: "保存前", type: "しょうゆ")
         context.insert(product)
 
         #expect(ProductDetailContent(product: product) == nil)
@@ -62,7 +62,7 @@ struct ProductDetailTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         context.autosaveEnabled = false
-        let product = Product(name: "削除する商品", type: "みそ")
+        let product = try Product(name: "削除する商品", type: "みそ")
         let productID = product.id
         context.insert(product)
         try context.save()
@@ -83,7 +83,7 @@ struct ProductDetailTests {
     @Test func unsetOptionalValuesRemainUnset() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: " \t\n　", type: "　\n")
+        let product = try Product(name: " \t\n　", type: "　\n")
         context.insert(product)
         try context.save()
 
@@ -103,7 +103,7 @@ struct ProductDetailTests {
     @Test func registeredValuesKeepTheirOwnFieldsAndUnits() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "  だし \n", type: " 和風 だし　")
+        let product = try Product(name: "  だし \n", type: " 和風 だし　")
         product.setValue(forKey: \.priceYen, to: 0)
         product.setValue(forKey: \.calories, to: 1234)
         product.setValue(forKey: \.protein, to: 1)
@@ -143,7 +143,7 @@ struct ProductDetailTests {
     func hundredthsAreDisplayedWithoutRounding(_ value: Int64, _ expected: String) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         product.setValue(forKey: \.calories, to: value)
         product.setValue(forKey: \.nutrientBasisAmount, to: 10000)
         product.setValue(forKey: \.nutrientBasisUnit, to: "g")
@@ -159,7 +159,7 @@ struct ProductDetailTests {
     func missingOrInvalidBasisAmountIsNotReplacedWithDefault(_ amount: Int64?) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         product.setValue(forKey: \.calories, to: 0)
         product.setValue(forKey: \.nutrientBasisAmount, to: amount)
         product.setValue(forKey: \.nutrientBasisUnit, to: "g")
@@ -175,7 +175,7 @@ struct ProductDetailTests {
     func missingBasisUnitIsNotInferred(_ unit: String?) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         product.setValue(forKey: \.nutrientBasisAmount, to: 10000)
         product.setValue(forKey: \.nutrientBasisUnit, to: unit)
         context.insert(product)
@@ -188,7 +188,7 @@ struct ProductDetailTests {
     @Test func corruptImageUsesPlaceholderWithoutHidingOtherValues() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "画像が壊れた商品", type: "みそ")
+        let product = try Product(name: "画像が壊れた商品", type: "みそ")
         product.image = Data([0, 1, 2, 3])
         product.setValue(forKey: \.priceYen, to: 398)
         context.insert(product)
@@ -203,7 +203,7 @@ struct ProductDetailTests {
     @Test func productWithoutItemsCanBeDeleted() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         context.insert(product)
         try context.save()
 
@@ -221,8 +221,8 @@ struct ProductDetailTests {
     @Test func deletionCountsIncludeEveryStateAndExcludeOtherProducts() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
-        let other = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
+        let other = try Product(name: "しょうゆ", type: "調味料")
         context.insert(product)
         context.insert(other)
         let states = ["unopened", "unopened", "inUse", "consumed", "consumed", "consumed", "future"]
@@ -252,7 +252,7 @@ struct ProductDetailTests {
     func historyOrUnknownStateAlonePreventsDeletion(_ state: String, _ history: Int, _ unknown: Int) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         context.insert(product)
         let item = Item(product: product)
         item.statusRawValue = state

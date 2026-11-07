@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
+
 @testable import SeasoningManager
 
 @MainActor
@@ -10,7 +11,7 @@ struct ItemRulesTests {
     @Test func openingAndConsumingPersistAllFieldsTogether() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let item = makeItem(status: .unopened)
+        let item = try makeItem(status: .unopened)
         let original = Snapshot(item)
         context.insert(item)
         try context.save()
@@ -51,7 +52,7 @@ struct ItemRulesTests {
 
     @Test(arguments: [ItemStatus.unopened, .inUse, .consumed])
     func allowsEditingDatesWithoutChangingStatus(_ status: ItemStatus) throws {
-        let item = makeItem(status: status)
+        let item = try makeItem(status: status)
         var opening: Date?
         var consumed: Date?
 
@@ -100,7 +101,7 @@ struct ItemRulesTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         context.autosaveEnabled = false
-        let item = makeItem(status: input.source)
+        let item = try makeItem(status: input.source)
         context.insert(item)
         try context.save()
         let original = Snapshot(item)
@@ -130,8 +131,8 @@ struct ItemRulesTests {
     }
 
     @Test(arguments: ["", "futureStatus"])
-    func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) {
-        let item = makeItem(status: .unopened)
+    func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) throws {
+        let item = try makeItem(status: .unopened)
         item.statusRawValue = rawValue
         let original = Snapshot(item)
 
@@ -151,7 +152,7 @@ struct ItemRulesTests {
     }
 
     @Test func comparesCalendarDaysInsteadOfTimesWithinTheSameDay() throws {
-        let item = makeItem(status: .unopened)
+        let item = try makeItem(status: .unopened)
         let opening = date(day: 10, hour: 23)
         let now = date(day: 10, hour: 1)
         try item.updateState(
@@ -170,7 +171,7 @@ struct ItemRulesTests {
     }
 
     @Test func openingDateUsesTheInjectedLocalDay() throws {
-        let item = makeItem(status: .unopened)
+        let item = try makeItem(status: .unopened)
         let now = date(day: 10, hour: 16)
         let rules = ItemRules(status: .inUse, openingDate: date(day: 11, hour: 1))
 
@@ -186,7 +187,7 @@ struct ItemRulesTests {
     }
 
     @Test func consumingOnAnEarlierLocalDayIsRejectedAcrossMidnight() throws {
-        let item = makeItem(status: .inUse)
+        let item = try makeItem(status: .inUse)
         let original = Snapshot(item)
         let rules = ItemRules(
             status: .consumed,
@@ -210,7 +211,7 @@ struct ItemRulesTests {
     }
 
     @Test func futureConsumedDateIsAllowedByTheCurrentSpecification() throws {
-        let item = makeItem(status: .inUse)
+        let item = try makeItem(status: .inUse)
         let future = date(day: 20)
         try item.updateState(
             using: ItemRules(status: .consumed, openingDate: item.openingDate, consumedDate: future),
@@ -258,7 +259,7 @@ struct ItemRulesTests {
         return calendar
     }
 
-    private func makeItem(status: ItemStatus) -> Item {
+    private func makeItem(status: ItemStatus) throws -> Item {
         var opening: Date?
         var consumed: Date?
 
@@ -273,7 +274,7 @@ struct ItemRulesTests {
         }
 
         return Item(
-            product: Product(name: "しょうゆ", type: "調味料"), expirationDate: date(day: 0),
+            product: try Product(name: "しょうゆ", type: "調味料"), expirationDate: date(day: 0),
             status: status, openingDate: opening, consumedDate: consumed, updatedAt: date(day: 1)
         )
     }

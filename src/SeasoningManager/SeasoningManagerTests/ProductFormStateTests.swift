@@ -144,7 +144,7 @@ struct ProductFormStateTests {
     @Test func unrelatedUnsavedChangesSurviveInputAndRejectedSave() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let existing = Product(name: "元の商品", type: "みそ")
+        let existing = try Product(name: "元の商品", type: "みそ")
         context.insert(existing)
         try context.save()
         try existing.editFixture { $0.name = "ほかの画面で編集中" }
@@ -218,7 +218,7 @@ struct ProductFormStateTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = try makeSavedProduct(in: context)
-        let other = Product(name: product.name, type: product.type)
+        let other = try Product(name: product.name, type: product.type)
         let item = Item(product: product)
         context.insert(other)
         context.insert(item)
@@ -268,7 +268,7 @@ struct ProductFormStateTests {
     func editingPreservesUnsetZeroAndMaximumPrice(_ price: Int64?) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "元の商品", type: "しょうゆ")
+        let product = try Product(name: "元の商品", type: "しょうゆ")
         product.setValue(forKey: \.priceYen, to: price)
         context.insert(product)
         try context.save()
