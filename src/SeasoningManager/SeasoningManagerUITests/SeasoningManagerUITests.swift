@@ -75,10 +75,11 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["item-form-save"].isEnabled)
         try selectItemProduct(name: "丸大豆しょうゆ", type: "しょうゆ", in: app)
         let expirationToggle = app.switches["item-form-has-expiration"]
-        XCTAssertEqual(expirationToggle.value as? String, "0")
+        assertItemExpiration(isEnabled: false, in: app)
         expirationToggle.tap()
-        XCTAssertTrue(app.datePickers["item-form-expiration"].waitForExistence(timeout: 5))
+        assertItemExpiration(isEnabled: true, in: app)
         expirationToggle.tap()
+        assertItemExpiration(isEnabled: false, in: app)
         app.buttons["item-form-save"].tap()
         XCTAssertTrue(app.navigationBars["在庫一覧"].waitForExistence(timeout: 5))
         let row = app.descendants(matching: .any).matching(
@@ -106,17 +107,19 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["inventory-empty-add"].waitForExistence(timeout: 5))
         app.buttons["inventory-empty-add"].tap()
         try selectItemProduct(name: "赤みそ", type: "みそ", in: app)
+        assertItemExpiration(isEnabled: false, in: app)
         app.switches["item-form-has-expiration"].tap()
-        XCTAssertTrue(app.datePickers["item-form-expiration"].waitForExistence(timeout: 5))
+        assertItemExpiration(isEnabled: true, in: app)
         app.navigationBars["個体を追加"].buttons["在庫一覧"].tap()
         XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
 
         app.navigationBars["在庫一覧"].buttons["inventory-list-add"].tap()
         XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["item-form-save"].isEnabled)
-        XCTAssertEqual(app.switches["item-form-has-expiration"].value as? String, "0")
+        assertItemExpiration(isEnabled: false, in: app)
         try selectItemProduct(name: "赤みそ", type: "みそ", in: app)
         app.switches["item-form-has-expiration"].tap()
+        assertItemExpiration(isEnabled: true, in: app)
         app.buttons["item-form-save"].tap()
         XCTAssertTrue(app.navigationBars["在庫一覧"].waitForExistence(timeout: 5))
         let row = app.descendants(matching: .any).matching(
@@ -145,6 +148,32 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(typeRow.waitForExistence(timeout: 5))
         XCTAssertEqual(nameRow.label, "名前、\(name)")
         XCTAssertEqual(typeRow.label, "種類、\(type)")
+    }
+
+    @MainActor
+    private func assertItemExpiration(isEnabled: Bool, in app: XCUIApplication) {
+        let toggle = app.switches["item-form-has-expiration"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5), app.debugDescription)
+        let expectedValue = isEnabled ? "1" : "0"
+        let toggleExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", expectedValue), object: toggle
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [toggleExpectation], timeout: 5), .completed, app.debugDescription
+        )
+
+        let dateField = app.descendants(matching: .any).matching(identifier: "item-form-expiration").firstMatch
+        if isEnabled {
+            XCTAssertTrue(dateField.waitForExistence(timeout: 5), app.debugDescription)
+            return
+        }
+
+        let hiddenExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: dateField
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [hiddenExpectation], timeout: 5), .completed, app.debugDescription
+        )
     }
 
     @MainActor
