@@ -136,7 +136,7 @@ struct ItemActionsTests {
         let context = ModelContext(container)
         let owner = ModelContext(container)
         let saved = try makeSavedProduct(in: owner)
-        let unmanaged = Product(name: "未登録", type: "調味料", updatedAt: originalDate)
+        let unmanaged = try Product(name: "未登録", type: "調味料", updatedAt: originalDate)
         let unmanagedID = unmanaged.id
         var saveCalls = 0
         let actions = ItemActions(context: context) { context in
@@ -176,7 +176,7 @@ struct ItemActionsTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         context.autosaveEnabled = false
-        let pending = Product(name: "未保存", type: "調味料", updatedAt: originalDate)
+        let pending = try Product(name: "未保存", type: "調味料", updatedAt: originalDate)
         let productID = pending.id
         context.insert(pending)
         var saveCalls = 0
@@ -412,7 +412,7 @@ struct ItemActionsTests {
         let owner = ModelContext(container)
         let product = try makeSavedProduct(in: owner)
         let saved = try makeSavedItem(in: owner, product: product)
-        let unmanaged = makeExistingItem(product: Product(name: "未登録", type: "調味料"))
+        let unmanaged = makeExistingItem(product: try Product(name: "未登録", type: "調味料"))
         let savedSnapshot = ItemSnapshot(saved)
         let unmanagedSnapshot = ItemSnapshot(unmanaged)
         var saveCalls = 0
@@ -843,7 +843,7 @@ struct ItemActionsTests {
         let owner = ModelContext(container)
         let product = try makeSavedProduct(in: owner)
         let saved = try makeSavedItem(in: owner, product: product, status: transition.source)
-        let unmanaged = Item(product: Product(name: "未登録", type: "調味料"), status: transition.source)
+        let unmanaged = Item(product: try Product(name: "未登録", type: "調味料"), status: transition.source)
         let savedSnapshot = ItemSnapshot(saved)
         let unmanagedSnapshot = ItemSnapshot(unmanaged)
         var saveCalls = 0
@@ -1274,7 +1274,7 @@ struct ItemActionsTests {
         let owner = ModelContext(container)
         let product = try makeSavedProduct(in: owner)
         let saved = try makeSavedItem(in: owner, product: product)
-        let unmanaged = makeExistingItem(product: Product(name: "未登録", type: "調味料"))
+        let unmanaged = makeExistingItem(product: try Product(name: "未登録", type: "調味料"))
         let savedSnapshot = ItemSnapshot(saved)
         let unmanagedSnapshot = ItemSnapshot(unmanaged)
         var saveCalls = 0

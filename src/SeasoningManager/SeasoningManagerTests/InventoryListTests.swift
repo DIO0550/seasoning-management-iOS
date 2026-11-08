@@ -9,7 +9,7 @@ struct InventoryListTests {
     @Test func inventoryKeepsEachCurrentItemAndExcludesConsumedAndUnknownStatuses() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         let unopened = Item(product: product)
         let secondUnopened = Item(product: product)
         let inUse = Item(product: product, status: .inUse)
@@ -36,7 +36,7 @@ struct InventoryListTests {
     func inventoryIsEmptyWithoutKnownCurrentItems(_ rawValues: [String]) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "みそ", type: "調味料")
+        let product = try Product(name: "みそ", type: "調味料")
         context.insert(product)
         for rawValue in rawValues {
             let item = Item(product: product)
@@ -53,7 +53,7 @@ struct InventoryListTests {
     @Test func inventoryReflectsSavedOpeningConsumptionAndDeletion() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         let first = Item(product: product)
         let second = Item(product: product)
         context.insert(product)
@@ -86,7 +86,7 @@ struct InventoryListTests {
     @Test func rowsForTheSameProductKeepTheirOwnExpiration() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: " しょうゆ ", type: " 調味料 ")
+        let product = try Product(name: " しょうゆ ", type: " 調味料 ")
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let dated = Item(product: product, expirationDate: date, status: .inUse)
         let undated = Item(product: product)
@@ -107,7 +107,7 @@ struct InventoryListTests {
     @Test func blankFieldsAndUnavailableProductHaveDistinctLabels() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: " \t", type: "　\n")
+        let product = try Product(name: " \t", type: "　\n")
         let item = Item(product: product)
         context.insert(product)
         context.insert(item)
@@ -125,7 +125,7 @@ struct InventoryListTests {
     @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let item = Item(product: product, expirationDate: date)
         context.insert(product)

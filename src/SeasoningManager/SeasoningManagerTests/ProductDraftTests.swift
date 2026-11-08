@@ -43,12 +43,12 @@ struct ProductDraftTests {
         )
         let values = try draft.validated().get()
 
-        #expect(values.name == "だし　しょうゆ")
-        #expect(values.type == "和風  だし")
-        #expect(values.priceYen == 398)
-        #expect(values.nutrition?.calories == 1234)
-        #expect(values.nutrition?.basisAmount == 100)
-        #expect(values.nutrition?.basisUnit == "杯（ 大さじ ）")
+        #expect(values.name.value == "だし　しょうゆ")
+        #expect(values.type.value == "和風  だし")
+        #expect(values.priceYen?.value == 398)
+        #expect(values.nutrition?.amounts.calories?.hundredths == 1234)
+        #expect(values.nutrition?.basisAmount.hundredths == 100)
+        #expect(values.nutrition?.basisUnit.value == "杯（ 大さじ ）")
         #expect(draft.calories == "\u{2003}12.34\n")
     }
 
@@ -61,7 +61,7 @@ struct ProductDraftTests {
         )
         let values = try draft.validated().get()
 
-        #expect(values.priceYen == nil)
+        #expect(values.priceYen?.value == nil)
         #expect(values.nutrition == nil)
     }
 
@@ -73,13 +73,13 @@ struct ProductDraftTests {
         )
         let values = try draft.validated().get()
 
-        #expect(values.priceYen == 0)
-        #expect(values.nutrition?.calories == 0)
-        #expect(values.nutrition?.protein == 0)
-        #expect(values.nutrition?.fat == 0)
-        #expect(values.nutrition?.sugar == 0)
-        #expect(values.nutrition?.carbohydrates == 0)
-        #expect(values.nutrition?.basisAmount == 1)
+        #expect(values.priceYen?.value == 0)
+        #expect(values.nutrition?.amounts.calories?.hundredths == 0)
+        #expect(values.nutrition?.amounts.protein?.hundredths == 0)
+        #expect(values.nutrition?.amounts.fat?.hundredths == 0)
+        #expect(values.nutrition?.amounts.sugar?.hundredths == 0)
+        #expect(values.nutrition?.amounts.carbohydrates?.hundredths == 0)
+        #expect(values.nutrition?.basisAmount.hundredths == 1)
     }
 
     @Test func nutrientFieldsRemainIndependent() throws {
@@ -89,23 +89,23 @@ struct ProductDraftTests {
         )
         let values = try draft.validated().get()
 
-        #expect(values.nutrition?.calories == 1234)
-        #expect(values.nutrition?.protein == 1)
-        #expect(values.nutrition?.fat == 120)
-        #expect(values.nutrition?.sugar == 2)
-        #expect(values.nutrition?.carbohydrates == 456)
-        #expect(values.nutrition?.basisAmount == 1500)
-        #expect(values.nutrition?.basisUnit == "mL")
+        #expect(values.nutrition?.amounts.calories?.hundredths == 1234)
+        #expect(values.nutrition?.amounts.protein?.hundredths == 1)
+        #expect(values.nutrition?.amounts.fat?.hundredths == 120)
+        #expect(values.nutrition?.amounts.sugar?.hundredths == 2)
+        #expect(values.nutrition?.amounts.carbohydrates?.hundredths == 456)
+        #expect(values.nutrition?.basisAmount.hundredths == 1500)
+        #expect(values.nutrition?.basisUnit.value == "mL")
     }
 
     @Test func oneNutrientDoesNotPopulateOthers() throws {
         let values = try draftWithNumericInput("4.56", field: .sugar).validated().get()
 
-        #expect(values.nutrition?.calories == nil)
-        #expect(values.nutrition?.protein == nil)
-        #expect(values.nutrition?.fat == nil)
-        #expect(values.nutrition?.sugar == 456)
-        #expect(values.nutrition?.carbohydrates == nil)
+        #expect(values.nutrition?.amounts.calories?.hundredths == nil)
+        #expect(values.nutrition?.amounts.protein?.hundredths == nil)
+        #expect(values.nutrition?.amounts.fat?.hundredths == nil)
+        #expect(values.nutrition?.amounts.sugar?.hundredths == 456)
+        #expect(values.nutrition?.amounts.carbohydrates?.hundredths == nil)
     }
 
     @Test(arguments: [
@@ -116,7 +116,7 @@ struct ProductDraftTests {
     func scalesDecimalsExactly(input: String, expected: Int64) throws {
         let values = try draftWithNumericInput(input, field: .calories).validated().get()
 
-        #expect(values.nutrition?.calories == expected)
+        #expect(values.nutrition?.amounts.calories?.hundredths == expected)
     }
 
     @Test(arguments: ["92233720368547758.08", "92233720368547759", "9223372036854775807", "99999999999999999999999"])
@@ -147,7 +147,7 @@ struct ProductDraftTests {
     @Test func priceAllowsInt64MaximumWithoutScaling() throws {
         let values = try draftWithNumericInput("9223372036854775807", field: .priceYen).validated().get()
 
-        #expect(values.priceYen == Int64.max)
+        #expect(values.priceYen?.value == Int64.max)
     }
 
     @Test(arguments: ["9223372036854775808", "99999999999999999999999"])
@@ -191,7 +191,7 @@ struct ProductDraftTests {
 
     @Test func basisAcceptsExactUpperLimitAndRejectsOverflow() throws {
         let values = try draftWithNumericInput("92233720368547758.07", field: .nutrientBasisAmount).validated().get()
-        #expect(values.nutrition?.basisAmount == Int64.max)
+        #expect(values.nutrition?.basisAmount.hundredths == Int64.max)
 
         let overflow = draftWithNumericInput("92233720368547758.08", field: .nutrientBasisAmount)
         #expect(overflow.validated() == .failure(ValidationError(field: .nutrientBasisAmount, reason: .outOfRange)))
@@ -206,8 +206,8 @@ struct ProductDraftTests {
         draft.nutrientBasisUnit = "mL"
         let cleared = try draft.validated().get()
 
-        #expect(original.nutrition?.calories == 100)
-        #expect(original.nutrition?.basisAmount == 10000)
+        #expect(original.nutrition?.amounts.calories?.hundredths == 100)
+        #expect(original.nutrition?.basisAmount.hundredths == 10000)
         #expect(cleared.nutrition == nil)
         #expect(draft.nutrientBasisAmount == "abc")
         #expect(draft.nutrientBasisUnit == "mL")
@@ -220,9 +220,9 @@ struct ProductDraftTests {
         draft.nutrientBasisUnit = "mL"
         let changed = try draft.validated().get()
 
-        #expect(changed.nutrition?.calories == original.nutrition?.calories)
-        #expect(changed.nutrition?.basisAmount == 1500)
-        #expect(changed.nutrition?.basisUnit == "mL")
+        #expect(changed.nutrition?.amounts.calories?.hundredths == original.nutrition?.amounts.calories?.hundredths)
+        #expect(changed.nutrition?.basisAmount.hundredths == 1500)
+        #expect(changed.nutrition?.basisUnit.value == "mL")
     }
 
     @Test func returnsTheFirstInvalidFieldInValidationOrder() {

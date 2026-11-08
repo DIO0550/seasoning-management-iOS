@@ -34,7 +34,7 @@ struct ProductModelTests {
         do {
             let container = try makeContainer(at: storeURL)
             let writer = ModelContext(container)
-            let unset = Product(name: "しょうゆ", type: "調味料", updatedAt: updatedAt)
+            let unset = try Product(name: "しょうゆ", type: "調味料", updatedAt: updatedAt)
             let zeroValues = try ProductDraft(
                 name: "しょうゆ", type: "調味料", priceYen: "0",
                 calories: "0", protein: "0", fat: "0", sugar: "0", carbohydrates: "0",
@@ -139,9 +139,9 @@ struct ProductModelTests {
 // 表示・保存テスト用。旧データに含まれる未正規化の文字列や欠損もそのまま再現する。
 @MainActor
 extension Product {
-    convenience init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) {
+    convenience init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) throws {
         let draft = ProductDraft(name: "テスト商品", type: "調味料")
-        self.init(id: id, values: try! draft.validated().get(), updatedAt: updatedAt)
+        self.init(id: id, values: try draft.validated().get(), updatedAt: updatedAt)
         setValue(forKey: \.name, to: name)
         setValue(forKey: \.type, to: type)
     }

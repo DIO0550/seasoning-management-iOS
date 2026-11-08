@@ -11,7 +11,7 @@ struct ItemRulesTests {
     @Test func openingAndConsumingPersistAllFieldsTogether() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let item = makeItem(status: .unopened)
+        let item = try makeItem(status: .unopened)
         let original = Snapshot(item)
         context.insert(item)
         try context.save()
@@ -45,7 +45,7 @@ struct ItemRulesTests {
     }
 
     @Test func repeatedOpeningAndConsumptionLeaveDatesUnchanged() throws {
-        let item = Item(product: Product(name: "しょうゆ", type: "調味料"))
+        let item = Item(product: try Product(name: "しょうゆ", type: "調味料"))
         try item.open(on: date(day: 2), now: date(day: 4), calendar: calendar()).get()
         let opened = Snapshot(item)
         guard case .failure(.invalidTransition) = item.open(on: date(day: 3), now: date(day: 5), calendar: calendar())
@@ -68,7 +68,7 @@ struct ItemRulesTests {
 
     @Test func editingCanRepairMissingOpeningDateWithoutPartiallyApplyingAnInvalidEdit() throws {
         let item = Item(
-            product: Product(name: "しょうゆ", type: "調味料"), expirationDate: date(day: 1),
+            product: try Product(name: "しょうゆ", type: "調味料"), expirationDate: date(day: 1),
             status: .inUse, openingDate: nil, updatedAt: date(day: 2)
         )
         let container = try makeContainer()
@@ -104,7 +104,7 @@ struct ItemRulesTests {
 
     @Test(arguments: [ItemStatus.unopened, .inUse, .consumed])
     func allowsEditingDatesWithoutChangingStatus(_ status: ItemStatus) throws {
-        let item = makeItem(status: status)
+        let item = try makeItem(status: status)
         let consumed = item.consumedDate
         let opening = status == .unopened ? nil : date(day: 1)
         let now = date(day: 10, hour: 12)
@@ -156,8 +156,8 @@ struct ItemRulesTests {
     }
 
     @Test(arguments: ["", "futureStatus"])
-    func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) {
-        let item = makeItem(status: .unopened)
+    func rejectsUnknownSavedStatusWithoutReplacingIt(_ rawValue: String) throws {
+        let item = try makeItem(status: .unopened)
         item.setValue(forKey: \.statusRawValue, to: rawValue)
         let original = Snapshot(item)
 
@@ -174,7 +174,7 @@ struct ItemRulesTests {
     }
 
     @Test func comparesCalendarDaysInsteadOfTimesWithinTheSameDay() throws {
-        let item = makeItem(status: .unopened)
+        let item = try makeItem(status: .unopened)
         let opening = date(day: 10, hour: 23)
         let now = date(day: 10, hour: 1)
         try item.open(on: opening, now: now, calendar: calendar()).get()
@@ -187,7 +187,7 @@ struct ItemRulesTests {
     }
 
     @Test func openingDateUsesTheInjectedLocalDay() throws {
-        let item = makeItem(status: .unopened)
+        let item = try makeItem(status: .unopened)
         let now = date(day: 10, hour: 16)
         let opening = date(day: 11, hour: 1)
 
@@ -203,7 +203,7 @@ struct ItemRulesTests {
     }
 
     @Test func consumingOnAnEarlierLocalDayIsRejectedAcrossMidnight() throws {
-        let item = makeItem(status: .unopened)
+        let item = try makeItem(status: .unopened)
         let now = date(day: 10)
         try item.open(on: date(day: 2, hour: 16), now: now, calendar: calendar()).get()
         let original = Snapshot(item)
@@ -222,7 +222,7 @@ struct ItemRulesTests {
     }
 
     @Test func futureConsumedDateIsAllowedByTheCurrentSpecification() throws {
-        let item = makeItem(status: .inUse)
+        let item = try makeItem(status: .inUse)
         let future = date(day: 20)
         try item.consume(on: future, now: date(day: 10), calendar: calendar()).get()
 
@@ -267,7 +267,7 @@ struct ItemRulesTests {
         return calendar
     }
 
-    private func makeItem(status: ItemStatus) -> Item {
+    private func makeItem(status: ItemStatus) throws -> Item {
         var opening: Date?
         var consumed: Date?
 
@@ -282,7 +282,7 @@ struct ItemRulesTests {
         }
 
         return Item(
-            product: Product(name: "しょうゆ", type: "調味料"), expirationDate: date(day: 0),
+            product: try Product(name: "しょうゆ", type: "調味料"), expirationDate: date(day: 0),
             status: status, openingDate: opening, consumedDate: consumed, updatedAt: date(day: 1)
         )
     }

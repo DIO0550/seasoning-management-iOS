@@ -9,7 +9,7 @@ struct ItemModelTests {
     @Test func freshContainerKeepsNewIndividualsDistinct() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         let updatedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let first = Item(product: product, updatedAt: updatedAt)
         let second = Item(product: product, updatedAt: updatedAt)
@@ -51,7 +51,7 @@ struct ItemModelTests {
         do {
             let container = try makeContainer(url: url)
             let context = ModelContext(container)
-            let product = Product(id: productID, name: "しょうゆ", type: "調味料")
+            let product = try Product(id: productID, name: "しょうゆ", type: "調味料")
             let unopened = Item(id: unopenedID, product: product, updatedAt: updatedAt)
             let inUse = Item(
                 id: inUseID, product: product, expirationDate: expiration,
@@ -113,7 +113,7 @@ struct ItemModelTests {
         do {
             let container = try makeContainer(url: url)
             let writer = ModelContext(container)
-            let product = Product(id: productID, name: "しょうゆ", type: "調味料")
+            let product = try Product(id: productID, name: "しょうゆ", type: "調味料")
             let item = Item(id: itemID, product: product)
             writer.insert(product)
             writer.insert(item)
@@ -144,8 +144,8 @@ struct ItemModelTests {
     @Test func replacingProductUpdatesBothInverseRelationships() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let original = Product(name: "しょうゆ", type: "調味料")
-        let replacement = Product(name: "だし", type: "調味料")
+        let original = try Product(name: "しょうゆ", type: "調味料")
+        let replacement = try Product(name: "だし", type: "調味料")
         let item = Item(product: original)
         context.insert(original)
         context.insert(replacement)
@@ -172,7 +172,7 @@ struct ItemModelTests {
     @Test func deletingItemPreservesProductAndOtherItem() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         let deleted = Item(product: product)
         let opening = Date(timeIntervalSince1970: 1_700_000_000)
         let remaining = Item(product: product, status: .inUse, openingDate: opening)

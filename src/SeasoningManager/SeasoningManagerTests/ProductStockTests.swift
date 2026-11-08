@@ -10,7 +10,7 @@ struct ProductStockTests {
     func savedStockExcludesConsumedAndUnknownStatuses(_ rawValue: String) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         context.insert(product)
 
         for status in [ItemStatus.unopened, .unopened, .inUse, .consumed] {
@@ -39,8 +39,8 @@ struct ProductStockTests {
     @Test func sameNameProductsKeepTheirOwnStock() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let first = Product(name: "しょうゆ", type: "調味料")
-        let second = Product(name: "しょうゆ", type: "調味料")
+        let first = try Product(name: "しょうゆ", type: "調味料")
+        let second = try Product(name: "しょうゆ", type: "調味料")
         context.insert(first)
         context.insert(second)
         context.insert(Item(product: first))
@@ -63,7 +63,7 @@ struct ProductStockTests {
     func productsWithoutCurrentStockReportBothZeros(_ rawValues: [String]) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         context.insert(product)
 
         for rawValue in rawValues {
@@ -81,8 +81,8 @@ struct ProductStockTests {
         #expect(saved.stockCounts.inUse == 0)
     }
 
-    @Test func missingItemRelationshipReportsBothZeros() {
-        let product = Product(name: "しょうゆ", type: "調味料")
+    @Test func missingItemRelationshipReportsBothZeros() throws {
+        let product = try Product(name: "しょうゆ", type: "調味料")
 
         #expect(product.items == nil)
         #expect(product.stockCounts.unopened == 0)
@@ -92,7 +92,7 @@ struct ProductStockTests {
     @Test func stockRecalculatesAfterStatusChangesAndDeletion() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let product = try Product(name: "しょうゆ", type: "調味料")
         let today = Date(timeIntervalSince1970: 1_700_000_000)
         let unopened = Item(product: product)
         let inUse = Item(product: product)

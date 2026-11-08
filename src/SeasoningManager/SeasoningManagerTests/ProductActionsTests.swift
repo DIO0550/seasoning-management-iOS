@@ -536,7 +536,7 @@ struct ProductActionsTests {
             saveCalls += 1
             return Result { try context.save() }
         }
-        let pending = Product(name: "未保存", type: "調味料")
+        let pending = try Product(name: "未保存", type: "調味料")
         context.insert(pending)
         let draft = ProductDraft(name: "別の商品", type: "調味料")
 
@@ -569,7 +569,7 @@ struct ProductActionsTests {
         let product = try ProductActions(context: context).create(
             from: populatedDraft(), image: originalImage, now: originalDate
         ).get()
-        let pending = Product(name: "未保存", type: "調味料")
+        let pending = try Product(name: "未保存", type: "調味料")
         context.insert(pending)
         var saveCalls = 0
         let actions = ProductActions(context: context) { context in
@@ -612,7 +612,7 @@ struct ProductActionsTests {
         let saved = try ProductActions(context: owner).create(
             from: populatedDraft(), image: originalImage, now: originalDate
         ).get()
-        let unmanaged = Product(name: "未登録", type: "調味料", updatedAt: originalDate)
+        let unmanaged = try Product(name: "未登録", type: "調味料", updatedAt: originalDate)
         let actions = ProductActions(context: context)
         let draft = ProductDraft(name: "編集後", type: "調味料")
 
