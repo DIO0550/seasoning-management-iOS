@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 135,
-  "sha": "cd7871ce9338df587037d4252955d3f3686dfd80",
+  "sha": "de7a2d733a8f081e6c9037d339477d21721af1f8",
   "overview": {
     "title": "未開封・使用中・使い切りと日付",
     "lead": "個体の状態と必要な日付を一つの値として検証し、成功したときだけ全項目を個体に反映する。",
@@ -74,6 +74,26 @@
       "review": [
         "再開封を拒否した後で開封日と更新日時を保持しているか。"
       ]
+    },
+    {
+      "sha": "de7a2d733a8f081e6c9037d339477d21721af1f8",
+      "phase": "revise",
+      "role": "商品情報の変更との統合",
+      "why": "商品情報の値型と、テスト用の商品生成が失敗を返す変更がmasterに入り、個体の状態操作を更新したテストと競合した。両方の変更を保って統合する。",
+      "review": [
+        "個体の開封・使い切り・日付編集と旧データの再現を維持している。",
+        "商品のテスト用生成から各テストまでtryとthrowsでエラーを伝える。"
+      ],
+      "before": [
+        {
+          "text": "最新の商品情報の変更と個体のテストが競合し、そのままでは統合できなかった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "商品の値型による生成境界と個体の状態型を併用でき、テスト用生成の失敗もテストへ伝播する。"
+        }
+      ]
     }
   ],
   "suites": [
@@ -107,7 +127,7 @@
         "path": "src/SeasoningManager/SeasoningManagerTests/ItemRulesTests.swift",
         "start": 47,
         "end": 67,
-        "text": "    @Test func repeatedOpeningAndConsumptionLeaveDatesUnchanged() throws {\n        let item = Item(product: Product(name: \"しょうゆ\", type: \"調味料\"))\n        try item.open(on: date(day: 2), now: date(day: 4), calendar: calendar()).get()\n        let opened = Snapshot(item)\n        guard case .failure(.invalidTransition) = item.open(on: date(day: 3), now: date(day: 5), calendar: calendar())\n        else {\n            Issue.record(\"使用中の個体の再開封を拒否しなかった\")\n            return\n        }\n        #expect(Snapshot(item) == opened)\n\n        try item.consume(on: date(day: 6), now: date(day: 7), calendar: calendar()).get()\n        let consumed = Snapshot(item)\n        guard\n            case .failure(.invalidTransition) = item.consume(on: date(day: 7), now: date(day: 8), calendar: calendar())\n        else {\n            Issue.record(\"使い切った個体の再操作を拒否しなかった\")\n            return\n        }\n        #expect(Snapshot(item) == consumed)\n    }"
+        "text": "    @Test func repeatedOpeningAndConsumptionLeaveDatesUnchanged() throws {\n        let item = Item(product: try Product(name: \"しょうゆ\", type: \"調味料\"))\n        try item.open(on: date(day: 2), now: date(day: 4), calendar: calendar()).get()\n        let opened = Snapshot(item)\n        guard case .failure(.invalidTransition) = item.open(on: date(day: 3), now: date(day: 5), calendar: calendar())\n        else {\n            Issue.record(\"使用中の個体の再開封を拒否しなかった\")\n            return\n        }\n        #expect(Snapshot(item) == opened)\n\n        try item.consume(on: date(day: 6), now: date(day: 7), calendar: calendar()).get()\n        let consumed = Snapshot(item)\n        guard\n            case .failure(.invalidTransition) = item.consume(on: date(day: 7), now: date(day: 8), calendar: calendar())\n        else {\n            Issue.record(\"使い切った個体の再操作を拒否しなかった\")\n            return\n        }\n        #expect(Snapshot(item) == consumed)\n    }"
       }
     }
   ],
