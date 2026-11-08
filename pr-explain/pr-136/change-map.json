@@ -1,0 +1,176 @@
+{
+  "version": 2,
+  "pr": 136,
+  "headBranch": "feat/issue-42-item-form",
+  "baseBranch": "master",
+  "mergeBase": "886d03e01815792f9ae3b98a39fd43faed1354e9",
+  "head": "ce23a8a6491920f21700c399017ed3646c85c6bc",
+  "groups": [
+    {
+      "label": "単体テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 260,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 96,
+          "deletions": 23,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "アプリ(その他)",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 21,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemFormView.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 196,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "discardingInputDoesNotCreateAnItemOrChangeProduct"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "failurePreservesInputAndRetryCreatesOnlyOneItem"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "missingSelectionDoesNotSaveAndCanBeCorrected"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "pendingChangesAreNeitherSavedNorDiscarded"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "productFromAnotherContextDoesNotSave"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "repeatedSaveCreatesOneItemAndNewFormCanAddAnother"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "savingCreatesOneUnopenedItemForSelectedProduct"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "turningExpirationOffSavesNoDate"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+        "name": "unavailableSelectedProductDoesNotSave"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testBackDiscardsItemInputAndNextFormCanSaveExpiration"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testEmptyInventoryCancelsProductRegistrationWithoutAddingStock"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testNewProductIsSelectedButItemWaitsForSaveAndPersistsWithoutExpiration"
+      }
+    ],
+    "removed": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testEmptyInventoryOpensPreparationAndCancelsProductRegistration"
+      }
+    ],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "ce23a8a6491920f21700c399017ed3646c85c6bc",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-08T18:49:58+09:00",
+      "subject": "feat: add manual inventory item registration form",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 21,
+          "patch": "@@ -33,7 +33,7 @@ struct InventoryListView: View {\n                     Text(\"未開封と使用中の個体をここで確認できます。\")\n                 } actions: {\n                     NavigationLink(\"個体を追加\") {\n-                        ItemRegistrationPreparationView()\n+                        ItemFormView()\n                     }\n                     .buttonStyle(.borderedProminent)\n                     .accessibilityIdentifier(\"inventory-empty-add\")\n@@ -49,7 +49,7 @@ struct InventoryListView: View {\n         .toolbar {\n             ToolbarItem(placement: .topBarTrailing) {\n                 NavigationLink {\n-                    ItemRegistrationPreparationView()\n+                    ItemFormView()\n                 } label: {\n                     Label(\"個体を追加\", systemImage: \"plus\")\n                 }\n@@ -112,22 +112,3 @@ struct InventoryItemRow: View {\n         .accessibilityElement(children: .combine)\n     }\n }\n-\n-// 個体登録フォームと保存の接続は後続の Issue で実装する。\n-private struct ItemRegistrationPreparationView: View {\n-    var body: some View {\n-        ContentUnavailableView {\n-            Label(\"個体登録は準備中\", systemImage: \"shippingbox\")\n-        } description: {\n-            Text(\"個体の登録機能はまだ利用できません。先に商品の情報を登録できます。商品を登録しても在庫は増えません。\")\n-        } actions: {\n-            NavigationLink(\"商品を登録\") {\n-                ProductFormView()\n-            }\n-            .buttonStyle(.borderedProminent)\n-            .accessibilityIdentifier(\"inventory-preparation-register-product\")\n-        }\n-        .navigationTitle(\"個体を追加\")\n-        .navigationBarTitleDisplayMode(.inline)\n-    }\n-}",
+          "patchLines": 41,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemFormView.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 196,
+          "deletions": 0,
+          "patch": "@@ -0,0 +1,196 @@\n+import Foundation\n+import SwiftData\n+import SwiftUI\n+\n+/// 商品の選択と日付は保存まで画面内に保持する。\n+@MainActor\n+struct ItemFormState {\n+    var selectedProductID: UUID?\n+    var hasExpirationDate = false\n+    var expirationDate = Date()\n+    private(set) var error: ItemActions.ActionError?\n+    private(set) var savedItemID: UUID?\n+\n+    func selectedProduct(in products: [Product]) -> Product? {\n+        guard let selectedProductID else {\n+            return nil\n+        }\n+\n+        return products.first { product in\n+            guard !product.isDeleted, product.modelContext != nil else {\n+                return false\n+            }\n+\n+            return product.id == selectedProductID\n+        }\n+    }\n+\n+    mutating func save(\n+        products: [Product], using actions: ItemActions\n+    ) -> Result<UUID, ItemActions.ActionError> {\n+        if let savedItemID {\n+            return .success(savedItemID)\n+        }\n+\n+        guard let product = selectedProduct(in: products) else {\n+            error = .productNotInContext\n+            return .failure(.productNotInContext)\n+        }\n+\n+        let expiration = hasExpirationDate ? expirationDate : nil\n+        switch actions.create(for: product, expirationDate: expiration) {\n+        case .success(let item):\n+            savedItemID = item.id\n+            error = nil\n+            return .success(item.id)\n+        case .failure(let failure):\n+            error = failure\n+            return .failure(failure)\n+        }\n+    }\n+\n+    var saveErrorMessage: String? {\n+        guard let error else {\n+            return nil\n+        }\n+\n+        switch error {\n+        case .productNotInContext:\n+            return \"選択した商品が見つかりません。商品を選び直してください。\"\n+        case .pendingChanges:\n+            return \"ほかの変更が保存されていません。変更が保存されてから、もう一度「保存」を押してください。\"\n+        case .persistence(let underlying):\n+            return \"個体を保存できませんでした。\\(underlying.localizedDescription) もう一度「保存」を押してください。\"\n+        case .itemNotInContext, .deletionNotConfirmed, .validation:\n+            return \"個体を保存できませんでした。入力内容を確認し、もう一度「保存」を押してください。\"\n+        }\n+    }\n+}\n+\n+struct ItemFormView: View {\n+    @Environment(\\.modelContext) private var modelContext\n+    @Environment(\\.dismiss) private var dismiss\n+    @Query(sort: [SortDescriptor(\\Product.type), SortDescriptor(\\Product.name)])\n+    private var products: [Product]\n+    @State private var state = ItemFormState()\n+\n+    private var canSave: Bool {\n+        guard _products.fetchError == nil, state.savedItemID == nil else {\n+            return false\n+        }\n+\n+        return state.selectedProduct(in: products) != nil\n+    }\n+\n+    var body: some View {\n+        Group {\n+            if let error = _products.fetchError {\n+                ContentUnavailableView(\n+                    \"商品を読み込めませんでした\",\n+                    systemImage: \"exclamationmark.triangle\",\n+                    description: Text(\"\\(error.localizedDescription) 一覧に戻って開き直してください。\")\n+                )\n+            } else if products.isEmpty {\n+                ContentUnavailableView {\n+                    Label(\"商品はまだありません\", systemImage: \"cabinet\")\n+                } description: {\n+                    Text(\"先に商品を登録してください。商品を登録したあと、賞味期限を確認して1本を保存できます。\")\n+                } actions: {\n+                    registerProductLink\n+                        .buttonStyle(.borderedProminent)\n+                }\n+            } else {\n+                registrationForm\n+            }\n+        }\n+        .navigationTitle(\"個体を追加\")\n+        .navigationBarTitleDisplayMode(.inline)\n+        .toolbar {\n+            ToolbarItem(placement: .cancellationAction) {\n+                Button(\"キャンセル\") {\n+                    dismiss()\n+                }\n+                .accessibilityIdentifier(\"item-form-cancel\")\n+            }\n+            ToolbarItem(placement: .confirmationAction) {\n+                Button(\"保存\", action: save)\n+                    .disabled(!canSave)\n+                    .accessibilityIdentifier(\"item-form-save\")\n+            }\n+        }\n+    }\n+\n+    private var registrationForm: some View {\n+        Form {\n+            Section(\"商品を選択\") {\n+                Picker(\"商品\", selection: $state.selectedProductID) {\n+                    Text(\"商品を選んでください\").tag(nil as UUID?)\n+                    ForEach(products, id: \\.persistentModelID) { product in\n+                        Text(\"\\(product.name)（\\(product.type)）\").tag(Optional(product.id))\n+                    }\n+                }\n+                .pickerStyle(.menu)\n+                .accessibilityIdentifier(\"item-form-product\")\n+                registerProductLink\n+            }\n+\n+            if let product = state.selectedProduct(in: products) {\n+                Section(\"選択した商品\") {\n+                    LabeledContent(\"名前\", value: product.name)\n+                        .accessibilityIdentifier(\"item-form-product-name\")\n+                    LabeledContent(\"種類\", value: product.type)\n+                        .accessibilityIdentifier(\"item-form-product-type\")\n+                }\n+            } else if state.selectedProductID != nil {\n+                Text(\"選択した商品が見つかりません。商品を選び直してください。\")\n+                    .foregroundStyle(.red)\n+            }\n+\n+            Section {\n+                Toggle(\"賞味期限を設定\", isOn: $state.hasExpirationDate)\n+                    .accessibilityIdentifier(\"item-form-has-expiration\")\n+                if state.hasExpirationDate {\n+                    DatePicker(\"賞味期限\", selection: $state.expirationDate, displayedComponents: .date)\n+                        .accessibilityIdentifier(\"item-form-expiration\")\n+                } else {\n+                    Text(\"期限未設定\")\n+                        .foregroundStyle(.secondary)\n+                }\n+            } header: {\n+                Text(\"賞味期限（任意）\")\n+            } footer: {\n+                Text(\"保存すると未開封の個体を1本登録します。賞味期限は省略できます。\")\n+            }\n+\n+            if let message = state.saveErrorMessage {\n+                Section {\n+                    Text(message)\n+                        .foregroundStyle(.red)\n+                        .accessibilityIdentifier(\"item-form-save-error\")\n+                }\n+            }\n+        }\n+    }\n+\n+    private var registerProductLink: some View {\n+        NavigationLink(\"商品を登録\") {\n+            ProductFormView { productID in\n+                state.selectedProductID = productID\n+            }\n+        }\n+        .accessibilityIdentifier(\"item-form-register-product\")\n+    }\n+\n+    private func save() {\n+        guard _products.fetchError == nil else {\n+            return\n+        }\n+\n+        switch state.save(products: products, using: ItemActions(context: modelContext)) {\n+        case .success:\n+            dismiss()\n+        case .failure:\n+            break\n+        }\n+    }\n+}",
+          "patchLines": 197,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/ItemFormStateTests.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 260,
+          "deletions": 0,
+          "patch": "@@ -0,0 +1,260 @@\n+import Foundation\n+import SwiftData\n+import Testing\n+\n+@testable import SeasoningManager\n+\n+@MainActor\n+struct ItemFormStateTests {\n+    private let expiration = Date(timeIntervalSince1970: 1_700_000_000)\n+\n+    nonisolated private enum StoreError: LocalizedError, Equatable {\n+        case unavailable\n+\n+        var errorDescription: String? {\n+            \"保存先を利用できません。\"\n+        }\n+    }\n+\n+    @Test func discardingInputDoesNotCreateAnItemOrChangeProduct() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+\n+        do {\n+            var state = ItemFormState()\n+            state.selectedProductID = product.id\n+            state.hasExpirationDate = true\n+            state.expirationDate = expiration\n+            #expect(state.selectedProduct(in: [product]) === product)\n+            #expect(!context.hasChanges)\n+        }\n+\n+        let reader = ModelContext(container)\n+        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 0)\n+        let saved = try #require(reader.fetch(FetchDescriptor<Product>()).first)\n+        #expect(saved.name == \"しょうゆ\")\n+        #expect(saved.type == \"調味料\")\n+        #expect(!context.hasChanges)\n+    }\n+\n+    @Test(arguments: [false, true])\n+    func savingCreatesOneUnopenedItemForSelectedProduct(_ hasExpiration: Bool) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let first = try makeSavedProduct(in: context)\n+        let selected = try makeSavedProduct(in: context)\n+        var state = ItemFormState()\n+        state.selectedProductID = selected.id\n+        state.hasExpirationDate = hasExpiration\n+        state.expirationDate = expiration\n+\n+        let itemID = try state.save(products: [first, selected], using: ItemActions(context: context)).get()\n+\n+        let reader = ModelContext(container)\n+        let items = try reader.fetch(FetchDescriptor<Item>())\n+        #expect(items.count == 1)\n+        let item = try #require(items.first)\n+        #expect(item.id == itemID)\n+        #expect(item.product?.id == selected.id)\n+        #expect(item.status == .unopened)\n+        #expect(item.openingDate == nil)\n+        #expect(item.consumedDate == nil)\n+        #expect(item.expirationDate == (hasExpiration ? expiration : nil))\n+        let products = try reader.fetch(FetchDescriptor<Product>())\n+        #expect(products.count == 2)\n+        let savedFirst = try #require(products.first { $0.id == first.id })\n+        #expect((savedFirst.items ?? []).isEmpty)\n+        #expect(state.savedItemID == itemID)\n+        #expect(state.error == nil)\n+        #expect(!context.hasChanges)\n+    }\n+\n+    @Test func turningExpirationOffSavesNoDate() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        var state = ItemFormState()\n+        state.selectedProductID = product.id\n+        state.hasExpirationDate = true\n+        state.expirationDate = expiration\n+        state.hasExpirationDate = false\n+\n+        _ = try state.save(products: [product], using: ItemActions(context: context)).get()\n+\n+        let reader = ModelContext(container)\n+        let saved = try #require(reader.fetch(FetchDescriptor<Item>()).first)\n+        #expect(saved.expirationDate == nil)\n+    }\n+\n+    @Test func repeatedSaveCreatesOneItemAndNewFormCanAddAnother() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        var saveCalls = 0\n+        let actions = ItemActions(context: context) { context in\n+            saveCalls += 1\n+            return Result { try context.save() }\n+        }\n+        var state = ItemFormState()\n+        state.selectedProductID = product.id\n+\n+        let firstID = try state.save(products: [product], using: actions).get()\n+        let repeatedID = try state.save(products: [product], using: actions).get()\n+        #expect(firstID == repeatedID)\n+        #expect(saveCalls == 1)\n+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Item>()) == 1)\n+\n+        var next = ItemFormState()\n+        next.selectedProductID = product.id\n+        let nextID = try next.save(products: [product], using: actions).get()\n+        #expect(nextID != firstID)\n+        #expect(saveCalls == 2)\n+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Item>()) == 2)\n+    }\n+\n+    @Test func failurePreservesInputAndRetryCreatesOnlyOneItem() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        var state = ItemFormState()\n+        state.selectedProductID = product.id\n+        state.hasExpirationDate = true\n+        state.expirationDate = expiration\n+        let failing = ItemActions(context: context) { _ in\n+            .failure(StoreError.unavailable)\n+        }\n+\n+        guard case .failure(.persistence(let error)) = state.save(products: [product], using: failing) else {\n+            Issue.record(\"保存失敗が呼び出し元へ返されなかった\")\n+            return\n+        }\n+        #expect(error as? StoreError == .unavailable)\n+        #expect(state.selectedProductID == product.id)\n+        #expect(state.hasExpirationDate)\n+        #expect(state.expirationDate == expiration)\n+        #expect(state.savedItemID == nil)\n+        #expect(state.saveErrorMessage?.contains(\"保存先を利用できません。\") == true)\n+        #expect(!context.hasChanges)\n+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Item>()) == 0)\n+\n+        let itemID = try state.save(products: [product], using: ItemActions(context: context)).get()\n+\n+        let reader = ModelContext(container)\n+        let items = try reader.fetch(FetchDescriptor<Item>())\n+        #expect(items.count == 1)\n+        #expect(items.first?.id == itemID)\n+        #expect(items.first?.expirationDate == expiration)\n+        #expect(state.error == nil)\n+        #expect(state.saveErrorMessage == nil)\n+    }\n+\n+    @Test func missingSelectionDoesNotSaveAndCanBeCorrected() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        var state = ItemFormState()\n+        let actions = ItemActions(context: context)\n+\n+        guard case .failure(.productNotInContext) = state.save(products: [product], using: actions) else {\n+            Issue.record(\"商品未選択の保存が拒否されなかった\")\n+            return\n+        }\n+        #expect(try context.fetchCount(FetchDescriptor<Item>()) == 0)\n+        #expect(state.saveErrorMessage != nil)\n+\n+        state.selectedProductID = product.id\n+        _ = try state.save(products: [product], using: actions).get()\n+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Item>()) == 1)\n+        #expect(state.error == nil)\n+    }\n+\n+    @Test(arguments: [false, true])\n+    func unavailableSelectedProductDoesNotSave(_ deleted: Bool) throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        var state = ItemFormState()\n+        state.selectedProductID = product.id\n+        let candidates: [Product]\n+        if deleted {\n+            context.delete(product)\n+            candidates = [product]\n+        } else {\n+            candidates = []\n+        }\n+\n+        guard case .failure(.productNotInContext) = state.save(\n+            products: candidates, using: ItemActions(context: context)\n+        ) else {\n+            Issue.record(\"利用できない商品への保存が拒否されなかった\")\n+            return\n+        }\n+        #expect(state.selectedProduct(in: candidates) == nil)\n+        #expect(state.savedItemID == nil)\n+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<Item>()) == 0)\n+    }\n+\n+    @Test func productFromAnotherContextDoesNotSave() throws {\n+        let container = try makeContainer()\n+        let owner = ModelContext(container)\n+        let product = try makeSavedProduct(in: owner)\n+        let context = ModelContext(container)\n+        var state = ItemFormState()\n+        state.selectedProductID = product.id\n+\n+        guard case .failure(.productNotInContext) = state.save(\n+            products: [product], using: ItemActions(context: context)\n+        ) else {\n+            Issue.record(\"別contextの商品への保存が拒否されなかった\")\n+            return\n+        }\n+        #expect(!owner.hasChanges)\n+        #expect(!context.hasChanges)\n+        #expect(try context.fetchCount(FetchDescriptor<Item>()) == 0)\n+        #expect(state.savedItemID == nil)\n+    }\n+\n+    @Test func pendingChangesAreNeitherSavedNorDiscarded() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try makeSavedProduct(in: context)\n+        let pending = try Product(name: \"保存前の商品\", type: \"調味料\")\n+        context.insert(pending)\n+        var state = ItemFormState()\n+        state.selectedProductID = product.id\n+        state.hasExpirationDate = true\n+        state.expirationDate = expiration\n+\n+        guard case .failure(.pendingChanges) = state.save(\n+            products: [product], using: ItemActions(context: context)\n+        ) else {\n+            Issue.record(\"未保存変更があるcontextへの登録が拒否されなかった\")\n+            return\n+        }\n+        #expect(context.hasChanges)\n+        #expect(pending.modelContext === context)\n+        #expect(state.selectedProductID == product.id)\n+        #expect(state.expirationDate == expiration)\n+        #expect(state.savedItemID == nil)\n+        #expect(state.saveErrorMessage != nil)\n+        let reader = ModelContext(container)\n+        #expect(try reader.fetchCount(FetchDescriptor<Item>()) == 0)\n+        #expect(try reader.fetchCount(FetchDescriptor<Product>()) == 1)\n+    }\n+\n+    private func makeSavedProduct(in context: ModelContext) throws -> Product {\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n+        context.insert(product)\n+        try context.save()\n+        return product\n+    }\n+\n+    private func makeContainer() throws -> ModelContainer {\n+        let schema = Schema([Product.self, Item.self])\n+        let configuration = ModelConfiguration(\n+            schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none\n+        )\n+        return try ModelContainer(for: schema, configurations: [configuration])\n+    }\n+}",
+          "patchLines": 261,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 96,
+          "deletions": 23,
+          "patch": "@@ -23,47 +23,120 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    func testEmptyInventoryOpensPreparationAndCancelsProductRegistration() throws {\n+    func testEmptyInventoryCancelsProductRegistrationWithoutAddingStock() throws {\n         let app = makeApplication()\n         app.launch()\n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n-        let inventoryTab = app.tabBars.buttons[\"在庫\"]\n-        XCTAssertTrue(inventoryTab.waitForExistence(timeout: 5))\n-        inventoryTab.tap()\n-\n-        XCTAssertTrue(app.navigationBars[\"在庫一覧\"].waitForExistence(timeout: 5))\n+        app.tabBars.buttons[\"在庫\"].tap()\n         XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n-        let add = app.buttons.matching(identifier: \"inventory-empty-add\").firstMatch\n-        XCTAssertTrue(add.waitForExistence(timeout: 5))\n-        add.tap()\n+        app.buttons[\"inventory-empty-add\"].tap()\n \n         XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n-        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].exists)\n-        let register = app.buttons.matching(identifier: \"inventory-preparation-register-product\").firstMatch\n-        XCTAssertTrue(register.waitForExistence(timeout: 5))\n-        register.tap()\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].exists)\n+        XCTAssertFalse(app.buttons[\"item-form-save\"].isEnabled)\n+        app.buttons[\"item-form-register-product\"].tap()\n         XCTAssertTrue(app.navigationBars[\"商品登録\"].waitForExistence(timeout: 5))\n         try enterProduct(name: \"キャンセルする商品\", type: \"調味料\", in: app)\n         app.buttons[\"product-form-cancel\"].tap()\n \n         XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n-        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].exists)\n-        app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n+        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].exists)\n+        app.buttons[\"item-form-cancel\"].tap()\n         XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n-\n-        let toolbarAdd = app.navigationBars[\"在庫一覧\"].buttons[\"inventory-list-add\"]\n-        XCTAssertTrue(toolbarAdd.isHittable)\n-        toolbarAdd.tap()\n-        XCTAssertTrue(app.staticTexts[\"個体登録は準備中\"].waitForExistence(timeout: 5))\n+        app.navigationBars[\"在庫一覧\"].buttons[\"inventory-list-add\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n         app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n \n         app.tabBars.buttons[\"商品\"].tap()\n-        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n         XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n+    }\n+\n+    @MainActor\n+    func testNewProductIsSelectedButItemWaitsForSaveAndPersistsWithoutExpiration() throws {\n+        let app = makeApplication()\n+        app.launch()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        app.tabBars.buttons[\"在庫\"].tap()\n+        XCTAssertTrue(app.buttons[\"inventory-empty-add\"].waitForExistence(timeout: 5))\n+        app.buttons[\"inventory-empty-add\"].tap()\n+        app.buttons[\"item-form-register-product\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"商品登録\"].waitForExistence(timeout: 5))\n+        try enterProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n+        app.buttons[\"product-form-save\"].tap()\n+\n+        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"丸大豆しょうゆ\"].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[\"しょうゆ\"].exists)\n+        XCTAssertTrue(app.buttons[\"item-form-save\"].isEnabled)\n+        app.buttons[\"item-form-cancel\"].tap()\n+        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n+\n+        app.buttons[\"inventory-empty-add\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n+        XCTAssertFalse(app.buttons[\"item-form-save\"].isEnabled)\n+        try selectItemProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n+        let expirationToggle = app.switches[\"item-form-has-expiration\"]\n+        XCTAssertEqual(expirationToggle.value as? String, \"0\")\n+        expirationToggle.tap()\n+        XCTAssertTrue(app.datePickers[\"item-form-expiration\"].waitForExistence(timeout: 5))\n+        expirationToggle.tap()\n+        app.buttons[\"item-form-save\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"在庫一覧\"].waitForExistence(timeout: 5))\n+        let row = app.descendants(matching: .any).matching(\n+            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", \"丸大豆しょうゆ\", \"期限未設定\")\n+        ).firstMatch\n+        XCTAssertTrue(row.waitForExistence(timeout: 5))\n+\n+        app.terminate()\n+        app.launch()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        app.tabBars.buttons[\"在庫\"].tap()\n+        XCTAssertTrue(row.waitForExistence(timeout: 5))\n+        XCTAssertFalse(app.staticTexts[\"在庫はまだありません\"].exists)\n+    }\n+\n+    @MainActor\n+    func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {\n+        let app = makeApplication()\n+        app.launch()\n         openRegistration(in: app)\n-        try assertBlankForm(in: app)\n-        app.buttons[\"product-form-cancel\"].tap()\n+        try enterProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n+        app.buttons[\"product-form-save\"].tap()\n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n+        app.tabBars.buttons[\"在庫\"].tap()\n+        XCTAssertTrue(app.buttons[\"inventory-empty-add\"].waitForExistence(timeout: 5))\n+        app.buttons[\"inventory-empty-add\"].tap()\n+        try selectItemProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n+        app.switches[\"item-form-has-expiration\"].tap()\n+        XCTAssertTrue(app.datePickers[\"item-form-expiration\"].waitForExistence(timeout: 5))\n+        app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n+        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n+\n+        app.navigationBars[\"在庫一覧\"].buttons[\"inventory-list-add\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n+        XCTAssertFalse(app.buttons[\"item-form-save\"].isEnabled)\n+        XCTAssertEqual(app.switches[\"item-form-has-expiration\"].value as? String, \"0\")\n+        try selectItemProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n+        app.switches[\"item-form-has-expiration\"].tap()\n+        app.buttons[\"item-form-save\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"在庫一覧\"].waitForExistence(timeout: 5))\n+        let row = app.descendants(matching: .any).matching(\n+            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", \"赤みそ\", \"賞味期限:\")\n+        ).firstMatch\n+        XCTAssertTrue(row.waitForExistence(timeout: 5))\n+        XCTAssertFalse(row.label.contains(\"期限未設定\"))\n+    }\n+\n+    @MainActor\n+    private func selectItemProduct(name: String, type: String, in app: XCUIApplication) throws {\n+        let picker = app.buttons[\"item-form-product\"]\n+        XCTAssertTrue(picker.waitForExistence(timeout: 5))\n+        picker.tap()\n+        let choice = app.buttons[\"\\(name)（\\(type)）\"]\n+        XCTAssertTrue(choice.waitForExistence(timeout: 5))\n+        choice.tap()\n+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))\n+        XCTAssertTrue(app.staticTexts[type].exists)\n     }\n \n     @MainActor",
+          "patchLines": 144,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
