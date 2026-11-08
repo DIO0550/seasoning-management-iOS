@@ -184,9 +184,9 @@ struct ItemFormStateTests {
             candidates = []
         }
 
-        guard case .failure(.productNotInContext) = state.save(
-            products: candidates, using: ItemActions(context: context)
-        ) else {
+        let result = state.save(products: candidates, using: ItemActions(context: context))
+
+        guard case .failure(.productNotInContext) = result else {
             Issue.record("利用できない商品への保存が拒否されなかった")
             return
         }
@@ -203,9 +203,9 @@ struct ItemFormStateTests {
         var state = ItemFormState()
         state.selectedProductID = product.id
 
-        guard case .failure(.productNotInContext) = state.save(
-            products: [product], using: ItemActions(context: context)
-        ) else {
+        let result = state.save(products: [product], using: ItemActions(context: context))
+
+        guard case .failure(.productNotInContext) = result else {
             Issue.record("別contextの商品への保存が拒否されなかった")
             return
         }
@@ -226,9 +226,9 @@ struct ItemFormStateTests {
         state.hasExpirationDate = true
         state.expirationDate = expiration
 
-        guard case .failure(.pendingChanges) = state.save(
-            products: [product], using: ItemActions(context: context)
-        ) else {
+        let result = state.save(products: [product], using: ItemActions(context: context))
+
+        guard case .failure(.pendingChanges) = result else {
             Issue.record("未保存変更があるcontextへの登録が拒否されなかった")
             return
         }
