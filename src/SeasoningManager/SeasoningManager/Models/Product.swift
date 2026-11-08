@@ -49,16 +49,16 @@ final class Product {
     }
 
     func update(values: ProductValues, image: Data?, updatedAt: Date) {
-        name = values.name
-        type = values.type
-        priceYen = values.priceYen
-        calories = values.nutrition?.calories
-        protein = values.nutrition?.protein
-        fat = values.nutrition?.fat
-        sugar = values.nutrition?.sugar
-        carbohydrates = values.nutrition?.carbohydrates
-        nutrientBasisAmount = values.nutrition?.basisAmount
-        nutrientBasisUnit = values.nutrition?.basisUnit
+        name = values.name.value
+        type = values.type.value
+        priceYen = values.priceYen?.value
+        calories = values.nutrition?.amounts.calories?.hundredths
+        protein = values.nutrition?.amounts.protein?.hundredths
+        fat = values.nutrition?.amounts.fat?.hundredths
+        sugar = values.nutrition?.amounts.sugar?.hundredths
+        carbohydrates = values.nutrition?.amounts.carbohydrates?.hundredths
+        nutrientBasisAmount = values.nutrition?.basisAmount.hundredths
+        nutrientBasisUnit = values.nutrition?.basisUnit.value
         self.image = image
         self.updatedAt = updatedAt
     }
