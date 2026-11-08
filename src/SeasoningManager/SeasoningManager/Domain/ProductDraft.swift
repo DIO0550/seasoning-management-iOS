@@ -27,180 +27,127 @@ struct ProductDraft {
         let reason: FailureReason
     }
 
-    /// 全項目が有効な場合だけ返す。栄養値・基準量は100倍した整数。
-    struct ValidatedValues: Equatable {
-        let name: String
-        let type: String
-        let priceYen: Int64?
-        let calories: Int64?
-        let protein: Int64?
-        let fat: Int64?
-        let sugar: Int64?
-        let carbohydrates: Int64?
-        let nutrientBasisAmount: Int64?
-        let nutrientBasisUnit: String?
-    }
-
-    /// 入力を変更せずに検証する。失敗時は保存可能な値を一部だけ返さない。
-    func validated() -> Result<ValidatedValues, ValidationError> {
-        let validatedName: String
-        switch requiredText(name, field: .name) {
-        case .success(let value):
-            validatedName = value
+    func validated() -> Result<ProductValues, ValidationError> {
+        let validatedName: ProductName
+        switch value(name, field: .name, using: ProductName.parse) {
+        case .success(let parsed):
+            validatedName = parsed
         case .failure(let error):
             return .failure(error)
         }
 
-        let validatedType: String
-        switch requiredText(type, field: .type) {
-        case .success(let value):
-            validatedType = value
+        let validatedType: ProductType
+        switch value(type, field: .type, using: ProductType.parse) {
+        case .success(let parsed):
+            validatedType = parsed
         case .failure(let error):
             return .failure(error)
         }
 
-        let validatedPrice: Int64?
-        switch number(priceYen, field: .priceYen, decimalPlaces: 0) {
-        case .success(let value):
-            validatedPrice = value
+        let validatedPriceYen: PriceYen?
+        switch optionalValue(priceYen, field: .priceYen, using: PriceYen.parse) {
+        case .success(let parsed):
+            validatedPriceYen = parsed
         case .failure(let error):
             return .failure(error)
         }
 
-        let validatedCalories: Int64?
-        switch number(calories, field: .calories, decimalPlaces: 2) {
-        case .success(let value):
-            validatedCalories = value
+        let validatedCalories: EnergyKcal?
+        switch optionalValue(calories, field: .calories, using: EnergyKcal.parse) {
+        case .success(let parsed):
+            validatedCalories = parsed
         case .failure(let error):
             return .failure(error)
         }
 
-        let validatedProtein: Int64?
-        switch number(protein, field: .protein, decimalPlaces: 2) {
-        case .success(let value):
-            validatedProtein = value
+        let validatedProtein: NutrientGrams?
+        switch optionalValue(protein, field: .protein, using: NutrientGrams.parse) {
+        case .success(let parsed):
+            validatedProtein = parsed
         case .failure(let error):
             return .failure(error)
         }
 
-        let validatedFat: Int64?
-        switch number(fat, field: .fat, decimalPlaces: 2) {
-        case .success(let value):
-            validatedFat = value
+        let validatedFat: NutrientGrams?
+        switch optionalValue(fat, field: .fat, using: NutrientGrams.parse) {
+        case .success(let parsed):
+            validatedFat = parsed
         case .failure(let error):
             return .failure(error)
         }
 
-        let validatedSugar: Int64?
-        switch number(sugar, field: .sugar, decimalPlaces: 2) {
-        case .success(let value):
-            validatedSugar = value
+        let validatedSugar: NutrientGrams?
+        switch optionalValue(sugar, field: .sugar, using: NutrientGrams.parse) {
+        case .success(let parsed):
+            validatedSugar = parsed
         case .failure(let error):
             return .failure(error)
         }
 
-        let validatedCarbohydrates: Int64?
-        switch number(carbohydrates, field: .carbohydrates, decimalPlaces: 2) {
-        case .success(let value):
-            validatedCarbohydrates = value
+        let validatedCarbohydrates: NutrientGrams?
+        switch optionalValue(carbohydrates, field: .carbohydrates, using: NutrientGrams.parse) {
+        case .success(let parsed):
+            validatedCarbohydrates = parsed
         case .failure(let error):
             return .failure(error)
         }
 
-        // 変換の成否ではなく、元の入力で基準の必要性を判定する。0も入力済み。
-        let hasNutrientInput = [calories, protein, fat, sugar, carbohydrates].contains {
-            !trimmed($0).isEmpty
-        }
-        var validatedBasisAmount: Int64?
-        var validatedBasisUnit: String?
-
-        if hasNutrientInput {
-            let amount: Int64?
-            switch number(nutrientBasisAmount, field: .nutrientBasisAmount, decimalPlaces: 2) {
-            case .success(let value):
-                amount = value
-            case .failure(let error):
-                return .failure(error)
-            }
-
-            guard let amount else {
-                return .failure(ValidationError(field: .nutrientBasisAmount, reason: .required))
-            }
-
-            guard amount > 0 else {
-                return .failure(ValidationError(field: .nutrientBasisAmount, reason: .mustBePositive))
-            }
-
-            validatedBasisAmount = amount
-            switch requiredText(nutrientBasisUnit, field: .nutrientBasisUnit) {
-            case .success(let value):
-                validatedBasisUnit = value
-            case .failure(let error):
-                return .failure(error)
-            }
-        }
-
-        return .success(
-            ValidatedValues(
-                name: validatedName,
-                type: validatedType,
-                priceYen: validatedPrice,
-                calories: validatedCalories,
-                protein: validatedProtein,
-                fat: validatedFat,
-                sugar: validatedSugar,
-                carbohydrates: validatedCarbohydrates,
-                nutrientBasisAmount: validatedBasisAmount,
-                nutrientBasisUnit: validatedBasisUnit
-            )
+        let amounts = ProductNutrition.Amounts.create(
+            calories: validatedCalories, protein: validatedProtein, fat: validatedFat,
+            sugar: validatedSugar, carbohydrates: validatedCarbohydrates
         )
-    }
-
-    private func trimmed(_ input: String) -> String {
-        input.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func requiredText(_ input: String, field: Field) -> Result<String, ValidationError> {
-        let value = trimmed(input)
-        guard !value.isEmpty else {
-            return .failure(ValidationError(field: field, reason: .required))
+        guard let amounts else {
+            return .success(
+                ProductValues(
+                    name: validatedName, type: validatedType, priceYen: validatedPriceYen, nutrition: nil
+                )
+            )
         }
 
-        return .success(value)
+        let basisAmount: NutrientBasisAmount
+        switch value(nutrientBasisAmount, field: .nutrientBasisAmount, using: NutrientBasisAmount.parse) {
+        case .success(let parsed):
+            basisAmount = parsed
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        return value(nutrientBasisUnit, field: .nutrientBasisUnit, using: NutrientBasisUnit.parse).map { unit in
+            ProductValues(
+                name: validatedName, type: validatedType, priceYen: validatedPriceYen,
+                nutrition: ProductNutrition(amounts: amounts, basisAmount: basisAmount, basisUnit: unit)
+            )
+        }
     }
 
-    private func number(_ input: String, field: Field, decimalPlaces: Int) -> Result<Int64?, ValidationError> {
-        let value = trimmed(input)
-        guard !value.isEmpty else {
+    private func value<Value>(
+        _ input: String, field: Field, using parse: (String) -> Result<Value, ProductValueError>
+    ) -> Result<Value, ValidationError> {
+        parse(input).mapError { error in
+            let reason: FailureReason
+
+            switch error {
+            case .required:
+                reason = .required
+            case .invalidFormat:
+                reason = .invalidFormat
+            case .outOfRange:
+                reason = .outOfRange
+            case .mustBePositive:
+                reason = .mustBePositive
+            }
+
+            return ValidationError(field: field, reason: reason)
+        }
+    }
+
+    private func optionalValue<Value>(
+        _ input: String, field: Field, using parse: (String) -> Result<Value, ProductValueError>
+    ) -> Result<Value?, ValidationError> {
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .success(nil)
         }
 
-        let components = value.split(separator: ".", omittingEmptySubsequences: false)
-        guard components.count <= 2,
-            components.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy { (48...57).contains($0) } })
-        else {
-            return .failure(ValidationError(field: field, reason: .invalidFormat))
-        }
-
-        let fraction = components.dropFirst().first ?? ""
-        guard fraction.count <= decimalPlaces else {
-            return .failure(ValidationError(field: field, reason: .invalidFormat))
-        }
-
-        // 小数点を除き、不足する桁に0を補う。Doubleへの変換・丸めは行わない。
-        let digits = components.joined() + String(repeating: "0", count: decimalPlaces - fraction.count)
-        var result: Int64 = 0
-
-        for digit in digits.utf8 {
-            let (multiplied, multiplicationOverflow) = result.multipliedReportingOverflow(by: 10)
-            let (added, additionOverflow) = multiplied.addingReportingOverflow(Int64(digit - 48))
-            guard !multiplicationOverflow, !additionOverflow else {
-                return .failure(ValidationError(field: field, reason: .outOfRange))
-            }
-
-            result = added
-        }
-
-        return .success(result)
+        return value(input, field: field, using: parse).map { $0 }
     }
 }

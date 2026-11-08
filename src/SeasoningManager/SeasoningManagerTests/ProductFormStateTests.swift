@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
+
 @testable import SeasoningManager
 
 @MainActor
@@ -143,10 +144,10 @@ struct ProductFormStateTests {
     @Test func unrelatedUnsavedChangesSurviveInputAndRejectedSave() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let existing = Product(name: "元の商品", type: "みそ")
+        let existing = try Product(name: "元の商品", type: "みそ")
         context.insert(existing)
         try context.save()
-        existing.name = "ほかの画面で編集中"
+        try existing.editFixture { $0.name = "ほかの画面で編集中" }
         var saveCalls = 0
         let actions = ProductActions(context: context) { context in
             saveCalls += 1
@@ -217,7 +218,7 @@ struct ProductFormStateTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = try makeSavedProduct(in: context)
-        let other = Product(name: product.name, type: product.type)
+        let other = try Product(name: product.name, type: product.type)
         let item = Item(product: product)
         context.insert(other)
         context.insert(item)
@@ -267,8 +268,8 @@ struct ProductFormStateTests {
     func editingPreservesUnsetZeroAndMaximumPrice(_ price: Int64?) throws {
         let container = try makeContainer()
         let context = ModelContext(container)
-        let product = Product(name: "元の商品", type: "しょうゆ")
-        product.priceYen = price
+        let product = try Product(name: "元の商品", type: "しょうゆ")
+        product.setValue(forKey: \.priceYen, to: price)
         context.insert(product)
         try context.save()
         var state = ProductFormState(product: product)
@@ -296,9 +297,11 @@ struct ProductFormStateTests {
         let product = try makeSavedProduct(in: context)
         var state = ProductFormState(product: product)
         state.draft.name = "編集後"
-        product.priceYen = 500
+        try product.editFixture { draft in
+            draft.priceYen = "500"
+            draft.protein = "4.56"
+        }
         product.image = Data([4, 5, 6])
-        product.protein = 456
         try context.save()
 
         try state.save(using: ProductActions(context: context)) { _ in }.get()
@@ -416,7 +419,7 @@ struct ProductFormStateTests {
         let product = try makeSavedProduct(in: context)
         var state = ProductFormState(product: product)
         state.draft.name = "編集後"
-        product.priceYen = 500
+        try product.editFixture { $0.priceYen = "500" }
         var notifications = 0
 
         let result = state.save(using: ProductActions(context: context)) { _ in notifications += 1 }
@@ -473,7 +476,7 @@ struct ProductFormStateTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = try makeSavedProduct(in: context)
-        product.priceYen = -1
+        product.setValue(forKey: \.priceYen, to: -1)
         try context.save()
         var state = ProductFormState(product: product)
         state.draft.name = "編集後"

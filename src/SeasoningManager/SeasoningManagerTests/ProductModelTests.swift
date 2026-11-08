@@ -1,13 +1,15 @@
 import Foundation
 import SwiftData
 import Testing
+
 @testable import SeasoningManager
 
 @MainActor
 struct ProductModelTests {
-    @Test func newProductStartsWithUnsetOptionalValues() {
+    @Test func newProductStartsWithUnsetOptionalValues() throws {
         let beforeCreation = Date()
-        let product = Product(name: "しょうゆ", type: "調味料")
+        let values = try ProductDraft(name: " しょうゆ　", type: " 調味料 ").validated().get()
+        let product = Product(values: values)
 
         #expect(product.name == "しょうゆ")
         #expect(product.type == "調味料")
@@ -32,33 +34,23 @@ struct ProductModelTests {
         do {
             let container = try makeContainer(at: storeURL)
             let writer = ModelContext(container)
-            let unset = Product(name: "しょうゆ", type: "調味料", updatedAt: updatedAt)
-            let zero = Product(name: "しょうゆ", type: "調味料", updatedAt: updatedAt)
+            let unset = try Product(name: "しょうゆ", type: "調味料", updatedAt: updatedAt)
+            let zeroValues = try ProductDraft(
+                name: "しょうゆ", type: "調味料", priceYen: "0",
+                calories: "0", protein: "0", fat: "0", sugar: "0", carbohydrates: "0",
+                nutrientBasisAmount: "100", nutrientBasisUnit: "g"
+            ).validated().get()
+            let zero = Product(values: zeroValues, updatedAt: updatedAt)
             unsetID = unset.id
             zeroID = zero.id
             #expect(unset.id != zero.id)
 
-            zero.priceYen = 0
-            zero.calories = 0
-            zero.protein = 0
-            zero.fat = 0
-            zero.sugar = 0
-            zero.carbohydrates = 0
-            zero.nutrientBasisAmount = 10000
-            zero.nutrientBasisUnit = "g"
-
-            let populated = Product(
-                id: populatedID, name: "だし", type: "和風 だし", updatedAt: updatedAt
-            )
-            populated.image = image
-            populated.priceYen = 398
-            populated.calories = 1234
-            populated.protein = 1
-            populated.fat = 250
-            // 糖質は未設定のまま、炭水化物と独立して保存する。
-            populated.carbohydrates = Int64.max
-            populated.nutrientBasisAmount = 1500
-            populated.nutrientBasisUnit = "mL"
+            let populatedValues = try ProductDraft(
+                name: "だし", type: "和風 だし", priceYen: "398",
+                calories: "12.34", protein: "0.01", fat: "2.50", carbohydrates: "92233720368547758.07",
+                nutrientBasisAmount: "15", nutrientBasisUnit: "mL"
+            ).validated().get()
+            let populated = Product(id: populatedID, values: populatedValues, image: image, updatedAt: updatedAt)
 
             writer.insert(unset)
             writer.insert(zero)
@@ -107,6 +99,24 @@ struct ProductModelTests {
         }
     }
 
+    @Test func removingLastNutrientClearsStoredBasisOnModelUpdate() throws {
+        var draft = ProductDraft(
+            name: "しょうゆ", type: "調味料", calories: "0",
+            nutrientBasisAmount: "100", nutrientBasisUnit: " g　"
+        )
+        let product = Product(values: try draft.validated().get())
+        #expect(product.calories == 0)
+        #expect(product.nutrientBasisAmount == 10000)
+        #expect(product.nutrientBasisUnit == "g")
+
+        draft.calories = ""
+        let editedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        product.update(values: try draft.validated().get(), image: nil, updatedAt: editedAt)
+
+        #expect(product.updatedAt == editedAt)
+        expectUnsetValues(product)
+    }
+
     private func makeContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema([Product.self])
         let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
@@ -123,5 +133,23 @@ struct ProductModelTests {
         #expect(product.carbohydrates == nil)
         #expect(product.nutrientBasisAmount == nil)
         #expect(product.nutrientBasisUnit == nil)
+    }
+}
+
+// 表示・保存テスト用。旧データに含まれる未正規化の文字列や欠損もそのまま再現する。
+@MainActor
+extension Product {
+    convenience init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) throws {
+        let draft = ProductDraft(name: "テスト商品", type: "調味料")
+        self.init(id: id, values: try draft.validated().get(), updatedAt: updatedAt)
+        setValue(forKey: \.name, to: name)
+        setValue(forKey: \.type, to: type)
+    }
+
+    /// 保存済み商品に別の画面から編集が入った状況を、モデルの更新経路で作る。
+    func editFixture(_ edit: (inout ProductDraft) -> Void) throws {
+        var draft = ProductFormState(product: self).draft
+        edit(&draft)
+        update(values: try draft.validated().get(), image: image, updatedAt: updatedAt)
     }
 }

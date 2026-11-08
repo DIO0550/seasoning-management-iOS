@@ -1,25 +1,25 @@
 import Foundation
 import SwiftData
 
-/// 永続化用の商品。入力値の業務検証は保存操作側で行う。
+/// 商品情報の書き込みには検証済みの値を使い、SwiftDataには従来の属性で保存する。
 @Model
 final class Product {
     // CloudKitで使えない一意制約に頼らず、商品ごとにIDを発行する。
     private(set) var id: UUID = UUID()
-    var name: String = ""
-    var type: String = ""
+    private(set) var name: String = ""
+    private(set) var type: String = ""
     @Attribute(.externalStorage) var image: Data?
-    var priceYen: Int64?
+    private(set) var priceYen: Int64?
 
     // 栄養値と基準量は実際の値を100倍した整数。未設定と0を区別する。
-    var calories: Int64?
-    var protein: Int64?
-    var fat: Int64?
-    var sugar: Int64?
-    var carbohydrates: Int64?
-    var nutrientBasisAmount: Int64?
-    var nutrientBasisUnit: String?
-    var updatedAt: Date = Date()
+    private(set) var calories: Int64?
+    private(set) var protein: Int64?
+    private(set) var fat: Int64?
+    private(set) var sugar: Int64?
+    private(set) var carbohydrates: Int64?
+    private(set) var nutrientBasisAmount: Int64?
+    private(set) var nutrientBasisUnit: String?
+    private(set) var updatedAt: Date = Date()
 
     // 個体がある商品の削除拒否は保存操作側で行う。
     @Relationship(deleteRule: .nullify)
@@ -43,10 +43,23 @@ final class Product {
         return counts
     }
 
-    init(id: UUID = UUID(), name: String, type: String, updatedAt: Date = Date()) {
+    init(id: UUID = UUID(), values: ProductValues, image: Data? = nil, updatedAt: Date = Date()) {
         self.id = id
-        self.name = name
-        self.type = type
+        update(values: values, image: image, updatedAt: updatedAt)
+    }
+
+    func update(values: ProductValues, image: Data?, updatedAt: Date) {
+        name = values.name.value
+        type = values.type.value
+        priceYen = values.priceYen?.value
+        calories = values.nutrition?.amounts.calories?.hundredths
+        protein = values.nutrition?.amounts.protein?.hundredths
+        fat = values.nutrition?.amounts.fat?.hundredths
+        sugar = values.nutrition?.amounts.sugar?.hundredths
+        carbohydrates = values.nutrition?.amounts.carbohydrates?.hundredths
+        nutrientBasisAmount = values.nutrition?.basisAmount.hundredths
+        nutrientBasisUnit = values.nutrition?.basisUnit.value
+        self.image = image
         self.updatedAt = updatedAt
     }
 }
