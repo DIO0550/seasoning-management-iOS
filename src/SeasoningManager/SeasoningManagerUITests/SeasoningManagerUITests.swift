@@ -23,47 +23,120 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    func testEmptyInventoryOpensPreparationAndCancelsProductRegistration() throws {
+    func testEmptyInventoryCancelsProductRegistrationWithoutAddingStock() throws {
         let app = makeApplication()
         app.launch()
         XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
-        let inventoryTab = app.tabBars.buttons["在庫"]
-        XCTAssertTrue(inventoryTab.waitForExistence(timeout: 5))
-        inventoryTab.tap()
-
-        XCTAssertTrue(app.navigationBars["在庫一覧"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["在庫"].tap()
         XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
-        let add = app.buttons.matching(identifier: "inventory-empty-add").firstMatch
-        XCTAssertTrue(add.waitForExistence(timeout: 5))
-        add.tap()
+        app.buttons["inventory-empty-add"].tap()
 
         XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["個体登録は準備中"].exists)
-        let register = app.buttons.matching(identifier: "inventory-preparation-register-product").firstMatch
-        XCTAssertTrue(register.waitForExistence(timeout: 5))
-        register.tap()
+        XCTAssertTrue(app.staticTexts["商品はまだありません"].exists)
+        XCTAssertFalse(app.buttons["item-form-save"].isEnabled)
+        app.buttons["item-form-register-product"].tap()
         XCTAssertTrue(app.navigationBars["商品登録"].waitForExistence(timeout: 5))
         try enterProduct(name: "キャンセルする商品", type: "調味料", in: app)
         app.buttons["product-form-cancel"].tap()
 
         XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["個体登録は準備中"].exists)
-        app.navigationBars["個体を追加"].buttons["在庫一覧"].tap()
+        XCTAssertTrue(app.staticTexts["商品はまだありません"].exists)
+        app.buttons["item-form-cancel"].tap()
         XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
-
-        let toolbarAdd = app.navigationBars["在庫一覧"].buttons["inventory-list-add"]
-        XCTAssertTrue(toolbarAdd.isHittable)
-        toolbarAdd.tap()
-        XCTAssertTrue(app.staticTexts["個体登録は準備中"].waitForExistence(timeout: 5))
+        app.navigationBars["在庫一覧"].buttons["inventory-list-add"].tap()
+        XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
         app.navigationBars["個体を追加"].buttons["在庫一覧"].tap()
 
         app.tabBars.buttons["商品"].tap()
-        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["商品はまだありません"].waitForExistence(timeout: 5))
-        openRegistration(in: app)
-        try assertBlankForm(in: app)
-        app.buttons["product-form-cancel"].tap()
+    }
+
+    @MainActor
+    func testNewProductIsSelectedButItemWaitsForSaveAndPersistsWithoutExpiration() throws {
+        let app = makeApplication()
+        app.launch()
         XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["在庫"].tap()
+        XCTAssertTrue(app.buttons["inventory-empty-add"].waitForExistence(timeout: 5))
+        app.buttons["inventory-empty-add"].tap()
+        app.buttons["item-form-register-product"].tap()
+        XCTAssertTrue(app.navigationBars["商品登録"].waitForExistence(timeout: 5))
+        try enterProduct(name: "丸大豆しょうゆ", type: "しょうゆ", in: app)
+        app.buttons["product-form-save"].tap()
+
+        XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["丸大豆しょうゆ"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["しょうゆ"].exists)
+        XCTAssertTrue(app.buttons["item-form-save"].isEnabled)
+        app.buttons["item-form-cancel"].tap()
+        XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
+
+        app.buttons["inventory-empty-add"].tap()
+        XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["item-form-save"].isEnabled)
+        try selectItemProduct(name: "丸大豆しょうゆ", type: "しょうゆ", in: app)
+        let expirationToggle = app.switches["item-form-has-expiration"]
+        XCTAssertEqual(expirationToggle.value as? String, "0")
+        expirationToggle.tap()
+        XCTAssertTrue(app.datePickers["item-form-expiration"].waitForExistence(timeout: 5))
+        expirationToggle.tap()
+        app.buttons["item-form-save"].tap()
+        XCTAssertTrue(app.navigationBars["在庫一覧"].waitForExistence(timeout: 5))
+        let row = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "丸大豆しょうゆ", "期限未設定")
+        ).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["在庫"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["在庫はまだありません"].exists)
+    }
+
+    @MainActor
+    func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {
+        let app = makeApplication()
+        app.launch()
+        openRegistration(in: app)
+        try enterProduct(name: "赤みそ", type: "みそ", in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["在庫"].tap()
+        XCTAssertTrue(app.buttons["inventory-empty-add"].waitForExistence(timeout: 5))
+        app.buttons["inventory-empty-add"].tap()
+        try selectItemProduct(name: "赤みそ", type: "みそ", in: app)
+        app.switches["item-form-has-expiration"].tap()
+        XCTAssertTrue(app.datePickers["item-form-expiration"].waitForExistence(timeout: 5))
+        app.navigationBars["個体を追加"].buttons["在庫一覧"].tap()
+        XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
+
+        app.navigationBars["在庫一覧"].buttons["inventory-list-add"].tap()
+        XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["item-form-save"].isEnabled)
+        XCTAssertEqual(app.switches["item-form-has-expiration"].value as? String, "0")
+        try selectItemProduct(name: "赤みそ", type: "みそ", in: app)
+        app.switches["item-form-has-expiration"].tap()
+        app.buttons["item-form-save"].tap()
+        XCTAssertTrue(app.navigationBars["在庫一覧"].waitForExistence(timeout: 5))
+        let row = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "赤みそ", "賞味期限:")
+        ).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertFalse(row.label.contains("期限未設定"))
+    }
+
+    @MainActor
+    private func selectItemProduct(name: String, type: String, in app: XCUIApplication) throws {
+        let picker = app.buttons["item-form-product"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.tap()
+        let choice = app.buttons["\(name)（\(type)）"]
+        XCTAssertTrue(choice.waitForExistence(timeout: 5))
+        choice.tap()
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[type].exists)
     }
 
     @MainActor
