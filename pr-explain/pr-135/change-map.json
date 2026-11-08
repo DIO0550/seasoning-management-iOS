@@ -2,9 +2,9 @@
   "version": 2,
   "pr": 135,
   "headBranch": "refactor/item-lifecycle",
-  "baseBranch": "refactor/product-domain-values",
-  "mergeBase": "dde5d6a7b2bb8f1c5742e1eb47d0fcfe4b0eea1e",
-  "head": "cd7871ce9338df587037d4252955d3f3686dfd80",
+  "baseBranch": "master",
+  "mergeBase": "b67a2bce8475602bd17f857a9033b33a75a77450",
+  "head": "de7a2d733a8f081e6c9037d339477d21721af1f8",
   "groups": [
     {
       "label": "Models",
@@ -64,7 +64,7 @@
           "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 6,
+          "additions": 5,
           "deletions": 6,
           "changed": true,
           "target": null
@@ -82,7 +82,7 @@
           "path": "src/SeasoningManager/SeasoningManagerTests/ItemModelTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 19,
+          "additions": 18,
           "deletions": 4,
           "changed": true,
           "target": null
@@ -91,7 +91,7 @@
           "path": "src/SeasoningManager/SeasoningManagerTests/ItemRulesTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 86,
+          "additions": 85,
           "deletions": 77,
           "changed": true,
           "target": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift"
@@ -100,7 +100,7 @@
           "path": "src/SeasoningManager/SeasoningManagerTests/ProductActionsTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 7,
+          "additions": 6,
           "deletions": 14,
           "changed": true,
           "target": "src/SeasoningManager/SeasoningManager/Data/ProductActions.swift"
@@ -118,7 +118,7 @@
           "path": "src/SeasoningManager/SeasoningManagerTests/ProductStockTests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 8,
+          "additions": 7,
           "deletions": 5,
           "changed": true,
           "target": null
@@ -310,6 +310,15 @@
           "truncated": false
         }
       ]
+    },
+    {
+      "sha": "de7a2d733a8f081e6c9037d339477d21721af1f8",
+      "merge": true,
+      "author": "DIO0550",
+      "date": "2026-11-08T16:07:23+09:00",
+      "subject": "Merge master and preserve lifecycle tests with throwing product fixtures",
+      "body": "",
+      "files": []
     }
   ],
   "dependencies": [
