@@ -4,7 +4,7 @@
   "headBranch": "feat/issue-42-item-form",
   "baseBranch": "master",
   "mergeBase": "886d03e01815792f9ae3b98a39fd43faed1354e9",
-  "head": "4eab5034682a3f1a8ded2db97bb93391b552b901",
+  "head": "6cdcffc15944551c50427d183061eb578cb07023",
   "groups": [
     {
       "label": "単体テスト",
@@ -27,7 +27,7 @@
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 96,
+          "additions": 104,
           "deletions": 23,
           "changed": true,
           "target": null
@@ -50,7 +50,7 @@
           "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemFormView.swift",
           "status": "A",
           "oldPath": null,
-          "additions": 196,
+          "additions": 200,
           "deletions": 0,
           "changed": true,
           "target": null
@@ -187,6 +187,36 @@
           "deletions": 9,
           "patch": "@@ -184,9 +184,9 @@ struct ItemFormStateTests {\n             candidates = []\n         }\n \n-        guard case .failure(.productNotInContext) = state.save(\n-            products: candidates, using: ItemActions(context: context)\n-        ) else {\n+        let result = state.save(products: candidates, using: ItemActions(context: context))\n+\n+        guard case .failure(.productNotInContext) = result else {\n             Issue.record(\"利用できない商品への保存が拒否されなかった\")\n             return\n         }\n@@ -203,9 +203,9 @@ struct ItemFormStateTests {\n         var state = ItemFormState()\n         state.selectedProductID = product.id\n \n-        guard case .failure(.productNotInContext) = state.save(\n-            products: [product], using: ItemActions(context: context)\n-        ) else {\n+        let result = state.save(products: [product], using: ItemActions(context: context))\n+\n+        guard case .failure(.productNotInContext) = result else {\n             Issue.record(\"別contextの商品への保存が拒否されなかった\")\n             return\n         }\n@@ -226,9 +226,9 @@ struct ItemFormStateTests {\n         state.hasExpirationDate = true\n         state.expirationDate = expiration\n \n-        guard case .failure(.pendingChanges) = state.save(\n-            products: [product], using: ItemActions(context: context)\n-        ) else {\n+        let result = state.save(products: [product], using: ItemActions(context: context))\n+\n+        guard case .failure(.pendingChanges) = result else {\n             Issue.record(\"未保存変更があるcontextへの登録が拒否されなかった\")\n             return\n         }",
           "patchLines": 39,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "6cdcffc15944551c50427d183061eb578cb07023",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-08T21:30:48+09:00",
+      "subject": "fix: align item confirmation accessibility and UI assertions",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemFormView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 4,
+          "deletions": 0,
+          "patch": "@@ -137,8 +137,12 @@ struct ItemFormView: View {\n             if let product = state.selectedProduct(in: products) {\n                 Section(\"選択した商品\") {\n                     LabeledContent(\"名前\", value: product.name)\n+                        .accessibilityElement(children: .ignore)\n+                        .accessibilityLabel(\"名前、\\(product.name)\")\n                         .accessibilityIdentifier(\"item-form-product-name\")\n                     LabeledContent(\"種類\", value: product.type)\n+                        .accessibilityElement(children: .ignore)\n+                        .accessibilityLabel(\"種類、\\(product.type)\")\n                         .accessibilityIdentifier(\"item-form-product-type\")\n                 }\n             } else if state.selectedProductID != nil {",
+          "patchLines": 13,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 12,
+          "deletions": 4,
+          "patch": "@@ -65,8 +65,7 @@ final class SeasoningManagerUITests: XCTestCase {\n         app.buttons[\"product-form-save\"].tap()\n \n         XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n-        XCTAssertTrue(app.staticTexts[\"丸大豆しょうゆ\"].waitForExistence(timeout: 5))\n-        XCTAssertTrue(app.staticTexts[\"しょうゆ\"].exists)\n+        assertSelectedItemProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n         XCTAssertTrue(app.buttons[\"item-form-save\"].isEnabled)\n         app.buttons[\"item-form-cancel\"].tap()\n         XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n@@ -135,8 +134,17 @@ final class SeasoningManagerUITests: XCTestCase {\n         let choice = app.buttons[\"\\(name)（\\(type)）\"]\n         XCTAssertTrue(choice.waitForExistence(timeout: 5))\n         choice.tap()\n-        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))\n-        XCTAssertTrue(app.staticTexts[type].exists)\n+        assertSelectedItemProduct(name: name, type: type, in: app)\n+    }\n+\n+    @MainActor\n+    private func assertSelectedItemProduct(name: String, type: String, in app: XCUIApplication) {\n+        let nameRow = app.descendants(matching: .any).matching(identifier: \"item-form-product-name\").firstMatch\n+        let typeRow = app.descendants(matching: .any).matching(identifier: \"item-form-product-type\").firstMatch\n+        XCTAssertTrue(nameRow.waitForExistence(timeout: 5))\n+        XCTAssertTrue(typeRow.waitForExistence(timeout: 5))\n+        XCTAssertEqual(nameRow.label, \"名前、\\(name)\")\n+        XCTAssertEqual(typeRow.label, \"種類、\\(type)\")\n     }\n \n     @MainActor",
+          "patchLines": 30,
           "truncated": false
         }
       ]
