@@ -65,8 +65,7 @@ final class SeasoningManagerUITests: XCTestCase {
         app.buttons["product-form-save"].tap()
 
         XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["丸大豆しょうゆ"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["しょうゆ"].exists)
+        assertSelectedItemProduct(name: "丸大豆しょうゆ", type: "しょうゆ", in: app)
         XCTAssertTrue(app.buttons["item-form-save"].isEnabled)
         app.buttons["item-form-cancel"].tap()
         XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
@@ -135,8 +134,17 @@ final class SeasoningManagerUITests: XCTestCase {
         let choice = app.buttons["\(name)（\(type)）"]
         XCTAssertTrue(choice.waitForExistence(timeout: 5))
         choice.tap()
-        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts[type].exists)
+        assertSelectedItemProduct(name: name, type: type, in: app)
+    }
+
+    @MainActor
+    private func assertSelectedItemProduct(name: String, type: String, in app: XCUIApplication) {
+        let nameRow = app.descendants(matching: .any).matching(identifier: "item-form-product-name").firstMatch
+        let typeRow = app.descendants(matching: .any).matching(identifier: "item-form-product-type").firstMatch
+        XCTAssertTrue(nameRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(typeRow.waitForExistence(timeout: 5))
+        XCTAssertEqual(nameRow.label, "名前、\(name)")
+        XCTAssertEqual(typeRow.label, "種類、\(type)")
     }
 
     @MainActor

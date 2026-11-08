@@ -137,8 +137,12 @@ struct ItemFormView: View {
             if let product = state.selectedProduct(in: products) {
                 Section("選択した商品") {
                     LabeledContent("名前", value: product.name)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("名前、\(product.name)")
                         .accessibilityIdentifier("item-form-product-name")
                     LabeledContent("種類", value: product.type)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("種類、\(product.type)")
                         .accessibilityIdentifier("item-form-product-type")
                 }
             } else if state.selectedProductID != nil {
