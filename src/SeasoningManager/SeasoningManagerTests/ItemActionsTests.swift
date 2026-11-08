@@ -378,7 +378,7 @@ struct ItemActionsTests {
         let item = try makeSavedItem(
             in: context, product: product, status: ItemStatus(rawValue: input.status) ?? .unopened
         )
-        item.statusRawValue = input.status
+        item.setValue(forKey: \.statusRawValue, to: input.status)
         try context.save()
         let original = ItemSnapshot(item)
         var saveCalls = 0
@@ -470,7 +470,7 @@ struct ItemActionsTests {
         switch pendingEdit {
         case .item:
             target = savedItem
-            target.expirationDate = expirationDate
+            target.setValue(forKey: \.expirationDate, to: expirationDate)
         case .unrelatedProduct:
             target = savedItem
             try other.editFixture { $0.name = "編集中のみそ" }
@@ -750,7 +750,7 @@ struct ItemActionsTests {
         let context = ModelContext(container)
         let product = try makeSavedProduct(in: context)
         let item = try makeSavedItem(in: context, product: product, status: input.transition.source)
-        item.statusRawValue = input.status
+        item.setValue(forKey: \.statusRawValue, to: input.status)
         try context.save()
         let original = ItemSnapshot(item)
         var saveCalls = 0
@@ -807,8 +807,8 @@ struct ItemActionsTests {
         let context = ModelContext(container)
         let product = try makeSavedProduct(in: context)
         let item = try makeSavedItem(in: context, product: product, status: input.transition.source)
-        item.openingDate = input.opening
-        item.consumedDate = input.consumed
+        item.setValue(forKey: \.openingDate, to: input.opening)
+        item.setValue(forKey: \.consumedDate, to: input.consumed)
         try context.save()
         let original = ItemSnapshot(item)
         var saveCalls = 0
@@ -892,7 +892,7 @@ struct ItemActionsTests {
         switch pendingEdit {
         case .item:
             target = savedItem
-            target.statusRawValue = "futureStatus"
+            target.setValue(forKey: \.statusRawValue, to: "futureStatus")
         case .unrelatedProduct:
             target = savedItem
             try other.editFixture { $0.name = "編集中のみそ" }
@@ -1048,7 +1048,7 @@ struct ItemActionsTests {
         let item = try makeSavedItem(in: context, product: product)
         let opening = Date(timeIntervalSince1970: 1_736_006_400)
         let consumed = opening.addingTimeInterval(-2 * 3600)
-        item.openingDate = opening
+        item.setValue(forKey: \.openingDate, to: opening)
         try context.save()
         let original = ItemSnapshot(item)
         var saveCalls = 0
@@ -1320,7 +1320,7 @@ struct ItemActionsTests {
         switch pendingEdit {
         case .item:
             target = saved
-            target.expirationDate = expirationDate
+            target.setValue(forKey: \.expirationDate, to: expirationDate)
         case .unrelatedProduct:
             target = saved
             try other.editFixture { $0.name = "編集中のみそ" }
@@ -1438,7 +1438,7 @@ struct ItemActionsTests {
         let context = ModelContext(container)
         let product = try makeSavedProduct(in: context)
         let item = try makeSavedItem(in: context, product: product)
-        item.statusRawValue = rawValue
+        item.setValue(forKey: \.statusRawValue, to: rawValue)
         try context.save()
         let original = ItemSnapshot(item)
         let productID = product.id
@@ -1581,16 +1581,12 @@ struct ItemActionsTests {
     private func makeSavedItem(
         in context: ModelContext, product: Product, status: ItemStatus = .inUse
     ) throws -> Item {
-        let item = Item(product: product, expirationDate: originalDate, status: status, updatedAt: originalDate)
-        switch status {
-        case .unopened:
-            break
-        case .inUse:
-            item.openingDate = originalDate
-        case .consumed:
-            item.openingDate = originalDate
-            item.consumedDate = originalDate.addingTimeInterval(172_800)
-        }
+        let item = Item(
+            product: product, expirationDate: originalDate, status: status,
+            openingDate: status == .unopened ? nil : originalDate,
+            consumedDate: status == .consumed ? originalDate.addingTimeInterval(172_800) : nil,
+            updatedAt: originalDate
+        )
         context.insert(item)
         try context.save()
         return item

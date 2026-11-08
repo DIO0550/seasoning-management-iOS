@@ -15,7 +15,7 @@ struct InventoryListTests {
         let inUse = Item(product: product, status: .inUse)
         let consumed = Item(product: product, status: .consumed)
         let unknown = Item(product: product)
-        unknown.statusRawValue = "futureStatus"
+        unknown.setValue(forKey: \.statusRawValue, to: "futureStatus")
         context.insert(product)
         for item in [unopened, secondUnopened, inUse, consumed, unknown] {
             context.insert(item)
@@ -40,7 +40,7 @@ struct InventoryListTests {
         context.insert(product)
         for rawValue in rawValues {
             let item = Item(product: product)
-            item.statusRawValue = rawValue
+            item.setValue(forKey: \.statusRawValue, to: rawValue)
             context.insert(item)
         }
         try context.save()
@@ -126,12 +126,11 @@ struct InventoryListTests {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = try Product(name: "しょうゆ", type: "調味料")
-        let item = Item(product: product)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let item = Item(product: product, expirationDate: date)
         context.insert(product)
         context.insert(item)
-        let date = Date(timeIntervalSince1970: 1_700_000_000)
-        item.expirationDate = date
-        item.product = nil
+        item.setValue(forKey: \.product, to: nil)
         try context.save()
 
         let reader = ModelContext(container)
