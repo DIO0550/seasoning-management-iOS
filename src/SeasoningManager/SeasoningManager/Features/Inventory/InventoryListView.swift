@@ -33,7 +33,7 @@ struct InventoryListView: View {
                     Text("未開封と使用中の個体をここで確認できます。")
                 } actions: {
                     NavigationLink("個体を追加") {
-                        ItemRegistrationPreparationView()
+                        ItemFormView()
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("inventory-empty-add")
@@ -49,7 +49,7 @@ struct InventoryListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
-                    ItemRegistrationPreparationView()
+                    ItemFormView()
                 } label: {
                     Label("個体を追加", systemImage: "plus")
                 }
@@ -110,24 +110,5 @@ struct InventoryItemRow: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
-    }
-}
-
-// 個体登録フォームと保存の接続は後続の Issue で実装する。
-private struct ItemRegistrationPreparationView: View {
-    var body: some View {
-        ContentUnavailableView {
-            Label("個体登録は準備中", systemImage: "shippingbox")
-        } description: {
-            Text("個体の登録機能はまだ利用できません。先に商品の情報を登録できます。商品を登録しても在庫は増えません。")
-        } actions: {
-            NavigationLink("商品を登録") {
-                ProductFormView()
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("inventory-preparation-register-product")
-        }
-        .navigationTitle("個体を追加")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
