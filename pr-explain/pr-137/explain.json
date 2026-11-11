@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 137,
-  "sha": "a650aa0cc97d88f3f4df3b003a46d7cdb1ec652a",
+  "sha": "ac4a38f8369f6428651bd2a4d1c1ee8195df1332",
   "issue": 44,
   "overview": {
     "title": "在庫の登録先を商品一覧から選ぶ",
@@ -146,6 +146,24 @@
         "直接の商品登録導線と未選択時の保存拒否が維持されること。",
         "UIテストの実行結果と日付値の取得をCIで確認すること。"
       ]
+    },
+    {
+      "sha": "ac4a38f8369f6428651bd2a4d1c1ee8195df1332",
+      "phase": "revise",
+      "role": "期限の日付を読むテストの対象を修正する",
+      "why": "初回CIでは外側の日付ピッカーの値が空で、再選択の検証前に失敗した。表示を担う子ボタンの値が非空になるのを待って読み、操作前後を同じ方法で比較する。空文字チェックの削除やラベルによる代替は、日付を観測せず通る原因になるため採用しない。",
+      "review": [
+        "日付が空の場合は成功せず、失敗時に要素階層が診断へ出ること。",
+        "再選択・戻る後も日付と商品の選択状態を検証すること。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "start": 231,
+          "end": 248,
+          "text": "子ボタンの非空値を待ち、取得・比較する。カレンダー操作で任意の日付へ変更する検証は今回の範囲外。"
+        }
+      ]
     }
   ],
   "suites": [
@@ -195,12 +213,12 @@
       "why": "別の商品への切り替えと、戻るだけの操作を区別する。",
       "given": "商品を2件登録し、最初の商品と賞味期限を選択。",
       "when": "別商品を選んで戻り、再度一覧を開いて戻る。",
-      "then": "商品名・種類と選択表示が一致し、期限設定と表示日付を保持する。日付は初期値の比較であり、任意に変更した日付の保持までは検証しない。",
+      "then": "商品名・種類と選択表示が一致し、期限設定と非空の表示日付を保持する。日付は子ボタンの値を各操作後に読み直す。初期値の比較であり、任意に変更した日付の保持までは検証しない。",
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
         "start": 158,
-        "end": 201,
-        "text": "    func testProductPickerReselectionAndBackPreserveExpiration() throws {\n        let app = makeApplication()\n        app.launch()\n        openRegistration(in: app)\n        try enterProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        openRegistration(in: app)\n        try enterProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        app.tabBars.buttons[\"在庫\"].tap()\n        XCTAssertTrue(app.buttons[\"inventory-empty-add\"].waitForExistence(timeout: 5))\n        app.buttons[\"inventory-empty-add\"].tap()\n        try selectItemProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n        tapItemExpirationToggle(in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        let datePicker = app.datePickers[\"item-form-expiration\"]\n        XCTAssertTrue(datePicker.waitForExistence(timeout: 5))\n        let expiration = try XCTUnwrap(datePicker.value as? String)\n        XCTAssertFalse(expiration.isEmpty)\n\n        app.buttons[\"item-form-product\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品を選択\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.buttons[\"丸大豆しょうゆ（しょうゆ）\"].isSelected)\n        XCTAssertFalse(app.buttons[\"赤みそ（みそ）\"].isSelected)\n        app.buttons[\"赤みそ（みそ）\"].tap()\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        assertSelectedItemProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        XCTAssertEqual(datePicker.value as? String, expiration)\n\n        app.buttons[\"item-form-product\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品を選択\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.buttons[\"赤みそ（みそ）\"].isSelected)\n        XCTAssertFalse(app.buttons[\"丸大豆しょうゆ（しょうゆ）\"].isSelected)\n        app.navigationBars[\"商品を選択\"].buttons[\"個体を追加\"].tap()\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        assertSelectedItemProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        XCTAssertEqual(datePicker.value as? String, expiration)\n        XCTAssertTrue(app.buttons[\"item-form-save\"].isEnabled)\n        app.buttons[\"item-form-cancel\"].tap()\n        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n    }"
+        "end": 198,
+        "text": "    func testProductPickerReselectionAndBackPreserveExpiration() throws {\n        let app = makeApplication()\n        app.launch()\n        openRegistration(in: app)\n        try enterProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        openRegistration(in: app)\n        try enterProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        app.tabBars.buttons[\"在庫\"].tap()\n        XCTAssertTrue(app.buttons[\"inventory-empty-add\"].waitForExistence(timeout: 5))\n        app.buttons[\"inventory-empty-add\"].tap()\n        try selectItemProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n        tapItemExpirationToggle(in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        let expiration = try itemExpirationValue(in: app)\n\n        app.buttons[\"item-form-product\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品を選択\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.buttons[\"丸大豆しょうゆ（しょうゆ）\"].isSelected)\n        XCTAssertFalse(app.buttons[\"赤みそ（みそ）\"].isSelected)\n        app.buttons[\"赤みそ（みそ）\"].tap()\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        assertSelectedItemProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        XCTAssertEqual(try itemExpirationValue(in: app), expiration)\n\n        app.buttons[\"item-form-product\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品を選択\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.buttons[\"赤みそ（みそ）\"].isSelected)\n        XCTAssertFalse(app.buttons[\"丸大豆しょうゆ（しょうゆ）\"].isSelected)\n        app.navigationBars[\"商品を選択\"].buttons[\"個体を追加\"].tap()\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        assertSelectedItemProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        XCTAssertEqual(try itemExpirationValue(in: app), expiration)\n        XCTAssertTrue(app.buttons[\"item-form-save\"].isEnabled)\n        app.buttons[\"item-form-cancel\"].tap()\n        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n    }"
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Inventory/ProductPickerView.swift",
