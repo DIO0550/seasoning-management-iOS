@@ -171,10 +171,7 @@ final class SeasoningManagerUITests: XCTestCase {
         try selectItemProduct(name: "丸大豆しょうゆ", type: "しょうゆ", in: app)
         tapItemExpirationToggle(in: app)
         assertItemExpiration(isEnabled: true, in: app)
-        let datePicker = app.datePickers["item-form-expiration"]
-        XCTAssertTrue(datePicker.waitForExistence(timeout: 5))
-        let expiration = try XCTUnwrap(datePicker.value as? String)
-        XCTAssertFalse(expiration.isEmpty)
+        let expiration = try itemExpirationValue(in: app)
 
         app.buttons["item-form-product"].tap()
         XCTAssertTrue(app.navigationBars["商品を選択"].waitForExistence(timeout: 5))
@@ -184,7 +181,7 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
         assertSelectedItemProduct(name: "赤みそ", type: "みそ", in: app)
         assertItemExpiration(isEnabled: true, in: app)
-        XCTAssertEqual(datePicker.value as? String, expiration)
+        XCTAssertEqual(try itemExpirationValue(in: app), expiration)
 
         app.buttons["item-form-product"].tap()
         XCTAssertTrue(app.navigationBars["商品を選択"].waitForExistence(timeout: 5))
@@ -194,7 +191,7 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["個体を追加"].waitForExistence(timeout: 5))
         assertSelectedItemProduct(name: "赤みそ", type: "みそ", in: app)
         assertItemExpiration(isEnabled: true, in: app)
-        XCTAssertEqual(datePicker.value as? String, expiration)
+        XCTAssertEqual(try itemExpirationValue(in: app), expiration)
         XCTAssertTrue(app.buttons["item-form-save"].isEnabled)
         app.buttons["item-form-cancel"].tap()
         XCTAssertTrue(app.staticTexts["在庫はまだありません"].waitForExistence(timeout: 5))
@@ -229,6 +226,25 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(control.waitForExistence(timeout: 5), app.debugDescription)
         XCTAssertTrue(control.isHittable, app.debugDescription)
         control.tap()
+    }
+
+    @MainActor
+    private func itemExpirationValue(in app: XCUIApplication) throws -> String {
+        let datePicker = app.datePickers["item-form-expiration"]
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 5), datePicker.debugDescription)
+        let dateButton = datePicker.buttons.firstMatch
+        XCTAssertTrue(dateButton.waitForExistence(timeout: 5), datePicker.debugDescription)
+        let valueExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value MATCHES %@", "(?s).*\\S.*"), object: dateButton
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [valueExpectation], timeout: 5), .completed, datePicker.debugDescription
+        )
+
+        let value = try XCTUnwrap(dateButton.value as? String, datePicker.debugDescription)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertFalse(value.isEmpty, datePicker.debugDescription)
+        return value
     }
 
     @MainActor
