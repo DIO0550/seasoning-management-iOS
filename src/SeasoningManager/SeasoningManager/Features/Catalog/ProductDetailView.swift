@@ -103,47 +103,18 @@ struct ProductDetailView: View {
                 ProductDetailRow(label: "炭水化物", value: detail.carbohydrates)
             }
 
-            deletionSection
+            ProductDeletionSection(
+                counts: ProductDeletionCounts(items: items),
+                fetchErrorMessage: _items.fetchError?.localizedDescription,
+                deletionError: deletionError,
+                onRequestDelete: requestDeletion
+            )
         }
     }
 
-    private var deletionSection: some View {
-        let counts = ProductDeletionCounts(items: items)
-
-        return Section("個体と削除") {
-            if let error = _items.fetchError {
-                Text("個体の件数を読み込めないため削除できません。\(error.localizedDescription) 一覧に戻って、もう一度商品を選んでください。")
-            } else {
-                ProductDetailRow(label: "未開封", value: "\(counts.unopened)件")
-                    .accessibilityIdentifier("product-detail-unopened")
-                ProductDetailRow(label: "使用中", value: "\(counts.inUse)件")
-                    .accessibilityIdentifier("product-detail-in-use")
-                ProductDetailRow(label: "使い切り履歴", value: "\(counts.history)件")
-                    .accessibilityIdentifier("product-detail-history")
-
-                if counts.unknown > 0 {
-                    ProductDetailRow(label: "不明な状態", value: "\(counts.unknown)件")
-                }
-
-                if !counts.canDelete {
-                    Text("個体が紐づいているため削除できません。使い切り履歴や不明な状態の個体も削除不可の対象です。")
-                        .accessibilityIdentifier("product-detail-deletion-reason")
-                }
-            }
-
-            if let deletionError {
-                Text(deletionError)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier("product-detail-deletion-error")
-            }
-
-            Button("商品を削除", role: .destructive) {
-                deletionError = nil
-                showsDeletionConfirmation = true
-            }
-            .disabled(_items.fetchError != nil || !counts.canDelete)
-            .accessibilityIdentifier("product-detail-delete")
-        }
+    private func requestDeletion() {
+        deletionError = nil
+        showsDeletionConfirmation = true
     }
 
     private func deleteProduct() {
@@ -169,6 +140,47 @@ struct ProductDetailView: View {
             case .deletionNotConfirmed, .validation:
                 deletionError = "削除できませんでした。一覧に戻って商品を選び直し、もう一度確認してください。"
             }
+        }
+    }
+}
+
+private struct ProductDeletionSection: View {
+    let counts: ProductDeletionCounts
+    let fetchErrorMessage: String?
+    let deletionError: String?
+    let onRequestDelete: @MainActor () -> Void
+
+    var body: some View {
+        Section("個体と削除") {
+            if let fetchErrorMessage {
+                Text("個体の件数を読み込めないため削除できません。\(fetchErrorMessage) 一覧に戻って、もう一度商品を選んでください。")
+            } else {
+                ProductDetailRow(label: "未開封", value: "\(counts.unopened)件")
+                    .accessibilityIdentifier("product-detail-unopened")
+                ProductDetailRow(label: "使用中", value: "\(counts.inUse)件")
+                    .accessibilityIdentifier("product-detail-in-use")
+                ProductDetailRow(label: "使い切り履歴", value: "\(counts.history)件")
+                    .accessibilityIdentifier("product-detail-history")
+
+                if counts.unknown > 0 {
+                    ProductDetailRow(label: "不明な状態", value: "\(counts.unknown)件")
+                }
+
+                if !counts.canDelete {
+                    Text("個体が紐づいているため削除できません。使い切り履歴や不明な状態の個体も削除不可の対象です。")
+                        .accessibilityIdentifier("product-detail-deletion-reason")
+                }
+            }
+
+            if let deletionError {
+                Text(deletionError)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("product-detail-deletion-error")
+            }
+
+            Button("商品を削除", role: .destructive, action: onRequestDelete)
+                .disabled(fetchErrorMessage != nil || !counts.canDelete)
+                .accessibilityIdentifier("product-detail-delete")
         }
     }
 }
