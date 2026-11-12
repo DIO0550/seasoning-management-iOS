@@ -123,13 +123,9 @@ struct ItemFormView: View {
     private var registrationForm: some View {
         Form {
             Section("商品を選択") {
-                Picker("商品", selection: $state.selectedProductID) {
-                    Text("商品を選んでください").tag(nil as UUID?)
-                    ForEach(products, id: \.persistentModelID) { product in
-                        Text("\(product.name)（\(product.type)）").tag(Optional(product.id))
-                    }
+                NavigationLink("商品一覧から選ぶ") {
+                    ProductPickerView(selectedProductID: $state.selectedProductID, products: products)
                 }
-                .pickerStyle(.menu)
                 .accessibilityIdentifier("item-form-product")
                 registerProductLink
             }
