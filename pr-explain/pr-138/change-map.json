@@ -1,0 +1,81 @@
+{
+  "version": 2,
+  "pr": 138,
+  "headBranch": "refactor/catalog-view-sections",
+  "baseBranch": "master",
+  "mergeBase": "b109a3b1263b3f58bb8e06166a498e979b868902",
+  "head": "50bc04cf6bda456109cc425704f3f42c9940e249",
+  "groups": [
+    {
+      "label": "アプリ(その他)",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 50,
+          "deletions": 38,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 45,
+          "deletions": 29,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [],
+    "removed": [],
+    "files": []
+  },
+  "commits": [
+    {
+      "sha": "cec34205840a6f3b12c6b6f7df308506b97dfcfc",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-12T22:13:48+09:00",
+      "subject": "商品フォームの基本情報を子Viewに切り出す",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductFormView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 45,
+          "deletions": 29,
+          "patch": "@@ -179,35 +179,12 @@ struct ProductFormView: View {\n \n     var body: some View {\n         Form {\n-            Section {\n-                TextField(\"名前\", text: $state.draft.name)\n-                    .accessibilityLabel(\"名前、必須\")\n-                    .accessibilityHint(state.validationMessage(for: .name) ?? \"商品の名前を入力してください。\")\n-                    .accessibilityIdentifier(\"product-form-name\")\n-\n-                if let message = state.validationMessage(for: .name) {\n-                    Text(message)\n-                        .foregroundStyle(.red)\n-                        .accessibilityLabel(\"名前のエラー、\\(message)\")\n-                        .accessibilityIdentifier(\"product-form-name-error\")\n-                }\n-\n-                TextField(\"種類\", text: $state.draft.type)\n-                    .accessibilityLabel(\"種類、必須\")\n-                    .accessibilityHint(state.validationMessage(for: .type) ?? \"しょうゆ、みそなど、種類を自由に入力してください。\")\n-                    .accessibilityIdentifier(\"product-form-type\")\n-\n-                if let message = state.validationMessage(for: .type) {\n-                    Text(message)\n-                        .foregroundStyle(.red)\n-                        .accessibilityLabel(\"種類のエラー、\\(message)\")\n-                        .accessibilityIdentifier(\"product-form-type-error\")\n-                }\n-            } header: {\n-                Text(\"基本情報\")\n-            } footer: {\n-                Text(\"名前と種類は必須です。\")\n-            }\n+            ProductBasicFieldsView(\n+                name: $state.draft.name,\n+                type: $state.draft.type,\n+                nameError: state.validationMessage(for: .name),\n+                typeError: state.validationMessage(for: .type)\n+            )\n \n             ProductPhotoPicker(\n                 selection: $selectedPhoto, imageData: state.image, isLoading: state.photo.isLoading,\n@@ -289,3 +266,42 @@ struct ProductFormView: View {\n         state.photo.cancelLoading()\n     }\n }\n+\n+private struct ProductBasicFieldsView: View {\n+    @Binding var name: String\n+    @Binding var type: String\n+    let nameError: String?\n+    let typeError: String?\n+\n+    var body: some View {\n+        Section {\n+            TextField(\"名前\", text: $name)\n+                .accessibilityLabel(\"名前、必須\")\n+                .accessibilityHint(nameError ?? \"商品の名前を入力してください。\")\n+                .accessibilityIdentifier(\"product-form-name\")\n+\n+            if let nameError {\n+                Text(nameError)\n+                    .foregroundStyle(.red)\n+                    .accessibilityLabel(\"名前のエラー、\\(nameError)\")\n+                    .accessibilityIdentifier(\"product-form-name-error\")\n+            }\n+\n+            TextField(\"種類\", text: $type)\n+                .accessibilityLabel(\"種類、必須\")\n+                .accessibilityHint(typeError ?? \"しょうゆ、みそなど、種類を自由に入力してください。\")\n+                .accessibilityIdentifier(\"product-form-type\")\n+\n+            if let typeError {\n+                Text(typeError)\n+                    .foregroundStyle(.red)\n+                    .accessibilityLabel(\"種類のエラー、\\(typeError)\")\n+                    .accessibilityIdentifier(\"product-form-type-error\")\n+            }\n+        } header: {\n+            Text(\"基本情報\")\n+        } footer: {\n+            Text(\"名前と種類は必須です。\")\n+        }\n+    }\n+}",
+          "patchLines": 85,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "50bc04cf6bda456109cc425704f3f42c9940e249",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-12T22:14:12+09:00",
+      "subject": "商品詳細の個体と削除を子Viewに切り出す",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 50,
+          "deletions": 38,
+          "patch": "@@ -103,47 +103,18 @@ struct ProductDetailView: View {\n                 ProductDetailRow(label: \"炭水化物\", value: detail.carbohydrates)\n             }\n \n-            deletionSection\n+            ProductDeletionSection(\n+                counts: ProductDeletionCounts(items: items),\n+                fetchErrorMessage: _items.fetchError?.localizedDescription,\n+                deletionError: deletionError,\n+                onRequestDelete: requestDeletion\n+            )\n         }\n     }\n \n-    private var deletionSection: some View {\n-        let counts = ProductDeletionCounts(items: items)\n-\n-        return Section(\"個体と削除\") {\n-            if let error = _items.fetchError {\n-                Text(\"個体の件数を読み込めないため削除できません。\\(error.localizedDescription) 一覧に戻って、もう一度商品を選んでください。\")\n-            } else {\n-                ProductDetailRow(label: \"未開封\", value: \"\\(counts.unopened)件\")\n-                    .accessibilityIdentifier(\"product-detail-unopened\")\n-                ProductDetailRow(label: \"使用中\", value: \"\\(counts.inUse)件\")\n-                    .accessibilityIdentifier(\"product-detail-in-use\")\n-                ProductDetailRow(label: \"使い切り履歴\", value: \"\\(counts.history)件\")\n-                    .accessibilityIdentifier(\"product-detail-history\")\n-\n-                if counts.unknown > 0 {\n-                    ProductDetailRow(label: \"不明な状態\", value: \"\\(counts.unknown)件\")\n-                }\n-\n-                if !counts.canDelete {\n-                    Text(\"個体が紐づいているため削除できません。使い切り履歴や不明な状態の個体も削除不可の対象です。\")\n-                        .accessibilityIdentifier(\"product-detail-deletion-reason\")\n-                }\n-            }\n-\n-            if let deletionError {\n-                Text(deletionError)\n-                    .foregroundStyle(.red)\n-                    .accessibilityIdentifier(\"product-detail-deletion-error\")\n-            }\n-\n-            Button(\"商品を削除\", role: .destructive) {\n-                deletionError = nil\n-                showsDeletionConfirmation = true\n-            }\n-            .disabled(_items.fetchError != nil || !counts.canDelete)\n-            .accessibilityIdentifier(\"product-detail-delete\")\n-        }\n+    private func requestDeletion() {\n+        deletionError = nil\n+        showsDeletionConfirmation = true\n     }\n \n     private func deleteProduct() {\n@@ -173,6 +144,47 @@ struct ProductDetailView: View {\n     }\n }\n \n+private struct ProductDeletionSection: View {\n+    let counts: ProductDeletionCounts\n+    let fetchErrorMessage: String?\n+    let deletionError: String?\n+    let onRequestDelete: @MainActor () -> Void\n+\n+    var body: some View {\n+        Section(\"個体と削除\") {\n+            if let fetchErrorMessage {\n+                Text(\"個体の件数を読み込めないため削除できません。\\(fetchErrorMessage) 一覧に戻って、もう一度商品を選んでください。\")\n+            } else {\n+                ProductDetailRow(label: \"未開封\", value: \"\\(counts.unopened)件\")\n+                    .accessibilityIdentifier(\"product-detail-unopened\")\n+                ProductDetailRow(label: \"使用中\", value: \"\\(counts.inUse)件\")\n+                    .accessibilityIdentifier(\"product-detail-in-use\")\n+                ProductDetailRow(label: \"使い切り履歴\", value: \"\\(counts.history)件\")\n+                    .accessibilityIdentifier(\"product-detail-history\")\n+\n+                if counts.unknown > 0 {\n+                    ProductDetailRow(label: \"不明な状態\", value: \"\\(counts.unknown)件\")\n+                }\n+\n+                if !counts.canDelete {\n+                    Text(\"個体が紐づいているため削除できません。使い切り履歴や不明な状態の個体も削除不可の対象です。\")\n+                        .accessibilityIdentifier(\"product-detail-deletion-reason\")\n+                }\n+            }\n+\n+            if let deletionError {\n+                Text(deletionError)\n+                    .foregroundStyle(.red)\n+                    .accessibilityIdentifier(\"product-detail-deletion-error\")\n+            }\n+\n+            Button(\"商品を削除\", role: .destructive, action: onRequestDelete)\n+                .disabled(fetchErrorMessage != nil || !counts.canDelete)\n+                .accessibilityIdentifier(\"product-detail-delete\")\n+        }\n+    }\n+}\n+\n /// 在庫だけでなく履歴と未知の状態も、削除を妨げる個体として数える。\n struct ProductDeletionCounts {\n     private(set) var unopened = 0",
+          "patchLines": 105,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
