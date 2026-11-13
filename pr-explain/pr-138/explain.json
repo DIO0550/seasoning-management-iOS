@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 138,
-  "sha": "50bc04cf6bda456109cc425704f3f42c9940e249",
+  "sha": "6d023ed049ddc1d917299b844794541504ca9cd0",
   "overview": {
     "title": "商品フォームと詳細の子ビュー",
     "lead": "商品登録・編集の基本情報と、商品詳細の個体・削除を、それぞれ画面専用の子ビューに移した。画面側の呼び出しで、各欄が受け取る値と操作が分かる。",
@@ -18,7 +18,7 @@
         "text": "基本情報欄は親の draft に接続する名前・種類の `@Binding` と、表示用のエラーを受け取る。"
       },
       {
-        "text": "個体・削除欄は件数とエラーを表示し、削除ボタンから親の確認処理を呼ぶ。"
+        "text": "個体・削除欄は件数とエラーを表示し、削除ボタンから `() -> Void` のクロージャを呼んで親に操作を伝える。"
       }
     ],
     "highlights": [
@@ -177,6 +177,33 @@
           "start": 181,
           "end": 183,
           "text": "削除を要求できる条件と、ボタンの通知先をここで読める。"
+        }
+      ]
+    },
+    {
+      "sha": "6d023ed049ddc1d917299b844794541504ca9cd0",
+      "phase": "revise",
+      "role": "商品詳細の削除要求に、写真欄と同じクロージャ型を使う。",
+      "why": "同じ機能内で、ボタンが親へ操作を伝えるときの型の書き方を揃える。",
+      "flows": [
+        "confirm-delete"
+      ],
+      "review": [
+        "親のクロージャは `requestDeletion()` を呼んで確認ダイアログを開く。",
+        "削除の確定は、確認ダイアログの「削除する」が引き続き担当する。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "start": 110,
+          "end": 110,
+          "text": "ボタンが押されたときに呼ぶ処理を、親でクロージャとして定義する。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "start": 151,
+          "end": 151,
+          "text": "削除要求は引数と戻り値を持たない同期クロージャとして受け取る。"
         }
       ]
     }
@@ -381,12 +408,12 @@
       "id": "callback",
       "kind": "language",
       "category": "Swift",
-      "label": "クロージャと `@MainActor`",
+      "label": "ボタンのクロージャ `() -> Void`",
       "gist": "クロージャを引数として渡すと、ボタンを押したときの処理を画面側で定義できる。",
       "passages": [
         {
           "kind": "text",
-          "text": "クロージャは後で呼べる処理を値として渡す仕組み。`() -> Void` は引数なしで結果の値も返さない関数型を表す。アクターは状態へのアクセスを順番に扱う境界で、`@MainActor` はこの関数をメインアクター上で呼び出すことを型で示す。"
+          "text": "クロージャは処理を値として渡し、受け取った側が必要なタイミングで呼び出せる仕組み。`() -> Void` の左側の `()` は引数なし、右側の `Void` は戻り値なしを表す。"
         },
         {
           "kind": "excerpt",
@@ -394,8 +421,21 @@
             "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
             "start": 147,
             "end": 151,
-            "text": "private struct ProductDeletionSection: View {\n    let counts: ProductDeletionCounts\n    let fetchErrorMessage: String?\n    let deletionError: String?\n    let onRequestDelete: @MainActor () -> Void"
+            "text": "private struct ProductDeletionSection: View {\n    let counts: ProductDeletionCounts\n    let fetchErrorMessage: String?\n    let deletionError: String?\n    let onRequestDelete: () -> Void"
           }
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+            "start": 106,
+            "end": 118,
+            "text": "            ProductDeletionSection(\n                counts: ProductDeletionCounts(items: items),\n                fetchErrorMessage: _items.fetchError?.localizedDescription,\n                deletionError: deletionError,\n                onRequestDelete: { requestDeletion() }\n            )\n        }\n    }\n\n    private func requestDeletion() {\n        deletionError = nil\n        showsDeletionConfirmation = true\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "親は `{ requestDeletion() }` を作って子ビューに渡す。波括弧の中にある呼び出しは、子ビューを組み立てる時点では実行されず、ボタンの `action:` が呼ばれたときに実行される。"
         },
         {
           "kind": "excerpt",
@@ -408,7 +448,7 @@
         },
         {
           "kind": "text",
-          "text": "削除ボタンの `action:` に渡した `onRequestDelete` が、押下時に呼ばれる。親が渡す `requestDeletion` は、前回のエラーを消して確認ダイアログを表示する。"
+          "text": "このアクションは親の `requestDeletion()` を呼び、前回のエラーを消して確認ダイアログを表示する。写真欄の削除ボタンも、子ビューに渡した `() -> Void` を同じように呼び出す。"
         }
       ],
       "occurrences": [
@@ -418,9 +458,20 @@
             "start": 147,
             "end": 151
           },
-          "text": "削除要求を受け取る関数の型。",
+          "text": "削除要求を受け取るクロージャの型。",
           "shas": [
-            "50bc04cf6bda456109cc425704f3f42c9940e249"
+            "6d023ed049ddc1d917299b844794541504ca9cd0"
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "lineRange": {
+            "start": 106,
+            "end": 112
+          },
+          "text": "親が押下時の処理を定義する箇所。",
+          "shas": [
+            "6d023ed049ddc1d917299b844794541504ca9cd0"
           ]
         }
       ]
@@ -495,7 +546,7 @@
             "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
             "start": 106,
             "end": 118,
-            "text": "            ProductDeletionSection(\n                counts: ProductDeletionCounts(items: items),\n                fetchErrorMessage: _items.fetchError?.localizedDescription,\n                deletionError: deletionError,\n                onRequestDelete: requestDeletion\n            )\n        }\n    }\n\n    private func requestDeletion() {\n        deletionError = nil\n        showsDeletionConfirmation = true\n    }"
+            "text": "            ProductDeletionSection(\n                counts: ProductDeletionCounts(items: items),\n                fetchErrorMessage: _items.fetchError?.localizedDescription,\n                deletionError: deletionError,\n                onRequestDelete: { requestDeletion() }\n            )\n        }\n    }\n\n    private func requestDeletion() {\n        deletionError = nil\n        showsDeletionConfirmation = true\n    }"
           }
         },
         {
@@ -521,11 +572,11 @@
           "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
           "lineRange": {
             "start": 106,
-            "end": 118
+            "end": 112
           },
-          "text": "件数とエラーの受け渡しと、確認を開く操作。",
+          "text": "件数・エラーと、確認を開くクロージャの受け渡し。",
           "shas": [
-            "50bc04cf6bda456109cc425704f3f42c9940e249"
+            "6d023ed049ddc1d917299b844794541504ca9cd0"
           ]
         },
         {
