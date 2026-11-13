@@ -179,35 +179,12 @@ struct ProductFormView: View {
 
     var body: some View {
         Form {
-            Section {
-                TextField("名前", text: $state.draft.name)
-                    .accessibilityLabel("名前、必須")
-                    .accessibilityHint(state.validationMessage(for: .name) ?? "商品の名前を入力してください。")
-                    .accessibilityIdentifier("product-form-name")
-
-                if let message = state.validationMessage(for: .name) {
-                    Text(message)
-                        .foregroundStyle(.red)
-                        .accessibilityLabel("名前のエラー、\(message)")
-                        .accessibilityIdentifier("product-form-name-error")
-                }
-
-                TextField("種類", text: $state.draft.type)
-                    .accessibilityLabel("種類、必須")
-                    .accessibilityHint(state.validationMessage(for: .type) ?? "しょうゆ、みそなど、種類を自由に入力してください。")
-                    .accessibilityIdentifier("product-form-type")
-
-                if let message = state.validationMessage(for: .type) {
-                    Text(message)
-                        .foregroundStyle(.red)
-                        .accessibilityLabel("種類のエラー、\(message)")
-                        .accessibilityIdentifier("product-form-type-error")
-                }
-            } header: {
-                Text("基本情報")
-            } footer: {
-                Text("名前と種類は必須です。")
-            }
+            ProductBasicFieldsView(
+                name: $state.draft.name,
+                type: $state.draft.type,
+                nameError: state.validationMessage(for: .name),
+                typeError: state.validationMessage(for: .type)
+            )
 
             ProductPhotoPicker(
                 selection: $selectedPhoto, imageData: state.image, isLoading: state.photo.isLoading,
@@ -287,5 +264,44 @@ struct ProductFormView: View {
         photoTask = nil
         selectedPhoto = nil
         state.photo.cancelLoading()
+    }
+}
+
+private struct ProductBasicFieldsView: View {
+    @Binding var name: String
+    @Binding var type: String
+    let nameError: String?
+    let typeError: String?
+
+    var body: some View {
+        Section {
+            TextField("名前", text: $name)
+                .accessibilityLabel("名前、必須")
+                .accessibilityHint(nameError ?? "商品の名前を入力してください。")
+                .accessibilityIdentifier("product-form-name")
+
+            if let nameError {
+                Text(nameError)
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("名前のエラー、\(nameError)")
+                    .accessibilityIdentifier("product-form-name-error")
+            }
+
+            TextField("種類", text: $type)
+                .accessibilityLabel("種類、必須")
+                .accessibilityHint(typeError ?? "しょうゆ、みそなど、種類を自由に入力してください。")
+                .accessibilityIdentifier("product-form-type")
+
+            if let typeError {
+                Text(typeError)
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("種類のエラー、\(typeError)")
+                    .accessibilityIdentifier("product-form-type-error")
+            }
+        } header: {
+            Text("基本情報")
+        } footer: {
+            Text("名前と種類は必須です。")
+        }
     }
 }
