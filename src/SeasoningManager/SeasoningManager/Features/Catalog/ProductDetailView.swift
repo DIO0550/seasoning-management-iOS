@@ -107,7 +107,7 @@ struct ProductDetailView: View {
                 counts: ProductDeletionCounts(items: items),
                 fetchErrorMessage: _items.fetchError?.localizedDescription,
                 deletionError: deletionError,
-                onRequestDelete: requestDeletion
+                onRequestDelete: { requestDeletion() }
             )
         }
     }
@@ -148,7 +148,7 @@ private struct ProductDeletionSection: View {
     let counts: ProductDeletionCounts
     let fetchErrorMessage: String?
     let deletionError: String?
-    let onRequestDelete: @MainActor () -> Void
+    let onRequestDelete: () -> Void
 
     var body: some View {
         Section("個体と削除") {
