@@ -1,0 +1,59 @@
+{
+  "version": 2,
+  "pr": 139,
+  "headBranch": "test/issue-51-item-form-registration",
+  "baseBranch": "master",
+  "mergeBase": "95f9fc363c17bf056790220b08df673399691729",
+  "head": "89322bbd3ad3ea18f36c66a070644b277b2c7fe9",
+  "groups": [
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 50,
+          "deletions": 2,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave"
+      }
+    ],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "89322bbd3ad3ea18f36c66a070644b277b2c7fe9",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-15T10:45:27+09:00",
+      "subject": "test: 同じ商品を続けて個体登録できることを確認する",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 50,
+          "deletions": 2,
+          "patch": "@@ -94,6 +94,54 @@ final class SeasoningManagerUITests: XCTestCase {\n         XCTAssertFalse(app.staticTexts[\"在庫はまだありません\"].exists)\n     }\n \n+    @MainActor\n+    func testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave() throws {\n+        let app = makeApplication()\n+        let name = \"丸大豆しょうゆ\"\n+        let type = \"しょうゆ\"\n+        let productList = app.navigationBars[\"商品一覧\"]\n+        let inventoryList = app.navigationBars[\"在庫一覧\"]\n+        let productTab = app.tabBars.buttons[\"商品\"]\n+        let inventoryTab = app.tabBars.buttons[\"在庫\"]\n+        let saveItem = app.buttons[\"item-form-save\"]\n+\n+        app.launch()\n+        openRegistration(in: app)\n+        try enterProduct(name: name, type: type, in: app)\n+        app.buttons[\"product-form-save\"].tap()\n+        XCTAssertTrue(productList.waitForExistence(timeout: 5))\n+\n+        inventoryTab.tap()\n+        let emptyAdd = app.buttons[\"inventory-empty-add\"]\n+        XCTAssertTrue(emptyAdd.waitForExistence(timeout: 5))\n+        emptyAdd.tap()\n+        try selectItemProduct(name: name, type: type, in: app)\n+        saveItem.tap()\n+        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))\n+\n+        productTab.tap()\n+        XCTAssertTrue(productList.waitForExistence(timeout: 5))\n+        let firstSavedRow = productRow(name: name, type: type, unopened: 1, in: app)\n+        XCTAssertTrue(firstSavedRow.waitForExistence(timeout: 5), app.debugDescription)\n+\n+        inventoryTab.tap()\n+        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))\n+        inventoryList.buttons[\"inventory-list-add\"].tap()\n+        try selectItemProduct(name: name, type: type, in: app)\n+        saveItem.tap()\n+        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))\n+\n+        productTab.tap()\n+        XCTAssertTrue(productList.waitForExistence(timeout: 5))\n+        let secondSavedRow = productRow(name: name, type: type, unopened: 2, in: app)\n+        XCTAssertTrue(secondSavedRow.waitForExistence(timeout: 5), app.debugDescription)\n+\n+        app.terminate()\n+        app.launch()\n+        XCTAssertTrue(productList.waitForExistence(timeout: 5))\n+        XCTAssertTrue(secondSavedRow.waitForExistence(timeout: 5), app.debugDescription)\n+    }\n+\n     @MainActor\n     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {\n         let app = makeApplication()\n@@ -845,8 +893,8 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func productRow(name: String, type: String, in app: XCUIApplication) -> XCUIElement {\n-        let label = \"商品名、\\(name)、種類、\\(type)、未開封、0本、使用中、0本\"\n+    private func productRow(name: String, type: String, unopened: Int = 0, in app: XCUIApplication) -> XCUIElement {\n+        let label = \"商品名、\\(name)、種類、\\(type)、未開封、\\(unopened)本、使用中、0本\"\n         return app.descendants(matching: .any).matching(NSPredicate(format: \"label == %@\", label)).firstMatch\n     }\n ",
+          "patchLines": 66,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
