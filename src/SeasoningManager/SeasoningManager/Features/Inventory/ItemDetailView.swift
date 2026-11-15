@@ -23,14 +23,23 @@ struct ItemDetailView: View {
                     systemImage: "exclamationmark.triangle",
                     description: Text("\(error.localizedDescription) 一覧に戻って、もう一度個体を選んでください。")
                 )
-            } else if let detail = ItemDetailContent(candidates: items) {
-                details(detail)
             } else {
-                ContentUnavailableView(
-                    "個体の詳細を表示できません",
-                    systemImage: "shippingbox",
-                    description: Text("個体または紐づく商品が見つかりません。一覧に戻って、もう一度個体を選んでください。")
-                )
+                switch ItemDetailContent.resolve(candidates: items) {
+                case .success(let detail):
+                    details(detail)
+                case .failure(.notFound):
+                    ContentUnavailableView(
+                        "個体が見つかりません",
+                        systemImage: "shippingbox",
+                        description: Text("在庫一覧に戻って、表示されている個体を選んでください。")
+                    )
+                case .failure(.duplicateID):
+                    ContentUnavailableView(
+                        "個体を特定できません",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text("同じIDの個体が複数あります。在庫一覧に戻ってください。")
+                    )
+                }
             }
         }
         .navigationTitle("個体詳細")
@@ -57,19 +66,30 @@ struct ItemDetailView: View {
 }
 
 struct ItemDetailContent {
+    nonisolated enum Unavailable: Error, Equatable, Sendable {
+        case notFound
+        case duplicateID
+    }
+
     let product: InventoryProductLabels
     let status: String
     let expiration: String
     let opening: String
 
-    init?(candidates: [Item]) {
-        guard candidates.count == 1, let item = candidates.first, !item.isDeleted, item.modelContext != nil,
-            let product = InventoryProductLabels(product: item.product)
-        else {
-            return nil
+    static func resolve(candidates: [Item]) -> Result<Self, Unavailable> {
+        if candidates.count > 1 {
+            return .failure(.duplicateID)
         }
 
-        self.product = product
+        guard let item = candidates.first, !item.isDeleted, item.modelContext != nil else {
+            return .failure(.notFound)
+        }
+
+        return .success(Self(item: item))
+    }
+
+    private init(item: Item) {
+        product = InventoryProductLabels(product: item.product)
         status = item.status?.displayName ?? "不明な状態"
         expiration = item.expirationDate?.formatted(date: .abbreviated, time: .omitted) ?? "期限未設定"
         opening = item.openingDate?.formatted(date: .abbreviated, time: .omitted) ?? "未設定"

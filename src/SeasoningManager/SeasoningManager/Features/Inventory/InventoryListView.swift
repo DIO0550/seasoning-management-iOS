@@ -47,8 +47,8 @@ struct InventoryListView: View {
                 }
             }
         }
-        .navigationDestination(for: UUID.self) { itemID in
-            ItemDetailView(itemID: itemID)
+        .navigationDestination(for: ItemDetailRoute.self) { route in
+            ItemDetailView(itemID: route.itemID)
         }
         .navigationTitle("在庫一覧")
         .toolbar {
@@ -70,7 +70,7 @@ struct InventoryListView: View {
         if !matchingItems.isEmpty {
             Section(status.displayName) {
                 ForEach(matchingItems, id: \.persistentModelID) { item in
-                    NavigationLink(value: item.id) {
+                    NavigationLink(value: ItemDetailRoute(itemID: item.id)) {
                         InventoryItemRow(item: item, status: status)
                     }
                 }
@@ -79,16 +79,16 @@ struct InventoryListView: View {
     }
 }
 
+private nonisolated struct ItemDetailRoute: Hashable {
+    let itemID: UUID
+}
+
 struct InventoryItemRow: View {
     let item: Item
     let status: ItemStatus
 
-    var productLabels: (name: String, type: String) {
-        guard let labels = InventoryProductLabels(product: item.product) else {
-            return ("商品情報なし", "種類不明")
-        }
-
-        return (labels.name, labels.type)
+    var productLabels: InventoryProductLabels {
+        InventoryProductLabels(product: item.product)
     }
 
     var expirationText: String {
@@ -122,14 +122,16 @@ struct InventoryProductLabels {
     let name: String
     let type: String
 
-    init?(product: Product?) {
+    init(product: Product?) {
         guard let product, !product.isDeleted, product.modelContext != nil else {
-            return nil
+            name = "商品情報なし"
+            type = "種類不明"
+            return
         }
 
-        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.name = name.isEmpty ? "名前未設定" : name
-        self.type = type.isEmpty ? "種類未設定" : type
+        let trimmedName = product.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedType = product.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        name = trimmedName.isEmpty ? "名前未設定" : trimmedName
+        type = trimmedType.isEmpty ? "種類未設定" : trimmedType
     }
 }
