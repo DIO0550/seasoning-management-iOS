@@ -1,0 +1,629 @@
+{
+  "version": 1,
+  "pr": 140,
+  "sha": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+  "issue": 52,
+  "overview": {
+    "title": "在庫から個体の詳細を開く",
+    "lead": "在庫一覧で選んだ1本の状態、賞味期限、開封日と商品情報を確認できます。個体や商品参照を取得できない場合は、一覧に戻れる空状態を表示します。",
+    "before": [
+      {
+        "text": "在庫行で商品名や賞味期限を見られた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "行をタップして選んだ1本の詳細を開く。",
+        "message": "open-detail"
+      },
+      {
+        "text": "選んだ個体の情報がそろわない場合は空状態で案内する。",
+        "message": "fetch-item"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "個体を選ぶ",
+        "text": "一覧が詳細へ渡す情報と、詳細が照会する条件を見る。",
+        "go": {
+          "kind": "flow",
+          "id": "select-item"
+        }
+      },
+      {
+        "title": "参照が失われたとき",
+        "text": "表示用の値を作る前に、保存モデルの状態を確認する。",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "stock-detail",
+      "label": "在庫と個体詳細",
+      "role": "在庫の各行から1本分の保存情報を確認する。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "name": "在庫一覧",
+      "role": "個体を未開封と使用中に分けて並べる。",
+      "feature": "stock-detail",
+      "change": "タップした行の個体を特定する入力を詳細へ渡す。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "name": "個体詳細",
+      "role": "選んだ個体を照会し、日付や商品情報を表示する。",
+      "feature": "stock-detail",
+      "change": "保存データを照会し、結果に応じて詳細または案内を表示する。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "name": "個体の保存モデル",
+      "role": "1本ごとの識別子、状態、日付、所属商品を保持する。",
+      "feature": "stock-detail"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+      "name": "在庫の単体テスト",
+      "role": "SwiftData を使って対象個体の特定と欠けたデータの扱いを確かめる。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "画面操作テスト",
+      "role": "実際のアプリで登録と画面遷移を操作する。"
+    }
+  ],
+  "messages": [
+    {
+      "id": "open-detail",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "kind": "cmd",
+      "name": "選択した個体の詳細を開く",
+      "via": "call",
+      "code": "ItemDetailView(itemID: itemID)",
+      "payload": "行の個体 UUID",
+      "status": "added"
+    },
+    {
+      "id": "fetch-item",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "kind": "qry",
+      "name": "個体 UUID で照会する",
+      "via": "state",
+      "code": "Query(Self.descriptor(for: itemID))",
+      "payload": "保存済み個体の UUID",
+      "returns": "一致する Item の配列",
+      "status": "added"
+    }
+  ],
+  "flows": [
+    {
+      "id": "select-item",
+      "label": "在庫行を開くとき",
+      "steps": [
+        "open-detail",
+        "fetch-item"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+      "phase": "core",
+      "role": "在庫の各行から個体詳細を表示する。",
+      "why": "同じ商品を複数本持っていても、各個体で期限や開封日が異なるため。",
+      "flows": [
+        "select-item"
+      ],
+      "review": [
+        "同じ商品の別の個体をタップしたとき、表示される期限も個体に合わせて変わるか。",
+        "削除済みの個体や欠けた商品参照の属性を読む前に空状態になるか。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "start": 72,
+          "end": 76,
+          "text": "一覧から渡す値にはこの行の個体 UUID を使う。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "start": 6,
+          "end": 15,
+          "text": "画面の入力を、保存済み個体を探す照会条件に組み立てる。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "start": 65,
+          "end": 75,
+          "text": "有効な参照を確認し、表示用の値に移す。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "model-checks",
+      "label": "保存済み個体の読み取り",
+      "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+    },
+    {
+      "id": "ui-checks",
+      "label": "在庫一覧からの画面遷移",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "lookup",
+      "suite": "model-checks",
+      "name": "detailLooksUpEachItemIDForSameProduct",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "commit": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 107,
+        "end": 137,
+        "text": "    @Test func detailLooksUpEachItemIDForSameProduct() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = try Product(name: \" しょうゆ \", type: \" 調味料 \")\n        let opening = Date(timeIntervalSince1970: 1_700_000_000)\n        let expiration = Date(timeIntervalSince1970: 1_710_000_000)\n        let unopened = Item(product: product)\n        let inUse = Item(product: product, expirationDate: expiration, status: .inUse, openingDate: opening)\n        context.insert(product)\n        context.insert(unopened)\n        context.insert(inUse)\n        try context.save()\n\n        let reader = ModelContext(container)\n        let unopenedMatches = try reader.fetch(ItemDetailView.descriptor(for: unopened.id))\n        let inUseMatches = try reader.fetch(ItemDetailView.descriptor(for: inUse.id))\n        #expect(unopenedMatches.map(\\.id) == [unopened.id])\n        #expect(inUseMatches.map(\\.id) == [inUse.id])\n\n        let unopenedDetail = try #require(ItemDetailContent(candidates: unopenedMatches))\n        #expect(unopenedDetail.status == \"未開封\")\n        #expect(unopenedDetail.expiration == \"期限未設定\")\n        #expect(unopenedDetail.opening == \"未設定\")\n\n        let inUseDetail = try #require(ItemDetailContent(candidates: inUseMatches))\n        #expect(inUseDetail.product.name == \"しょうゆ\")\n        #expect(inUseDetail.product.type == \"調味料\")\n        #expect(inUseDetail.status == \"使用中\")\n        #expect(inUseDetail.expiration == expiration.formatted(date: .abbreviated, time: .omitted))\n        #expect(inUseDetail.opening == opening.formatted(date: .abbreviated, time: .omitted))\n        #expect(!reader.hasChanges)"
+      },
+      "why": "同じ商品が複数あっても、期限や開封日を取り違えないため。",
+      "given": "同じ商品に未開封の1本と、開封日と賞味期限を持つ使用中の1本が保存されている。",
+      "when": "各個体の ID を使い、別の `ModelContext` で詳細を照会する。",
+      "then": "それぞれの個体だけが一致し、状態と日付をその個体の情報で表示する。",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+        "src/SeasoningManager/SeasoningManager/Item.swift"
+      ],
+      "covers": [
+        "fetch-item"
+      ],
+      "values": {
+        "columns": [
+          "選んだ個体",
+          "状態",
+          "賞味期限",
+          "開封日"
+        ],
+        "rows": [
+          {
+            "cells": [
+              "1本目",
+              "未開封",
+              "期限未設定",
+              "未設定"
+            ]
+          },
+          {
+            "cells": [
+              "2本目",
+              "使用中",
+              "保存した日付",
+              "保存した日付"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "deleted",
+      "suite": "model-checks",
+      "name": "deletedItemHasNoDetailBeforeAndAfterSavingDeletion",
+      "techniques": [
+        "boundary",
+        "state"
+      ],
+      "commit": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 140,
+        "end": 165,
+        "text": "    @Test func deletedItemHasNoDetailBeforeAndAfterSavingDeletion() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        context.autosaveEnabled = false\n        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n        let item = Item(product: product)\n        let itemID = item.id\n        context.insert(product)\n        context.insert(item)\n        try context.save()\n\n        let descriptor = ItemDetailView.descriptor(for: itemID)\n        let candidates = try context.fetch(descriptor)\n        let candidate = try #require(candidates.first)\n        #expect(ItemDetailContent(candidates: candidates) != nil)\n\n        context.delete(candidate)\n\n        // 再照会まで古い候補が残っていても、削除された個体の属性には触れない。\n        #expect(ItemDetailContent(candidates: candidates) == nil)\n        try context.save()\n\n        #expect(ItemDetailContent(candidates: candidates) == nil)\n        let savedCandidates = try ModelContext(container).fetch(descriptor)\n        #expect(savedCandidates.isEmpty)\n        #expect(ItemDetailContent(candidates: savedCandidates) == nil)"
+      },
+      "why": "照会結果の更新前に削除されたモデルへ読み取りが入る場合を再現するため。",
+      "given": "保存済みの個体を照会し、その結果を配列に保持している。",
+      "when": "その個体を削除し、保存の前と後で配列から詳細を作ろうとする。",
+      "then": "どちらも詳細用の値が生成されず、新しいコンテキストで取り直した候補も空になる。",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift"
+      ],
+      "covers": [
+        "fetch-item"
+      ]
+    },
+    {
+      "id": "duplicate",
+      "suite": "model-checks",
+      "name": "duplicateItemIDHasNoDetail",
+      "techniques": [
+        "boundary",
+        "state"
+      ],
+      "commit": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 168,
+        "end": 182,
+        "text": "    @Test func duplicateItemIDHasNoDetail() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n        let itemID = UUID()\n        context.insert(product)\n        context.insert(Item(id: itemID, product: product))\n        context.insert(Item(id: itemID, product: product))\n        try context.save()\n\n        let reader = ModelContext(container)\n        let matches = try reader.fetch(ItemDetailView.descriptor(for: itemID))\n        #expect(matches.count == 2)\n        #expect(ItemDetailContent(candidates: matches) == nil)\n        #expect(!reader.hasChanges)"
+      },
+      "why": "重複した識別子では、同じ商品に属するどちらかを任意に表示する危険があるため。",
+      "given": "同じ ID を持つ個体が2件保存されている。",
+      "when": "その ID で詳細を照会する。",
+      "then": "照会に2件が一致し、詳細用の値は生成されない。",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift"
+      ],
+      "covers": [
+        "fetch-item"
+      ]
+    },
+    {
+      "id": "missing-product",
+      "suite": "model-checks",
+      "name": "missingProductRelationshipDoesNotHideCurrentItem",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "commit": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 204,
+        "end": 228,
+        "text": "    @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n        let date = Date(timeIntervalSince1970: 1_700_000_000)\n        let item = Item(product: product, expirationDate: date)\n        context.insert(product)\n        context.insert(item)\n        item.setValue(forKey: \\.product, to: nil)\n        try context.save()\n\n        let reader = ModelContext(container)\n        let items = try reader.fetch(InventoryListView.descriptor())\n        #expect(items.map(\\.id) == [item.id])\n        let saved = try #require(items.first)\n        #expect(saved.product == nil)\n        let row = InventoryItemRow(item: saved, status: .unopened)\n        #expect(row.productLabels.name == \"商品情報なし\")\n        #expect(row.productLabels.type == \"種類不明\")\n        let expectedDate = date.formatted(date: .abbreviated, time: .omitted)\n        #expect(row.expirationText == \"賞味期限: \\(expectedDate)\")\n        let candidates = try reader.fetch(ItemDetailView.descriptor(for: item.id))\n        #expect(candidates.map(\\.id) == [item.id])\n        #expect(ItemDetailContent(candidates: candidates) == nil)\n        #expect(!reader.hasChanges)"
+      },
+      "why": "商品との紐づきが欠けた個体の表示を確認するため。",
+      "given": "現行在庫の1本に賞味期限があり、商品との関係は空になっている。",
+      "when": "保存後に一覧と詳細を照会する。",
+      "then": "一覧行は商品情報なしと賞味期限を表示し、詳細用の値は生成されない。",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift"
+      ],
+      "covers": [
+        "fetch-item"
+      ]
+    },
+    {
+      "id": "tap-two",
+      "suite": "ui-checks",
+      "name": "testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "commit": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 98,
+        "end": 142,
+        "text": "    func testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave() throws {\n        let app = makeApplication()\n        let name = \"丸大豆しょうゆ\"\n        let type = \"しょうゆ\"\n        let productList = app.navigationBars[\"商品一覧\"]\n        let inventoryList = app.navigationBars[\"在庫一覧\"]\n        let productTab = app.tabBars.buttons[\"商品\"]\n        let inventoryTab = app.tabBars.buttons[\"在庫\"]\n        let saveItem = app.buttons[\"item-form-save\"]\n\n        app.launch()\n        openRegistration(in: app)\n        try enterProduct(name: name, type: type, in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(productList.waitForExistence(timeout: 5))\n\n        inventoryTab.tap()\n        let emptyAdd = app.buttons[\"inventory-empty-add\"]\n        XCTAssertTrue(emptyAdd.waitForExistence(timeout: 5))\n        emptyAdd.tap()\n        try selectItemProduct(name: name, type: type, in: app)\n        saveItem.tap()\n        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))\n\n        productTab.tap()\n        XCTAssertTrue(productList.waitForExistence(timeout: 5))\n        let firstSavedRow = productRow(name: name, type: type, unopened: 1, in: app)\n        XCTAssertTrue(firstSavedRow.waitForExistence(timeout: 5), app.debugDescription)\n\n        inventoryTab.tap()\n        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))\n        inventoryList.buttons[\"inventory-list-add\"].tap()\n        try selectItemProduct(name: name, type: type, in: app)\n        tapItemExpirationToggle(in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        saveItem.tap()\n        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))\n\n        assertInventoryItemDetail(name: name, hasExpiration: false, in: app)\n        assertInventoryItemDetail(name: name, hasExpiration: true, in: app)\n\n        productTab.tap()\n        XCTAssertTrue(productList.waitForExistence(timeout: 5))\n        let secondSavedRow = productRow(name: name, type: type, unopened: 2, in: app)\n        XCTAssertTrue(secondSavedRow.waitForExistence(timeout: 5), app.debugDescription)"
+      },
+      "why": "実際に行をタップして、リンクと照会条件が同じ1本を指すことを確認するため。",
+      "given": "1本目は期限を省略し、2本目は期限を入力して同じ商品を登録した。",
+      "when": "在庫一覧で、期限の表示が異なる2行を順にタップして詳細を開く。",
+      "then": "各行の期限の有無が詳細と一致し、標準の戻るボタンで一覧へ戻れる。",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift"
+      ],
+      "covers": [
+        "open-detail",
+        "fetch-item"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "在庫の1本ごとに状態や日付を確認できる",
+    "lead": "在庫一覧で1本を選ぶと、その個体の賞味期限と開封日、状態、商品名と種類が表示されます。",
+    "changed": {
+      "before": [
+        {
+          "text": "在庫一覧の行で商品名や賞味期限を確認できた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "対象の行から個体詳細を開き、日付や状態を確認できる。",
+          "message": "open-detail"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "同じ商品の2本を開く場合",
+        "before": [],
+        "after": [
+          {
+            "text": "期限なしの行、期限ありの行のそれぞれから、選んだ1本の情報を表示する。",
+            "message": "open-detail"
+          }
+        ],
+        "tests": [
+          "lookup",
+          "tap-two"
+        ]
+      },
+      {
+        "label": "個体や商品情報が取得できない場合",
+        "before": [],
+        "after": [
+          {
+            "text": "画面に案内を表示し、一覧から選び直せる。",
+            "message": "fetch-item"
+          }
+        ],
+        "tests": [
+          "deleted",
+          "duplicate",
+          "missing-product"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "swiftui-path",
+      "kind": "language",
+      "category": "SwiftUI · ナビゲーション",
+      "label": "`NavigationLink(value:)` と `.navigationDestination(for:)`",
+      "gist": "SwiftUI の `NavigationStack` は、値を使って現在開いている画面を決められます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`NavigationLink` はタップできる行です。`value:` に渡した値が `NavigationStack` の遷移経路に追加されます。この行の `item.id` の型は [[UUID|uuid]] です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 72,
+            "end": 76,
+            "text": "                ForEach(matchingItems, id: \\.persistentModelID) { item in\n                    NavigationLink(value: item.id) {\n                        InventoryItemRow(item: item, status: status)\n                    }\n                }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`ForEach` は `persistentModelID` を使って行の同一性を管理します。リンクが詳細へ渡す照会キーには `Item.id` を使います。`NavigationLink` に続く波括弧は、行に見せるラベルの View を組み立てるクロージャです。"
+        },
+        {
+          "kind": "text",
+          "text": "`.navigationDestination(for: UUID.self)` は UUID 用の遷移先を登録します。`UUID.self` は Swift で型そのものを渡す書き方です。`{ itemID in ... }` の引数には、リンクから受け取った UUID が入ります。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 50,
+            "end": 52,
+            "text": "        .navigationDestination(for: UUID.self) { itemID in\n            ItemDetailView(itemID: itemID)\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "一覧の外側に遷移先を登録すると、リストの表示範囲で行の View が作り直されても、スタックは同じ遷移先を使えます。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 72,
+            "end": 76
+          },
+          "text": "行が個体 UUID を渡す。",
+          "shas": [
+            "9a48eca96cb6f411c71a2afaf0536d7b352c1454"
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 50,
+            "end": 52
+          },
+          "text": "在庫画面に UUID 用の遷移先を登録する。",
+          "shas": [
+            "9a48eca96cb6f411c71a2afaf0536d7b352c1454"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "requery"
+      ]
+    },
+    {
+      "id": "swiftdata-query",
+      "kind": "language",
+      "category": "SwiftData · 読み取り",
+      "label": "`@Query` と `#Predicate`",
+      "gist": "画面の入力を照会条件にして、該当する保存モデルの配列を受け取ります。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`@Query` は [[プロパティラッパー|wrapper]] です。`items` は照会結果の `[Item]` として読めます。`_items` はラッパーを指し、画面の `init(itemID:)` で照会条件を渡して初期化します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 6,
+            "end": 15,
+            "text": "    @Query private var items: [Item]\n\n    init(itemID: UUID) {\n        _items = Query(Self.descriptor(for: itemID))\n    }\n\n    static func descriptor(for itemID: UUID) -> FetchDescriptor<Item> {\n        var descriptor = FetchDescriptor<Item>(predicate: #Predicate { $0.id == itemID })\n        descriptor.includePendingChanges = false\n        return descriptor"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`FetchDescriptor<Item>` は `Item` を取得する条件を持つ値です。`#Predicate` は Swift のマクロで、式を照会条件として組み立てます。`$0` は個々の `Item`、`itemID` は画面を開くときに受け取った UUID です。`$0.id == itemID` を満たす候補だけが詳細へ届きます。"
+        },
+        {
+          "kind": "text",
+          "text": "`includePendingChanges = false` を指定すると、照会は永続ストアの内容を基準にします。候補のモデルが直前に削除された場合は、表示用の値を作るときにも `isDeleted` と `modelContext` を確認します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 6,
+            "end": 15
+          },
+          "text": "引数の UUID を照会に使う。",
+          "shas": [
+            "9a48eca96cb6f411c71a2afaf0536d7b352c1454"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "requery",
+        "read-snapshot"
+      ]
+    },
+    {
+      "id": "requery",
+      "kind": "codebase",
+      "category": "個体詳細 · 入口",
+      "label": "同じ商品に属する1本を選ぶ",
+      "gist": "商品が同じでも、1本ごとに割り当てられる [[UUID|uuid]] で対象が決まります。",
+      "status": "added",
+      "flows": [
+        "select-item"
+      ],
+      "tests": [
+        "lookup",
+        "tap-two"
+      ],
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 50,
+            "end": 52,
+            "text": "        .navigationDestination(for: UUID.self) { itemID in\n            ItemDetailView(itemID: itemID)\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "商品名と種類、在庫の並びは表示に使います。詳細が受け取る識別子は行に紐づく `Item.id` です。在庫の並び替えや開封によるセクション移動があっても、同じ個体を照会できます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 6,
+            "end": 15,
+            "text": "    @Query private var items: [Item]\n\n    init(itemID: UUID) {\n        _items = Query(Self.descriptor(for: itemID))\n    }\n\n    static func descriptor(for itemID: UUID) -> FetchDescriptor<Item> {\n        var descriptor = FetchDescriptor<Item>(predicate: #Predicate { $0.id == itemID })\n        descriptor.includePendingChanges = false\n        return descriptor"
+          }
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 50,
+            "end": 52
+          },
+          "text": "選んだ UUID から個体詳細を作る。",
+          "shas": [
+            "9a48eca96cb6f411c71a2afaf0536d7b352c1454"
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 6,
+            "end": 15
+          },
+          "text": "詳細が同じ UUID で保存データを取得する。",
+          "shas": [
+            "9a48eca96cb6f411c71a2afaf0536d7b352c1454"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "swiftui-path",
+        "swiftdata-query"
+      ]
+    },
+    {
+      "id": "read-snapshot",
+      "kind": "codebase",
+      "category": "個体詳細 · 空状態",
+      "label": "有効な候補から表示用の値を作る",
+      "gist": "個体と商品の両方を確認したあとに、表示に必要な文字列を作ります。",
+      "status": "added",
+      "tests": [
+        "deleted",
+        "duplicate",
+        "missing-product"
+      ],
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`init?` は失敗可能なイニシャライザです。`guard` に複数の条件を書くと、Swift は上から順に確認します。条件が満たせなければ `return nil` で値の生成を終え、画面が空状態を選びます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 65,
+            "end": 75,
+            "text": "    init?(candidates: [Item]) {\n        guard candidates.count == 1, let item = candidates.first, !item.isDeleted, item.modelContext != nil,\n            let product = InventoryProductLabels(product: item.product)\n        else {\n            return nil\n        }\n\n        self.product = product\n        status = item.status?.displayName ?? \"不明な状態\"\n        expiration = item.expirationDate?.formatted(date: .abbreviated, time: .omitted) ?? \"期限未設定\"\n        opening = item.openingDate?.formatted(date: .abbreviated, time: .omitted) ?? \"未設定\""
+          }
+        },
+        {
+          "kind": "text",
+          "text": "候補が1件であることを確かめたあと、`isDeleted` と `modelContext` で個体の削除とコンテキストとの接続を確認します。商品にも同じ確認を適用します。有効な個体では、期限や開封日が未入力なら、それぞれの未設定表示を使います。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 125,
+            "end": 133,
+            "text": "    init?(product: Product?) {\n        guard let product, !product.isDeleted, product.modelContext != nil else {\n            return nil\n        }\n\n        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)\n        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)\n        self.name = name.isEmpty ? \"名前未設定\" : name\n        self.type = type.isEmpty ? \"種類未設定\" : type"
+          }
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 65,
+            "end": 75
+          },
+          "text": "削除・欠落・重複を確認し、表示に使う値を作る。",
+          "shas": [
+            "9a48eca96cb6f411c71a2afaf0536d7b352c1454"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "swiftdata-query"
+      ]
+    }
+  ],
+  "terms": [
+    {
+      "id": "uuid",
+      "label": "UUID",
+      "text": "分散した場所で発行できる識別子。ここでは在庫の1本ごとに発行し、同じ個体を読み取るために使う。"
+    },
+    {
+      "id": "wrapper",
+      "label": "プロパティラッパー",
+      "text": "プロパティの読み書きに別の型の振る舞いを加える Swift の仕組み。`@Query` は SwiftData の照会結果をプロパティとして提供する。"
+    }
+  ]
+}
