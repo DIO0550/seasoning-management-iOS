@@ -95,6 +95,54 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
+    func testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave() throws {
+        let app = makeApplication()
+        let name = "丸大豆しょうゆ"
+        let type = "しょうゆ"
+        let productList = app.navigationBars["商品一覧"]
+        let inventoryList = app.navigationBars["在庫一覧"]
+        let productTab = app.tabBars.buttons["商品"]
+        let inventoryTab = app.tabBars.buttons["在庫"]
+        let saveItem = app.buttons["item-form-save"]
+
+        app.launch()
+        openRegistration(in: app)
+        try enterProduct(name: name, type: type, in: app)
+        app.buttons["product-form-save"].tap()
+        XCTAssertTrue(productList.waitForExistence(timeout: 5))
+
+        inventoryTab.tap()
+        let emptyAdd = app.buttons["inventory-empty-add"]
+        XCTAssertTrue(emptyAdd.waitForExistence(timeout: 5))
+        emptyAdd.tap()
+        try selectItemProduct(name: name, type: type, in: app)
+        saveItem.tap()
+        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))
+
+        productTab.tap()
+        XCTAssertTrue(productList.waitForExistence(timeout: 5))
+        let firstSavedRow = productRow(name: name, type: type, unopened: 1, in: app)
+        XCTAssertTrue(firstSavedRow.waitForExistence(timeout: 5), app.debugDescription)
+
+        inventoryTab.tap()
+        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))
+        inventoryList.buttons["inventory-list-add"].tap()
+        try selectItemProduct(name: name, type: type, in: app)
+        saveItem.tap()
+        XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))
+
+        productTab.tap()
+        XCTAssertTrue(productList.waitForExistence(timeout: 5))
+        let secondSavedRow = productRow(name: name, type: type, unopened: 2, in: app)
+        XCTAssertTrue(secondSavedRow.waitForExistence(timeout: 5), app.debugDescription)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(productList.waitForExistence(timeout: 5))
+        XCTAssertTrue(secondSavedRow.waitForExistence(timeout: 5), app.debugDescription)
+    }
+
+    @MainActor
     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {
         let app = makeApplication()
         app.launch()
@@ -845,8 +893,8 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func productRow(name: String, type: String, in app: XCUIApplication) -> XCUIElement {
-        let label = "商品名、\(name)、種類、\(type)、未開封、0本、使用中、0本"
+    private func productRow(name: String, type: String, unopened: Int = 0, in app: XCUIApplication) -> XCUIElement {
+        let label = "商品名、\(name)、種類、\(type)、未開封、\(unopened)本、使用中、0本"
         return app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
     }
 
