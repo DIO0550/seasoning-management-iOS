@@ -128,8 +128,13 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))
         inventoryList.buttons["inventory-list-add"].tap()
         try selectItemProduct(name: name, type: type, in: app)
+        tapItemExpirationToggle(in: app)
+        assertItemExpiration(isEnabled: true, in: app)
         saveItem.tap()
         XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))
+
+        assertInventoryItemDetail(name: name, hasExpiration: false, in: app)
+        assertInventoryItemDetail(name: name, hasExpiration: true, in: app)
 
         productTab.tap()
         XCTAssertTrue(productList.waitForExistence(timeout: 5))
@@ -266,6 +271,29 @@ final class SeasoningManagerUITests: XCTestCase {
         XCTAssertTrue(typeRow.waitForExistence(timeout: 5))
         XCTAssertEqual(nameRow.label, "名前、\(name)")
         XCTAssertEqual(typeRow.label, "種類、\(type)")
+    }
+
+    @MainActor
+    private func assertInventoryItemDetail(name: String, hasExpiration: Bool, in app: XCUIApplication) {
+        let marker = hasExpiration ? "賞味期限:" : "期限未設定"
+        let row = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", name, marker)
+        ).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)
+        row.tap()
+
+        let detail = app.navigationBars["個体詳細"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 5), app.debugDescription)
+        let expiration = app.descendants(matching: .any).matching(identifier: "item-detail-expiration").firstMatch
+        XCTAssertTrue(expiration.waitForExistence(timeout: 5), app.debugDescription)
+        let label = expiration.label
+        let prefix = "賞味期限、"
+        XCTAssertTrue(label.hasPrefix(prefix))
+        XCTAssertGreaterThan(label.count, prefix.count)
+        XCTAssertEqual(label == "\(prefix)期限未設定", !hasExpiration)
+
+        detail.buttons["在庫一覧"].tap()
+        XCTAssertTrue(app.navigationBars["在庫一覧"].waitForExistence(timeout: 5), app.debugDescription)
     }
 
     @MainActor

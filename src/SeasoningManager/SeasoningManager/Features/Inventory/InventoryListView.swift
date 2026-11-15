@@ -19,6 +19,8 @@ struct InventoryListView: View {
     }
 
     var body: some View {
+        let availableItems = items.filter { !$0.isDeleted && $0.modelContext != nil }
+
         Group {
             if let error = _items.fetchError {
                 ContentUnavailableView(
@@ -26,7 +28,7 @@ struct InventoryListView: View {
                     systemImage: "exclamationmark.triangle",
                     description: Text("\(error.localizedDescription) アプリを開き直してください。")
                 )
-            } else if items.isEmpty {
+            } else if availableItems.isEmpty {
                 ContentUnavailableView {
                     Label("在庫はまだありません", systemImage: "shippingbox")
                 } description: {
@@ -40,10 +42,13 @@ struct InventoryListView: View {
                 }
             } else {
                 List {
-                    inventorySection(for: .unopened)
-                    inventorySection(for: .inUse)
+                    inventorySection(for: .unopened, items: availableItems)
+                    inventorySection(for: .inUse, items: availableItems)
                 }
             }
+        }
+        .navigationDestination(for: UUID.self) { itemID in
+            ItemDetailView(itemID: itemID)
         }
         .navigationTitle("在庫一覧")
         .toolbar {
@@ -59,13 +64,15 @@ struct InventoryListView: View {
     }
 
     @ViewBuilder
-    private func inventorySection(for status: ItemStatus) -> some View {
+    private func inventorySection(for status: ItemStatus, items: [Item]) -> some View {
         let matchingItems = items.filter { $0.status == status }
 
         if !matchingItems.isEmpty {
             Section(status.displayName) {
                 ForEach(matchingItems, id: \.persistentModelID) { item in
-                    InventoryItemRow(item: item, status: status)
+                    NavigationLink(value: item.id) {
+                        InventoryItemRow(item: item, status: status)
+                    }
                 }
             }
         }
@@ -77,13 +84,11 @@ struct InventoryItemRow: View {
     let status: ItemStatus
 
     var productLabels: (name: String, type: String) {
-        guard let product = item.product, !product.isDeleted, product.modelContext != nil else {
+        guard let labels = InventoryProductLabels(product: item.product) else {
             return ("商品情報なし", "種類不明")
         }
 
-        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (name.isEmpty ? "名前未設定" : name, type.isEmpty ? "種類未設定" : type)
+        return (labels.name, labels.type)
     }
 
     var expirationText: String {
@@ -110,5 +115,21 @@ struct InventoryItemRow: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
+    }
+}
+
+struct InventoryProductLabels {
+    let name: String
+    let type: String
+
+    init?(product: Product?) {
+        guard let product, !product.isDeleted, product.modelContext != nil else {
+            return nil
+        }
+
+        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.name = name.isEmpty ? "名前未設定" : name
+        self.type = type.isEmpty ? "種類未設定" : type
     }
 }
