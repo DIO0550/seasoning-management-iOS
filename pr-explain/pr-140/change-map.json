@@ -1,0 +1,135 @@
+{
+  "version": 2,
+  "pr": 140,
+  "headBranch": "feat/issue-52-item-detail",
+  "baseBranch": "master",
+  "mergeBase": "00a67d334bcc97767ff529386a8e6c6e2654dace",
+  "head": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+  "groups": [
+    {
+      "label": "単体テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 82,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 28,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "アプリ(その他)",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 30,
+          "deletions": 9,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 77,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "name": "deletedItemHasNoDetailBeforeAndAfterSavingDeletion"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "name": "detailLooksUpEachItemIDForSameProduct"
+      },
+      {
+        "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "name": "duplicateItemIDHasNoDetail"
+      }
+    ],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "9a48eca96cb6f411c71a2afaf0536d7b352c1454",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-15T21:45:36+09:00",
+      "subject": "feat: 在庫一覧から選んだ個体の詳細を開く",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 30,
+          "deletions": 9,
+          "patch": "@@ -19,6 +19,8 @@ struct InventoryListView: View {\n     }\n \n     var body: some View {\n+        let availableItems = items.filter { !$0.isDeleted && $0.modelContext != nil }\n+\n         Group {\n             if let error = _items.fetchError {\n                 ContentUnavailableView(\n@@ -26,7 +28,7 @@ struct InventoryListView: View {\n                     systemImage: \"exclamationmark.triangle\",\n                     description: Text(\"\\(error.localizedDescription) アプリを開き直してください。\")\n                 )\n-            } else if items.isEmpty {\n+            } else if availableItems.isEmpty {\n                 ContentUnavailableView {\n                     Label(\"在庫はまだありません\", systemImage: \"shippingbox\")\n                 } description: {\n@@ -40,11 +42,14 @@ struct InventoryListView: View {\n                 }\n             } else {\n                 List {\n-                    inventorySection(for: .unopened)\n-                    inventorySection(for: .inUse)\n+                    inventorySection(for: .unopened, items: availableItems)\n+                    inventorySection(for: .inUse, items: availableItems)\n                 }\n             }\n         }\n+        .navigationDestination(for: UUID.self) { itemID in\n+            ItemDetailView(itemID: itemID)\n+        }\n         .navigationTitle(\"在庫一覧\")\n         .toolbar {\n             ToolbarItem(placement: .topBarTrailing) {\n@@ -59,13 +64,15 @@ struct InventoryListView: View {\n     }\n \n     @ViewBuilder\n-    private func inventorySection(for status: ItemStatus) -> some View {\n+    private func inventorySection(for status: ItemStatus, items: [Item]) -> some View {\n         let matchingItems = items.filter { $0.status == status }\n \n         if !matchingItems.isEmpty {\n             Section(status.displayName) {\n                 ForEach(matchingItems, id: \\.persistentModelID) { item in\n-                    InventoryItemRow(item: item, status: status)\n+                    NavigationLink(value: item.id) {\n+                        InventoryItemRow(item: item, status: status)\n+                    }\n                 }\n             }\n         }\n@@ -77,13 +84,11 @@ struct InventoryItemRow: View {\n     let status: ItemStatus\n \n     var productLabels: (name: String, type: String) {\n-        guard let product = item.product, !product.isDeleted, product.modelContext != nil else {\n+        guard let labels = InventoryProductLabels(product: item.product) else {\n             return (\"商品情報なし\", \"種類不明\")\n         }\n \n-        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)\n-        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)\n-        return (name.isEmpty ? \"名前未設定\" : name, type.isEmpty ? \"種類未設定\" : type)\n+        return (labels.name, labels.type)\n     }\n \n     var expirationText: String {\n@@ -112,3 +117,19 @@ struct InventoryItemRow: View {\n         .accessibilityElement(children: .combine)\n     }\n }\n+\n+struct InventoryProductLabels {\n+    let name: String\n+    let type: String\n+\n+    init?(product: Product?) {\n+        guard let product, !product.isDeleted, product.modelContext != nil else {\n+            return nil\n+        }\n+\n+        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)\n+        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)\n+        self.name = name.isEmpty ? \"名前未設定\" : name\n+        self.type = type.isEmpty ? \"種類未設定\" : type\n+    }\n+}",
+          "patchLines": 89,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "status": "A",
+          "oldPath": null,
+          "additions": 77,
+          "deletions": 0,
+          "patch": "@@ -0,0 +1,77 @@\n+import Foundation\n+import SwiftData\n+import SwiftUI\n+\n+struct ItemDetailView: View {\n+    @Query private var items: [Item]\n+\n+    init(itemID: UUID) {\n+        _items = Query(Self.descriptor(for: itemID))\n+    }\n+\n+    static func descriptor(for itemID: UUID) -> FetchDescriptor<Item> {\n+        var descriptor = FetchDescriptor<Item>(predicate: #Predicate { $0.id == itemID })\n+        descriptor.includePendingChanges = false\n+        return descriptor\n+    }\n+\n+    var body: some View {\n+        Group {\n+            if let error = _items.fetchError {\n+                ContentUnavailableView(\n+                    \"個体を読み込めませんでした\",\n+                    systemImage: \"exclamationmark.triangle\",\n+                    description: Text(\"\\(error.localizedDescription) 一覧に戻って、もう一度個体を選んでください。\")\n+                )\n+            } else if let detail = ItemDetailContent(candidates: items) {\n+                details(detail)\n+            } else {\n+                ContentUnavailableView(\n+                    \"個体の詳細を表示できません\",\n+                    systemImage: \"shippingbox\",\n+                    description: Text(\"個体または紐づく商品が見つかりません。一覧に戻って、もう一度個体を選んでください。\")\n+                )\n+            }\n+        }\n+        .navigationTitle(\"個体詳細\")\n+        .navigationBarTitleDisplayMode(.inline)\n+    }\n+\n+    private func details(_ detail: ItemDetailContent) -> some View {\n+        Form {\n+            Section(\"個体情報\") {\n+                LabeledContent(\"状態\", value: detail.status)\n+                LabeledContent(\"賞味期限\", value: detail.expiration)\n+                    .accessibilityElement(children: .ignore)\n+                    .accessibilityLabel(\"賞味期限、\\(detail.expiration)\")\n+                    .accessibilityIdentifier(\"item-detail-expiration\")\n+                LabeledContent(\"開封日\", value: detail.opening)\n+            }\n+\n+            Section(\"商品情報\") {\n+                LabeledContent(\"商品名\", value: detail.product.name)\n+                LabeledContent(\"種類\", value: detail.product.type)\n+            }\n+        }\n+    }\n+}\n+\n+struct ItemDetailContent {\n+    let product: InventoryProductLabels\n+    let status: String\n+    let expiration: String\n+    let opening: String\n+\n+    init?(candidates: [Item]) {\n+        guard candidates.count == 1, let item = candidates.first, !item.isDeleted, item.modelContext != nil,\n+            let product = InventoryProductLabels(product: item.product)\n+        else {\n+            return nil\n+        }\n+\n+        self.product = product\n+        status = item.status?.displayName ?? \"不明な状態\"\n+        expiration = item.expirationDate?.formatted(date: .abbreviated, time: .omitted) ?? \"期限未設定\"\n+        opening = item.openingDate?.formatted(date: .abbreviated, time: .omitted) ?? \"未設定\"\n+    }\n+}",
+          "patchLines": 78,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 82,
+          "deletions": 0,
+          "patch": "@@ -104,6 +104,84 @@ struct InventoryListTests {\n         #expect(undatedRow.expirationText == \"期限未設定\")\n     }\n \n+    @Test func detailLooksUpEachItemIDForSameProduct() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try Product(name: \" しょうゆ \", type: \" 調味料 \")\n+        let opening = Date(timeIntervalSince1970: 1_700_000_000)\n+        let expiration = Date(timeIntervalSince1970: 1_710_000_000)\n+        let unopened = Item(product: product)\n+        let inUse = Item(product: product, expirationDate: expiration, status: .inUse, openingDate: opening)\n+        context.insert(product)\n+        context.insert(unopened)\n+        context.insert(inUse)\n+        try context.save()\n+\n+        let reader = ModelContext(container)\n+        let unopenedMatches = try reader.fetch(ItemDetailView.descriptor(for: unopened.id))\n+        let inUseMatches = try reader.fetch(ItemDetailView.descriptor(for: inUse.id))\n+        #expect(unopenedMatches.map(\\.id) == [unopened.id])\n+        #expect(inUseMatches.map(\\.id) == [inUse.id])\n+\n+        let unopenedDetail = try #require(ItemDetailContent(candidates: unopenedMatches))\n+        #expect(unopenedDetail.status == \"未開封\")\n+        #expect(unopenedDetail.expiration == \"期限未設定\")\n+        #expect(unopenedDetail.opening == \"未設定\")\n+\n+        let inUseDetail = try #require(ItemDetailContent(candidates: inUseMatches))\n+        #expect(inUseDetail.product.name == \"しょうゆ\")\n+        #expect(inUseDetail.product.type == \"調味料\")\n+        #expect(inUseDetail.status == \"使用中\")\n+        #expect(inUseDetail.expiration == expiration.formatted(date: .abbreviated, time: .omitted))\n+        #expect(inUseDetail.opening == opening.formatted(date: .abbreviated, time: .omitted))\n+        #expect(!reader.hasChanges)\n+    }\n+\n+    @Test func deletedItemHasNoDetailBeforeAndAfterSavingDeletion() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        context.autosaveEnabled = false\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n+        let item = Item(product: product)\n+        let itemID = item.id\n+        context.insert(product)\n+        context.insert(item)\n+        try context.save()\n+\n+        let descriptor = ItemDetailView.descriptor(for: itemID)\n+        let candidates = try context.fetch(descriptor)\n+        let candidate = try #require(candidates.first)\n+        #expect(ItemDetailContent(candidates: candidates) != nil)\n+\n+        context.delete(candidate)\n+\n+        // 再照会まで古い候補が残っていても、削除された個体の属性には触れない。\n+        #expect(ItemDetailContent(candidates: candidates) == nil)\n+        try context.save()\n+\n+        #expect(ItemDetailContent(candidates: candidates) == nil)\n+        let savedCandidates = try ModelContext(container).fetch(descriptor)\n+        #expect(savedCandidates.isEmpty)\n+        #expect(ItemDetailContent(candidates: savedCandidates) == nil)\n+    }\n+\n+    @Test func duplicateItemIDHasNoDetail() throws {\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n+        let itemID = UUID()\n+        context.insert(product)\n+        context.insert(Item(id: itemID, product: product))\n+        context.insert(Item(id: itemID, product: product))\n+        try context.save()\n+\n+        let reader = ModelContext(container)\n+        let matches = try reader.fetch(ItemDetailView.descriptor(for: itemID))\n+        #expect(matches.count == 2)\n+        #expect(ItemDetailContent(candidates: matches) == nil)\n+        #expect(!reader.hasChanges)\n+    }\n+\n     @Test func blankFieldsAndUnavailableProductHaveDistinctLabels() throws {\n         let container = try makeContainer()\n         let context = ModelContext(container)\n@@ -120,6 +198,7 @@ struct InventoryListTests {\n         context.delete(product)\n         #expect(row.productLabels.name == \"商品情報なし\")\n         #expect(row.productLabels.type == \"種類不明\")\n+        #expect(ItemDetailContent(candidates: [item]) == nil)\n     }\n \n     @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {\n@@ -143,6 +222,9 @@ struct InventoryListTests {\n         #expect(row.productLabels.type == \"種類不明\")\n         let expectedDate = date.formatted(date: .abbreviated, time: .omitted)\n         #expect(row.expirationText == \"賞味期限: \\(expectedDate)\")\n+        let candidates = try reader.fetch(ItemDetailView.descriptor(for: item.id))\n+        #expect(candidates.map(\\.id) == [item.id])\n+        #expect(ItemDetailContent(candidates: candidates) == nil)\n         #expect(!reader.hasChanges)\n     }\n ",
+          "patchLines": 103,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 28,
+          "deletions": 0,
+          "patch": "@@ -128,9 +128,14 @@ final class SeasoningManagerUITests: XCTestCase {\n         XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))\n         inventoryList.buttons[\"inventory-list-add\"].tap()\n         try selectItemProduct(name: name, type: type, in: app)\n+        tapItemExpirationToggle(in: app)\n+        assertItemExpiration(isEnabled: true, in: app)\n         saveItem.tap()\n         XCTAssertTrue(inventoryList.waitForExistence(timeout: 5))\n \n+        assertInventoryItemDetail(name: name, hasExpiration: false, in: app)\n+        assertInventoryItemDetail(name: name, hasExpiration: true, in: app)\n+\n         productTab.tap()\n         XCTAssertTrue(productList.waitForExistence(timeout: 5))\n         let secondSavedRow = productRow(name: name, type: type, unopened: 2, in: app)\n@@ -268,6 +273,29 @@ final class SeasoningManagerUITests: XCTestCase {\n         XCTAssertEqual(typeRow.label, \"種類、\\(type)\")\n     }\n \n+    @MainActor\n+    private func assertInventoryItemDetail(name: String, hasExpiration: Bool, in app: XCUIApplication) {\n+        let marker = hasExpiration ? \"賞味期限:\" : \"期限未設定\"\n+        let row = app.descendants(matching: .any).matching(\n+            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, marker)\n+        ).firstMatch\n+        XCTAssertTrue(row.waitForExistence(timeout: 5), app.debugDescription)\n+        row.tap()\n+\n+        let detail = app.navigationBars[\"個体詳細\"]\n+        XCTAssertTrue(detail.waitForExistence(timeout: 5), app.debugDescription)\n+        let expiration = app.descendants(matching: .any).matching(identifier: \"item-detail-expiration\").firstMatch\n+        XCTAssertTrue(expiration.waitForExistence(timeout: 5), app.debugDescription)\n+        let label = expiration.label\n+        let prefix = \"賞味期限、\"\n+        XCTAssertTrue(label.hasPrefix(prefix))\n+        XCTAssertGreaterThan(label.count, prefix.count)\n+        XCTAssertEqual(label == \"\\(prefix)期限未設定\", !hasExpiration)\n+\n+        detail.buttons[\"在庫一覧\"].tap()\n+        XCTAssertTrue(app.navigationBars[\"在庫一覧\"].waitForExistence(timeout: 5), app.debugDescription)\n+    }\n+\n     @MainActor\n     private func tapItemExpirationToggle(in app: XCUIApplication) {\n         let control = app.switches[\"item-form-has-expiration\"].switches.firstMatch",
+          "patchLines": 45,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
