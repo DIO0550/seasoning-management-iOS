@@ -1,9 +1,12 @@
+import Combine
 import Foundation
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ItemDetailView: View {
     @Query private var items: [Item]
+    @State private var expirationReferenceDate = Date.now
 
     init(itemID: UUID) {
         _items = Query(Self.descriptor(for: itemID))
@@ -42,18 +45,28 @@ struct ItemDetailView: View {
                 }
             }
         }
+        .onAppear {
+            expirationReferenceDate = .now
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            expirationReferenceDate = .now
+        }
         .navigationTitle("個体詳細")
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private func details(_ detail: ItemDetailContent) -> some View {
-        Form {
+        let expiration = detail.expirationPresentation(now: expirationReferenceDate)
+
+        return Form {
             Section("個体情報") {
                 LabeledContent("状態", value: detail.status)
-                LabeledContent("賞味期限", value: detail.expiration)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("賞味期限、\(detail.expiration)")
-                    .accessibilityIdentifier("item-detail-expiration")
+                LabeledContent("賞味期限") {
+                    InventoryExpirationLabel(text: expiration.detailText, warningColor: expiration.warningColor)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("賞味期限、\(expiration.detailText)")
+                .accessibilityIdentifier("item-detail-expiration")
                 LabeledContent("開封日", value: detail.opening)
             }
 
@@ -73,8 +86,12 @@ struct ItemDetailContent {
 
     let product: InventoryProductLabels
     let status: String
-    let expiration: String
+    let expirationDate: Date?
     let opening: String
+
+    func expirationPresentation(now: Date, calendar: Calendar = .current) -> InventoryExpirationPresentation {
+        InventoryExpirationPresentation(expirationDate: expirationDate, now: now, calendar: calendar)
+    }
 
     static func resolve(candidates: [Item]) -> Result<Self, Unavailable> {
         if candidates.count > 1 {
@@ -91,7 +108,7 @@ struct ItemDetailContent {
     private init(item: Item) {
         product = InventoryProductLabels(product: item.product)
         status = item.status?.displayName ?? "不明な状態"
-        expiration = item.expirationDate?.formatted(date: .abbreviated, time: .omitted) ?? "期限未設定"
+        expirationDate = item.expirationDate
         opening = item.openingDate?.formatted(date: .abbreviated, time: .omitted) ?? "未設定"
     }
 }

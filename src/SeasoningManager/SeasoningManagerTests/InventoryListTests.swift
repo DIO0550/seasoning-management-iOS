@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftUI
 import Testing
 
 @testable import SeasoningManager
@@ -95,13 +96,68 @@ struct InventoryListTests {
         context.insert(undated)
         try context.save()
 
-        let datedRow = InventoryItemRow(item: dated, status: .inUse)
-        let undatedRow = InventoryItemRow(item: undated, status: .unopened)
+        let datedRow = InventoryItemRow(item: dated, status: .inUse, now: date)
+        let undatedRow = InventoryItemRow(item: undated, status: .unopened, now: date)
         #expect(datedRow.productLabels.name == "しょうゆ")
         #expect(datedRow.productLabels.type == "調味料")
         let expectedDate = date.formatted(date: .abbreviated, time: .omitted)
-        #expect(datedRow.expirationText == "賞味期限: \(expectedDate)")
-        #expect(undatedRow.expirationText == "期限未設定")
+        #expect(datedRow.expirationPresentation().rowText == "賞味期限: \(expectedDate)（期限が近い）")
+        #expect(undatedRow.expirationPresentation().rowText == "期限未設定")
+    }
+
+    @Test(
+        arguments: [
+            (-1 as Int?, "期限切れ" as String?, Color.red as Color?),
+            (0, "期限が近い", .orange),
+            (7, "期限が近い", .orange),
+            (8, nil, nil),
+            (nil, nil, nil),
+        ],
+        [ItemStatus.unopened, .inUse]
+    )
+    func expirationWarningsMatchInListAndDetail(
+        _ sample: (daysFromToday: Int?, warning: String?, color: Color?), _ status: ItemStatus
+    ) throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "Asia/Tokyo"))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 10)))
+        let tonight = try #require(calendar.date(bySettingHour: 23, minute: 0, second: 0, of: now))
+        let expirationDate = try sample.daysFromToday.map { days in
+            try #require(calendar.date(byAdding: .day, value: days, to: tonight))
+        }
+
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try Product(name: "しょうゆ", type: "調味料")
+        let openingDate = status == .inUse ? now : nil
+        let item = Item(product: product, expirationDate: expirationDate, status: status, openingDate: openingDate)
+        context.insert(product)
+        context.insert(item)
+        try context.save()
+
+        let row = InventoryItemRow(item: item, status: status, now: now)
+        let detail = try ItemDetailContent.resolve(candidates: [item]).get()
+        let rowExpiration = row.expirationPresentation(calendar: calendar)
+        let detailExpiration = detail.expirationPresentation(now: now, calendar: calendar)
+
+        let expectedRow: String
+        let expectedDetail: String
+        if let expirationDate {
+            let dateStyle = Date.FormatStyle(
+                date: .abbreviated, time: .omitted, calendar: calendar, timeZone: calendar.timeZone
+            )
+            let date = expirationDate.formatted(dateStyle)
+            expectedDetail = sample.warning.map { "\(date)（\($0)）" } ?? date
+            expectedRow = "賞味期限: \(expectedDetail)"
+        } else {
+            expectedDetail = "期限未設定"
+            expectedRow = "期限未設定"
+        }
+
+        #expect(rowExpiration.rowText == expectedRow)
+        #expect(detailExpiration.detailText == expectedDetail)
+        #expect(rowExpiration.warningColor == sample.color)
+        #expect(detailExpiration.warningColor == sample.color)
     }
 
     @Test func detailLooksUpEachItemIDForSameProduct() throws {
@@ -125,14 +181,14 @@ struct InventoryListTests {
 
         let unopenedDetail = try ItemDetailContent.resolve(candidates: unopenedMatches).get()
         #expect(unopenedDetail.status == "未開封")
-        #expect(unopenedDetail.expiration == "期限未設定")
+        #expect(unopenedDetail.expirationDate == nil)
         #expect(unopenedDetail.opening == "未設定")
 
         let inUseDetail = try ItemDetailContent.resolve(candidates: inUseMatches).get()
         #expect(inUseDetail.product.name == "しょうゆ")
         #expect(inUseDetail.product.type == "調味料")
         #expect(inUseDetail.status == "使用中")
-        #expect(inUseDetail.expiration == expiration.formatted(date: .abbreviated, time: .omitted))
+        #expect(inUseDetail.expirationDate == expiration)
         #expect(inUseDetail.opening == opening.formatted(date: .abbreviated, time: .omitted))
         #expect(!reader.hasChanges)
     }
@@ -220,7 +276,7 @@ struct InventoryListTests {
         context.insert(item)
         try context.save()
 
-        let row = InventoryItemRow(item: item, status: .unopened)
+        let row = InventoryItemRow(item: item, status: .unopened, now: item.updatedAt)
         #expect(row.productLabels.name == "名前未設定")
         #expect(row.productLabels.type == "種類未設定")
 
@@ -254,11 +310,11 @@ struct InventoryListTests {
         #expect(items.map(\.id) == [item.id])
         let saved = try #require(items.first)
         #expect(saved.product == nil)
-        let row = InventoryItemRow(item: saved, status: .inUse)
+        let row = InventoryItemRow(item: saved, status: .inUse, now: opening)
         #expect(row.productLabels.name == "商品情報なし")
         #expect(row.productLabels.type == "種類不明")
         let expectedExpiration = expiration.formatted(date: .abbreviated, time: .omitted)
-        #expect(row.expirationText == "賞味期限: \(expectedExpiration)")
+        #expect(row.expirationPresentation().rowText == "賞味期限: \(expectedExpiration)")
 
         let candidates = try reader.fetch(ItemDetailView.descriptor(for: item.id))
         #expect(candidates.map(\.id) == [item.id])
@@ -266,7 +322,7 @@ struct InventoryListTests {
         #expect(detail.product.name == "商品情報なし")
         #expect(detail.product.type == "種類不明")
         #expect(detail.status == "使用中")
-        #expect(detail.expiration == expectedExpiration)
+        #expect(detail.expirationPresentation(now: opening).detailText == expectedExpiration)
         #expect(detail.opening == opening.formatted(date: .abbreviated, time: .omitted))
         #expect(!reader.hasChanges)
     }
