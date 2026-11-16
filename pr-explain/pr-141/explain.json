@@ -1,0 +1,636 @@
+{
+  "version": 1,
+  "pr": 141,
+  "sha": "cfb79d046df9c836e9d770e068749048a21fb65c",
+  "issue": 56,
+  "overview": {
+    "title": "在庫一覧と個体詳細に賞味期限の警告を表示する",
+    "lead": "在庫の1本ごとに、賞味期限の日付と警告を表示します。昨日以前は期限切れ、今日から7日後までは期限が近いと分かります。",
+    "before": [
+      {
+        "text": "賞味期限がある場合は、期限までの日数にかかわらず日付だけを表示していた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "一覧は既存の暦日判定を使い、日付と警告文を同じ行に示す。",
+        "message": "classify"
+      },
+      {
+        "text": "詳細は同じ表示値を使い、読み上げにも警告を含める。",
+        "message": "detail-label"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "7日後の境界",
+        "text": "判定をどちらの画面に届けるかをたどる。",
+        "go": {
+          "kind": "flow",
+          "id": "read-list"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "expiration",
+      "label": "賞味期限の表示",
+      "role": "在庫の個体ごとに日付と警告を伝える。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "name": "在庫一覧と期限表示",
+      "role": "個体行と、共通の期限表示を組み立てる。",
+      "feature": "expiration",
+      "change": "日付・警告文・色を用意し、一覧行で表示する。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "name": "個体詳細",
+      "role": "選んだ1本の個体情報を表示する。",
+      "feature": "expiration",
+      "change": "共通の期限表示を使い、読み上げにも日付と警告文を含める。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Domain/ExpirationState.swift",
+      "name": "期限の暦日判定",
+      "role": "期限日・基準日時・暦から期限の状態を返す。",
+      "feature": "expiration"
+    }
+  ],
+  "messages": [
+    {
+      "id": "classify",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Domain/ExpirationState.swift",
+      "kind": "qry",
+      "name": "期限状態を調べる",
+      "code": "ExpirationState.calculate(expirationDate:now:calendar:)",
+      "via": "call",
+      "payload": "個体の期限日、基準日時、端末の暦",
+      "returns": "判定した期限状態、または計算エラー",
+      "status": "added"
+    },
+    {
+      "id": "detail-label",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "kind": "qry",
+      "name": "詳細用の表示を作る",
+      "code": "InventoryExpirationPresentation(expirationDate:now:calendar:)",
+      "via": "call",
+      "payload": "取得した個体の期限日、基準日時、端末の暦",
+      "returns": "日付と警告文、警告アイコンの色",
+      "status": "added"
+    }
+  ],
+  "flows": [
+    {
+      "id": "read-list",
+      "label": "在庫一覧を表示する",
+      "steps": [
+        "classify"
+      ]
+    },
+    {
+      "id": "read-detail",
+      "label": "個体詳細を表示する",
+      "steps": [
+        "detail-label",
+        "classify"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "cfb79d046df9c836e9d770e068749048a21fb65c",
+      "phase": "core",
+      "role": "在庫一覧と個体詳細に期限の警告をつなぐ。",
+      "why": "画面ごとに日付を比較すると7日後の境界がずれ得るため、既存のドメイン判定と共通の表示を一度ずつ定義する。",
+      "flows": [
+        "read-list",
+        "read-detail"
+      ],
+      "review": [
+        "7日後を含み、8日後から日付だけになることを確認する。",
+        "詳細の読み上げ文が画面と同じ警告で終わることを確認する。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "start": 140,
+          "end": 146,
+          "text": "判定結果を表示に写す。計算エラーが返っても、先に書式化した日付を使える。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "start": 64,
+          "end": 69,
+          "text": "画面に出した期限文字列を読み上げにも渡す。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "inventory",
+      "label": "在庫表示の単体テスト",
+      "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "warnings",
+      "suite": "inventory",
+      "name": "expirationWarningsMatchInListAndDetail",
+      "techniques": [
+        "boundary",
+        "state",
+        "regression"
+      ],
+      "why": "画面用の値の警告文と色を確認し、一覧と詳細の食い違いを検出する。",
+      "given": "東京の暦と基準日を固定し、未開封と使用中の個体それぞれに期限を設定する。",
+      "when": "同じ個体から一覧用と詳細用の文字列を作る。",
+      "then": "両方の日付と警告文、警告の色が揃い、期限が空なら期限未設定になる。",
+      "commit": "cfb79d046df9c836e9d770e068749048a21fb65c",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 108,
+        "end": 161,
+        "text": "    @Test(\n        arguments: [\n            (-1 as Int?, \"期限切れ\" as String?, Color.red as Color?),\n            (0, \"期限が近い\", .orange),\n            (7, \"期限が近い\", .orange),\n            (8, nil, nil),\n            (nil, nil, nil),\n        ],\n        [ItemStatus.unopened, .inUse]\n    )\n    func expirationWarningsMatchInListAndDetail(\n        _ sample: (daysFromToday: Int?, warning: String?, color: Color?), _ status: ItemStatus\n    ) throws {\n        var calendar = Calendar(identifier: .gregorian)\n        calendar.timeZone = try #require(TimeZone(identifier: \"Asia/Tokyo\"))\n        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 10)))\n        let tonight = try #require(calendar.date(bySettingHour: 23, minute: 0, second: 0, of: now))\n        let expirationDate = try sample.daysFromToday.map { days in\n            try #require(calendar.date(byAdding: .day, value: days, to: tonight))\n        }\n\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n        let openingDate = status == .inUse ? now : nil\n        let item = Item(product: product, expirationDate: expirationDate, status: status, openingDate: openingDate)\n        context.insert(product)\n        context.insert(item)\n        try context.save()\n\n        let row = InventoryItemRow(item: item, status: status, now: now)\n        let detail = try ItemDetailContent.resolve(candidates: [item]).get()\n        let rowExpiration = row.expirationPresentation(calendar: calendar)\n        let detailExpiration = detail.expirationPresentation(now: now, calendar: calendar)\n\n        let expectedRow: String\n        let expectedDetail: String\n        if let expirationDate {\n            let dateStyle = Date.FormatStyle(\n                date: .abbreviated, time: .omitted, calendar: calendar, timeZone: calendar.timeZone\n            )\n            let date = expirationDate.formatted(dateStyle)\n            expectedDetail = sample.warning.map { \"\\(date)（\\($0)）\" } ?? date\n            expectedRow = \"賞味期限: \\(expectedDetail)\"\n        } else {\n            expectedDetail = \"期限未設定\"\n            expectedRow = \"期限未設定\"\n        }\n\n        #expect(rowExpiration.rowText == expectedRow)\n        #expect(detailExpiration.detailText == expectedDetail)\n        #expect(rowExpiration.warningColor == sample.color)\n        #expect(detailExpiration.warningColor == sample.color)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift"
+      ],
+      "covers": [
+        "classify",
+        "detail-label"
+      ],
+      "values": {
+        "columns": [
+          "期限",
+          "期待する文言",
+          "警告色"
+        ],
+        "rows": [
+          {
+            "cells": [
+              "昨日",
+              "期限切れ",
+              "赤"
+            ],
+            "boundary": true
+          },
+          {
+            "cells": [
+              "今日",
+              "期限が近い",
+              "オレンジ"
+            ],
+            "boundary": true
+          },
+          {
+            "cells": [
+              "7日後",
+              "期限が近い",
+              "オレンジ"
+            ],
+            "boundary": true
+          },
+          {
+            "cells": [
+              "8日後",
+              "日付だけ",
+              "なし"
+            ],
+            "boundary": true
+          },
+          {
+            "cells": [
+              "なし",
+              "期限未設定",
+              "なし"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "impact": {
+    "title": "賞味期限の見え方",
+    "lead": "在庫一覧と、行を開いた先の個体詳細で期限の状態を確認できます。未開封と使用中のどちらにも表示します。",
+    "tables": [
+      {
+        "label": "期限と画面ごとの表示",
+        "rowHeads": [
+          {
+            "id": "past",
+            "label": "昨日以前"
+          },
+          {
+            "id": "today",
+            "label": "今日"
+          },
+          {
+            "id": "week",
+            "label": "7日後"
+          },
+          {
+            "id": "later",
+            "label": "8日後以降"
+          },
+          {
+            "id": "unset",
+            "label": "未設定"
+          }
+        ],
+        "columnHeads": [
+          {
+            "id": "list",
+            "label": "在庫一覧"
+          },
+          {
+            "id": "detail",
+            "label": "個体詳細"
+          }
+        ],
+        "outcomes": [
+          {
+            "rowHead": "past",
+            "columnHead": "list",
+            "result": "日付と赤いアイコン、期限切れ",
+            "tests": [
+              "warnings"
+            ],
+            "was": "日付"
+          },
+          {
+            "rowHead": "past",
+            "columnHead": "detail",
+            "result": "日付と赤いアイコン、期限切れ",
+            "tests": [
+              "warnings"
+            ],
+            "was": "日付"
+          },
+          {
+            "rowHead": "today",
+            "columnHead": "list",
+            "result": "日付とオレンジのアイコン、期限が近い",
+            "tests": [
+              "warnings"
+            ],
+            "was": "日付"
+          },
+          {
+            "rowHead": "today",
+            "columnHead": "detail",
+            "result": "日付とオレンジのアイコン、期限が近い",
+            "tests": [
+              "warnings"
+            ],
+            "was": "日付"
+          },
+          {
+            "rowHead": "week",
+            "columnHead": "list",
+            "result": "日付とオレンジのアイコン、期限が近い",
+            "tests": [
+              "warnings"
+            ],
+            "was": "日付"
+          },
+          {
+            "rowHead": "week",
+            "columnHead": "detail",
+            "result": "日付とオレンジのアイコン、期限が近い",
+            "tests": [
+              "warnings"
+            ],
+            "was": "日付"
+          },
+          {
+            "rowHead": "later",
+            "columnHead": "list",
+            "result": "日付",
+            "tests": [
+              "warnings"
+            ]
+          },
+          {
+            "rowHead": "later",
+            "columnHead": "detail",
+            "result": "日付",
+            "tests": [
+              "warnings"
+            ]
+          },
+          {
+            "rowHead": "unset",
+            "columnHead": "list",
+            "result": "期限未設定",
+            "tests": [
+              "warnings"
+            ]
+          },
+          {
+            "rowHead": "unset",
+            "columnHead": "detail",
+            "result": "期限未設定",
+            "tests": [
+              "warnings"
+            ]
+          }
+        ]
+      }
+    ],
+    "added": [
+      {
+        "label": "個体詳細の読み上げ",
+        "before": [
+          {
+            "text": "賞味期限と日付を読み上げる。"
+          }
+        ],
+        "after": [
+          {
+            "text": "賞味期限と日付に続いて、該当する警告も読み上げる。",
+            "message": "detail-label"
+          }
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "view-state",
+      "kind": "language",
+      "category": "SwiftUI",
+      "label": "`@State` と画面の再計算",
+      "gist": "画面が覚えておく値に `@State` を付けると、値を更新したときに SwiftUI が表示を計算し直します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftUI では、画面の構成を `View` の `body` に書きます。画面を表す構造体は何度も作られ得ます。変数の宣言の前に `@State` を付けると、同じ画面を表している間、SwiftUI が値を管理します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 7,
+            "end": 12,
+            "text": "struct InventoryListView: View {\n    @Query private var items: [Item]\n    @State private var expirationReferenceDate = Date.now\n\n    init() {\n        _items = Query(Self.descriptor())"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "この値は期限の比較に使う時計の読み取り結果です。`Date.now` を一度読むとその瞬間を表す値が作られます。日付が変わってもその値は進まないため、画面が現れるときや時刻変更の知らせを受けたときに読み直します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 57,
+            "end": 62,
+            "text": "        .onAppear {\n            expirationReferenceDate = .now\n        }\n        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in\n            expirationReferenceDate = .now\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`.onAppear` は画面が表示されるときに波括弧内の処理を呼びます。`.onReceive` は通知を値として受け取ります。`{ _ in ... }` の `_` は、受け取った通知の内容をこの処理で使わないことを表します。どちらの場合も基準日時を更新し、個体の期限を表示し直します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 57,
+            "end": 62
+          },
+          "text": "一覧で再表示と時刻変更の両方を扱う。",
+          "shas": [
+            "cfb79d046df9c836e9d770e068749048a21fb65c"
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 48,
+            "end": 53
+          },
+          "text": "個体詳細も同じタイミングで時刻を読み直す。",
+          "shas": [
+            "cfb79d046df9c836e9d770e068749048a21fb65c"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "local-days"
+      ]
+    },
+    {
+      "id": "match-result",
+      "kind": "language",
+      "category": "Swift",
+      "label": "`Result` と `switch`",
+      "gist": "`Result` は計算が成功して返した値と、計算が失敗した理由を区別できる型です。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "期限日の未入力は有効な状態です。暦に7日を足せない場合は計算エラーとして扱います。`Result<ExpirationState, CalculationError>` の前半が成功時の型、後半が失敗時の型です。期限未入力は判定できた結果なので `.success(.unset)` になります。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 134,
+            "end": 152,
+            "text": "    init(expirationDate: Date?, now: Date, calendar: Calendar) {\n        let dateStyle = Date.FormatStyle(\n            date: .abbreviated, time: .omitted, calendar: calendar, timeZone: calendar.timeZone\n        )\n        let dateText = expirationDate?.formatted(dateStyle) ?? \"期限未設定\"\n        let warning: (text: String, color: Color)?\n        switch ExpirationState.calculate(expirationDate: expirationDate, now: now, calendar: calendar) {\n        case .success(.expired):\n            warning = (\"期限切れ\", .red)\n        case .success(.expiringSoon):\n            warning = (\"期限が近い\", .orange)\n        case .success(.normal), .success(.unset), .failure:\n            warning = nil\n        }\n\n        let text = warning.map { \"\\(dateText)（\\($0.text)）\" } ?? dateText\n        detailText = text\n        rowText = expirationDate == nil ? text : \"賞味期限: \\(text)\"\n        warningColor = warning?.color"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`switch` は `case` に書いた形に当てはまる枝を実行します。`.success(.expired)` は、外側が成功で、中に期限切れの状態を持つ場合です。`.failure` では、括弧の中のエラー詳細を取り出さずに失敗全体を扱います。この画面では、判定できれば警告を添え、失敗時も書式化済みの日付を表示します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 134,
+            "end": 152
+          },
+          "text": "期限の判定結果を日付と警告文、色に対応させる。",
+          "shas": [
+            "cfb79d046df9c836e9d770e068749048a21fb65c"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "local-days"
+      ]
+    },
+    {
+      "id": "accessibility-label",
+      "kind": "language",
+      "category": "SwiftUI",
+      "label": "`LabeledContent` と読み上げ",
+      "gist": "`LabeledContent` は「賞味期限」のような項目名と、その値を組み合わせる部品です。読み上げ用の文も設定できます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "フォームでは項目名と値を分けて配置します。読み上げには両者を一文で渡すと意味が伝わります。`LabeledContent` の末尾の波括弧は、項目の値として配置するビューを返します。ここでは日付と警告を表示する共通の部品を渡します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 61,
+            "end": 70,
+            "text": "        return Form {\n            Section(\"個体情報\") {\n                LabeledContent(\"状態\", value: detail.status)\n                LabeledContent(\"賞味期限\") {\n                    InventoryExpirationLabel(text: expiration.detailText, warningColor: expiration.warningColor)\n                }\n                .accessibilityElement(children: .ignore)\n                .accessibilityLabel(\"賞味期限、\\(expiration.detailText)\")\n                .accessibilityIdentifier(\"item-detail-expiration\")\n                LabeledContent(\"開封日\", value: detail.opening)"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`.accessibilityElement(children: .ignore)` は読み上げ用の要素を作り、内部の項目を別々に読む対象から外します。次の `.accessibilityLabel` に「賞味期限」、日付、警告を入れます。判定と同じ文字列を使うので色に頼らず期限が分かります。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 64,
+            "end": 69
+          },
+          "text": "日付と警告をひと続きの読み上げ文にする。",
+          "shas": [
+            "cfb79d046df9c836e9d770e068749048a21fb65c"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "shared-label"
+      ]
+    },
+    {
+      "id": "local-days",
+      "kind": "codebase",
+      "category": "期限の仕様",
+      "label": "暦日で期限を判定する",
+      "gist": "`Date` は時刻を含む瞬間を表します。その瞬間を何月何日として扱うかは、暦とタイムゾーンで決まります。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "例えば端末が東京にあるとき、10月10日23時の期限は10月10日の朝にも『今日』です。`startOfDay(for:)` で基準日時と期限日時をそれぞれの日の始まりにそろえると、時刻の差を除いて比較できます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ExpirationState.swift",
+            "start": 10,
+            "end": 40,
+            "text": "    private static let expiringSoonThresholdDays = 7\n\n    enum CalculationError: Error, Equatable, Sendable {\n        case dayCalculationFailed\n    }\n\n    /// 今日から7日後までを「期限が近い」とする。期限日の時刻は判定に含めない。\n    static func calculate(\n        expirationDate: Date?, now: Date, calendar: Calendar\n    ) -> Result<ExpirationState, CalculationError> {\n        guard let expirationDate else {\n            return .success(.unset)\n        }\n\n        let today = calendar.startOfDay(for: now)\n        let expirationDay = calendar.startOfDay(for: expirationDate)\n\n        guard expirationDay >= today else {\n            return .success(.expired)\n        }\n\n        guard let lastSoonDay = calendar.date(byAdding: .day, value: Self.expiringSoonThresholdDays, to: today) else {\n            return .failure(.dayCalculationFailed)\n        }\n\n        if expirationDay <= lastSoonDay {\n            return .success(.expiringSoon)\n        }\n\n        return .success(.normal)\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "7日後の境界は `calendar.date(byAdding: .day, ...)` で求めます。夏時間の切り替えで1日の長さが変わっても日付の順序で判定できます。`<=` を使うため7日後も範囲に入ります。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 134,
+            "end": 140,
+            "text": "    init(expirationDate: Date?, now: Date, calendar: Calendar) {\n        let dateStyle = Date.FormatStyle(\n            date: .abbreviated, time: .omitted, calendar: calendar, timeZone: calendar.timeZone\n        )\n        let dateText = expirationDate?.formatted(dateStyle) ?? \"期限未設定\"\n        let warning: (text: String, color: Color)?\n        switch ExpirationState.calculate(expirationDate: expirationDate, now: now, calendar: calendar) {"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "表示の `Date.FormatStyle` にも同じ暦とタイムゾーンを渡します。日付を書式化する場所と状態を決める場所が同じ暦を基準にするため、画面に出た日付と警告の意味が揃います。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 134,
+            "end": 140
+          },
+          "text": "書式化と判定に同じ暦を使う。",
+          "shas": [
+            "cfb79d046df9c836e9d770e068749048a21fb65c"
+          ]
+        }
+      ],
+      "tests": [
+        "warnings"
+      ],
+      "flows": [
+        "read-list",
+        "read-detail"
+      ]
+    },
+    {
+      "id": "shared-label",
+      "kind": "codebase",
+      "category": "在庫の画面",
+      "label": "一覧と詳細が共有する期限欄",
+      "gist": "共通の処理で期限の状態から警告文と色を決め、一覧と詳細は同じ部品で描画します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "一覧では日付に『賞味期限』を付けます。詳細ではフォームに項目名があるため値だけを渡します。どちらも警告がある場合は日付と警告を太字にし、アイコンにも色を付けます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+            "start": 149,
+            "end": 173,
+            "text": "        let text = warning.map { \"\\(dateText)（\\($0.text)）\" } ?? dateText\n        detailText = text\n        rowText = expirationDate == nil ? text : \"賞味期限: \\(text)\"\n        warningColor = warning?.color\n    }\n}\n\nstruct InventoryExpirationLabel: View {\n    let text: String\n    let warningColor: Color?\n\n    var body: some View {\n        HStack(alignment: .firstTextBaseline, spacing: 4) {\n            if let warningColor {\n                Image(systemName: \"exclamationmark.circle.fill\")\n                    .foregroundStyle(warningColor)\n                    .accessibilityHidden(true)\n            }\n\n            Text(text)\n                .fontWeight(warningColor == nil ? nil : .semibold)\n                .foregroundStyle(warningColor == nil ? Color.secondary : Color.primary)\n                .fixedSize(horizontal: false, vertical: true)\n        }\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`.accessibilityHidden(true)` は警告アイコンを読み上げの対象から外します。直近の期限か期限切れかは、隣に表示する文字列が伝えます。色の付かない表示でも意味を追えます。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+          "lineRange": {
+            "start": 156,
+            "end": 173
+          },
+          "text": "期限欄を描画する。",
+          "shas": [
+            "cfb79d046df9c836e9d770e068749048a21fb65c"
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 64,
+            "end": 69
+          },
+          "text": "詳細の項目値に期限欄を使う。",
+          "shas": [
+            "cfb79d046df9c836e9d770e068749048a21fb65c"
+          ]
+        }
+      ],
+      "tests": [
+        "warnings"
+      ],
+      "flows": [
+        "read-list",
+        "read-detail"
+      ]
+    }
+  ]
+}
