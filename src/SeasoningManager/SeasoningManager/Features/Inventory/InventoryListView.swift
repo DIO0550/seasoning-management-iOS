@@ -19,6 +19,8 @@ struct InventoryListView: View {
     }
 
     var body: some View {
+        let availableItems = items.filter { !$0.isDeleted && $0.modelContext != nil }
+
         Group {
             if let error = _items.fetchError {
                 ContentUnavailableView(
@@ -26,7 +28,7 @@ struct InventoryListView: View {
                     systemImage: "exclamationmark.triangle",
                     description: Text("\(error.localizedDescription) アプリを開き直してください。")
                 )
-            } else if items.isEmpty {
+            } else if availableItems.isEmpty {
                 ContentUnavailableView {
                     Label("在庫はまだありません", systemImage: "shippingbox")
                 } description: {
@@ -40,10 +42,13 @@ struct InventoryListView: View {
                 }
             } else {
                 List {
-                    inventorySection(for: .unopened)
-                    inventorySection(for: .inUse)
+                    inventorySection(for: .unopened, items: availableItems)
+                    inventorySection(for: .inUse, items: availableItems)
                 }
             }
+        }
+        .navigationDestination(for: ItemDetailRoute.self) { route in
+            ItemDetailView(itemID: route.itemID)
         }
         .navigationTitle("在庫一覧")
         .toolbar {
@@ -59,31 +64,31 @@ struct InventoryListView: View {
     }
 
     @ViewBuilder
-    private func inventorySection(for status: ItemStatus) -> some View {
+    private func inventorySection(for status: ItemStatus, items: [Item]) -> some View {
         let matchingItems = items.filter { $0.status == status }
 
         if !matchingItems.isEmpty {
             Section(status.displayName) {
                 ForEach(matchingItems, id: \.persistentModelID) { item in
-                    InventoryItemRow(item: item, status: status)
+                    NavigationLink(value: ItemDetailRoute(itemID: item.id)) {
+                        InventoryItemRow(item: item, status: status)
+                    }
                 }
             }
         }
     }
 }
 
+private nonisolated struct ItemDetailRoute: Hashable {
+    let itemID: UUID
+}
+
 struct InventoryItemRow: View {
     let item: Item
     let status: ItemStatus
 
-    var productLabels: (name: String, type: String) {
-        guard let product = item.product, !product.isDeleted, product.modelContext != nil else {
-            return ("商品情報なし", "種類不明")
-        }
-
-        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let type = product.type.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (name.isEmpty ? "名前未設定" : name, type.isEmpty ? "種類未設定" : type)
+    var productLabels: InventoryProductLabels {
+        InventoryProductLabels(product: item.product)
     }
 
     var expirationText: String {
@@ -110,5 +115,23 @@ struct InventoryItemRow: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
+    }
+}
+
+struct InventoryProductLabels {
+    let name: String
+    let type: String
+
+    init(product: Product?) {
+        guard let product, !product.isDeleted, product.modelContext != nil else {
+            name = "商品情報なし"
+            type = "種類不明"
+            return
+        }
+
+        let trimmedName = product.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedType = product.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        name = trimmedName.isEmpty ? "名前未設定" : trimmedName
+        type = trimmedType.isEmpty ? "種類未設定" : trimmedType
     }
 }

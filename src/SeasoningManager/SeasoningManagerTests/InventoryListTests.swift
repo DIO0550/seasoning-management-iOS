@@ -104,6 +104,113 @@ struct InventoryListTests {
         #expect(undatedRow.expirationText == "期限未設定")
     }
 
+    @Test func detailLooksUpEachItemIDForSameProduct() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try Product(name: " しょうゆ ", type: " 調味料 ")
+        let opening = Date(timeIntervalSince1970: 1_700_000_000)
+        let expiration = Date(timeIntervalSince1970: 1_710_000_000)
+        let unopened = Item(product: product)
+        let inUse = Item(product: product, expirationDate: expiration, status: .inUse, openingDate: opening)
+        context.insert(product)
+        context.insert(unopened)
+        context.insert(inUse)
+        try context.save()
+
+        let reader = ModelContext(container)
+        let unopenedMatches = try reader.fetch(ItemDetailView.descriptor(for: unopened.id))
+        let inUseMatches = try reader.fetch(ItemDetailView.descriptor(for: inUse.id))
+        #expect(unopenedMatches.map(\.id) == [unopened.id])
+        #expect(inUseMatches.map(\.id) == [inUse.id])
+
+        let unopenedDetail = try ItemDetailContent.resolve(candidates: unopenedMatches).get()
+        #expect(unopenedDetail.status == "未開封")
+        #expect(unopenedDetail.expiration == "期限未設定")
+        #expect(unopenedDetail.opening == "未設定")
+
+        let inUseDetail = try ItemDetailContent.resolve(candidates: inUseMatches).get()
+        #expect(inUseDetail.product.name == "しょうゆ")
+        #expect(inUseDetail.product.type == "調味料")
+        #expect(inUseDetail.status == "使用中")
+        #expect(inUseDetail.expiration == expiration.formatted(date: .abbreviated, time: .omitted))
+        #expect(inUseDetail.opening == opening.formatted(date: .abbreviated, time: .omitted))
+        #expect(!reader.hasChanges)
+    }
+
+    @Test func insertedItemOnlyBecomesAvailableAfterSave() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let product = try Product(name: "しょうゆ", type: "調味料")
+        context.insert(product)
+        try context.save()
+
+        let item = Item(product: product)
+        let descriptor = ItemDetailView.descriptor(for: item.id)
+        context.insert(item)
+        #expect(try context.fetch(descriptor).isEmpty)
+
+        try context.save()
+        let matches = try context.fetch(descriptor)
+        #expect(matches.map(\.id) == [item.id])
+        let detail = try ItemDetailContent.resolve(candidates: matches).get()
+        #expect(detail.status == "未開封")
+    }
+
+    @Test func deletedItemHasNoDetailBeforeAndAfterSavingDeletion() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let product = try Product(name: "しょうゆ", type: "調味料")
+        let item = Item(product: product)
+        let itemID = item.id
+        context.insert(product)
+        context.insert(item)
+        try context.save()
+
+        let descriptor = ItemDetailView.descriptor(for: itemID)
+        let candidates = try context.fetch(descriptor)
+        let candidate = try #require(candidates.first)
+        let detail = try ItemDetailContent.resolve(candidates: candidates).get()
+        #expect(detail.status == "未開封")
+
+        context.delete(candidate)
+
+        // 再照会まで古い候補が残っていても、削除された個体の属性には触れない。
+        #expect(throws: ItemDetailContent.Unavailable.notFound) {
+            try ItemDetailContent.resolve(candidates: candidates).get()
+        }
+        try context.save()
+
+        #expect(throws: ItemDetailContent.Unavailable.notFound) {
+            try ItemDetailContent.resolve(candidates: candidates).get()
+        }
+        let savedCandidates = try ModelContext(container).fetch(descriptor)
+        #expect(savedCandidates.isEmpty)
+        #expect(throws: ItemDetailContent.Unavailable.notFound) {
+            try ItemDetailContent.resolve(candidates: savedCandidates).get()
+        }
+    }
+
+    @Test func duplicateItemIDHasNoDetail() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let product = try Product(name: "しょうゆ", type: "調味料")
+        let itemID = UUID()
+        context.insert(product)
+        context.insert(Item(id: itemID, product: product))
+        context.insert(Item(id: itemID, product: product))
+        try context.save()
+
+        let reader = ModelContext(container)
+        let matches = try reader.fetch(ItemDetailView.descriptor(for: itemID))
+        #expect(matches.count == 2)
+        #expect(throws: ItemDetailContent.Unavailable.duplicateID) {
+            try ItemDetailContent.resolve(candidates: matches).get()
+        }
+        #expect(!reader.hasChanges)
+    }
+
     @Test func blankFieldsAndUnavailableProductHaveDistinctLabels() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
@@ -118,16 +225,25 @@ struct InventoryListTests {
         #expect(row.productLabels.type == "種類未設定")
 
         context.delete(product)
+        let deletedProductLabels = InventoryProductLabels(product: product)
+        #expect(deletedProductLabels.name == "商品情報なし")
+        #expect(deletedProductLabels.type == "種類不明")
         #expect(row.productLabels.name == "商品情報なし")
         #expect(row.productLabels.type == "種類不明")
+
+        let detail = try ItemDetailContent.resolve(candidates: [item]).get()
+        #expect(detail.product.name == "商品情報なし")
+        #expect(detail.product.type == "種類不明")
+        #expect(detail.status == "未開封")
     }
 
     @Test func missingProductRelationshipDoesNotHideCurrentItem() throws {
         let container = try makeContainer()
         let context = ModelContext(container)
         let product = try Product(name: "しょうゆ", type: "調味料")
-        let date = Date(timeIntervalSince1970: 1_700_000_000)
-        let item = Item(product: product, expirationDate: date)
+        let opening = Date(timeIntervalSince1970: 1_700_000_000)
+        let expiration = Date(timeIntervalSince1970: 1_710_000_000)
+        let item = Item(product: product, expirationDate: expiration, status: .inUse, openingDate: opening)
         context.insert(product)
         context.insert(item)
         item.setValue(forKey: \.product, to: nil)
@@ -138,11 +254,20 @@ struct InventoryListTests {
         #expect(items.map(\.id) == [item.id])
         let saved = try #require(items.first)
         #expect(saved.product == nil)
-        let row = InventoryItemRow(item: saved, status: .unopened)
+        let row = InventoryItemRow(item: saved, status: .inUse)
         #expect(row.productLabels.name == "商品情報なし")
         #expect(row.productLabels.type == "種類不明")
-        let expectedDate = date.formatted(date: .abbreviated, time: .omitted)
-        #expect(row.expirationText == "賞味期限: \(expectedDate)")
+        let expectedExpiration = expiration.formatted(date: .abbreviated, time: .omitted)
+        #expect(row.expirationText == "賞味期限: \(expectedExpiration)")
+
+        let candidates = try reader.fetch(ItemDetailView.descriptor(for: item.id))
+        #expect(candidates.map(\.id) == [item.id])
+        let detail = try ItemDetailContent.resolve(candidates: candidates).get()
+        #expect(detail.product.name == "商品情報なし")
+        #expect(detail.product.type == "種類不明")
+        #expect(detail.status == "使用中")
+        #expect(detail.expiration == expectedExpiration)
+        #expect(detail.opening == opening.formatted(date: .abbreviated, time: .omitted))
         #expect(!reader.hasChanges)
     }
 
