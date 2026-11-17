@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 142,
-  "sha": "0011382fc5b329a380ca44c1e0ef46a3dc30c09a",
+  "sha": "19e8f5f6824325eb323e46f0acfd69ce38c94db2",
   "overview": {
     "title": "UIテストをクラス別の2ジョブに分けて並行実行する",
     "lead": "UI テストジョブが 36〜38 分かかっていたため、テストクラスを 2 つに分け、CI でクラス別のジョブへ振り分けて並行して走らせる。シミュレータクローンの並列実行はランナーの CPU 分割で遅くなったため、ジョブ分割を採る。",
@@ -242,6 +242,37 @@
           "text": "環境変数で並列を切る"
         }
       ]
+    },
+    {
+      "sha": "19e8f5f6824325eb323e46f0acfd69ce38c94db2",
+      "phase": "core",
+      "role": "フレークした待機を補強",
+      "why": "商品脚で2件が時間切れ系で失敗。一覧スナップショット未生成とタップが欄を拾わない2点に待機・再タップを入れた。",
+      "flows": [
+        "ci-run"
+      ],
+      "review": [
+        "脚の再実行結果"
+      ],
+      "before": [
+        {
+          "text": "画面遷移の途中で一覧の frame が空になると即座に失敗した"
+        }
+      ],
+      "after": [
+        {
+          "text": "一覧の生成を待ち、欄のタップをやり直す",
+          "message": "run-tests"
+        }
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "start": 780,
+          "end": 790,
+          "text": "一覧の生成を待つ"
+        }
+      ]
     }
   ],
   "suites": [
@@ -386,7 +417,7 @@
           },
           "text": "テストコマンドの組み立て",
           "shas": [
-            "0011382fc5b329a380ca44c1e0ef46a3dc30c09a"
+            "19e8f5f6824325eb323e46f0acfd69ce38c94db2"
           ]
         }
       ]
@@ -422,7 +453,7 @@
           },
           "text": "共有ヘルパーの拡張",
           "shas": [
-            "0011382fc5b329a380ca44c1e0ef46a3dc30c09a"
+            "19e8f5f6824325eb323e46f0acfd69ce38c94db2"
           ]
         }
       ]
