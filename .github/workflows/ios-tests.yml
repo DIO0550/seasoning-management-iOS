@@ -29,10 +29,11 @@ jobs:
             timeout: 30
           - name: UI tests
             target: SeasoningManagerUITests
-            timeout: 45
+            timeout: 60
     # iOS 27.0 is the minimum deployment target decided in #13.
     runs-on: xcode-27
     # UI全件とビルドが30分で繰り返し中断されたため、UIジョブだけ余裕を持たせる。
+    # クローン2台がランナーのCPUを分けるため、直列より遅くなる場合があり60分にする。
     timeout-minutes: ${{ matrix.timeout }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
