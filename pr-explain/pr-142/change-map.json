@@ -4,7 +4,7 @@
   "headBranch": "test/parallel-ui-tests",
   "baseBranch": "master",
   "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
-  "head": "e90192d9e639def440a9b1a29198986828a0266f",
+  "head": "2177b10005f26fd5d26f812e2a204ea82e3bad27",
   "groups": [
     {
       "label": "UI テスト",
@@ -25,6 +25,15 @@
       "files": [
         {
           "path": ".github/workflows/ios-tests.yml",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 1,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "harness/ci-report.py",
           "changed": false
         },
         {
@@ -35,6 +44,10 @@
           "deletions": 1,
           "changed": true,
           "target": null
+        },
+        {
+          "path": "harness/tests/test_ci_report.py",
+          "changed": false
         },
         {
           "path": "harness/tests/test_harness.py",
@@ -86,12 +99,42 @@
           "truncated": false
         }
       ]
+    },
+    {
+      "sha": "2177b10005f26fd5d26f812e2a204ea82e3bad27",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-17T08:03:04-08:00",
+      "subject": "UIテストのCIタイムアウトを60分に延ばす",
+      "body": "シミュレータクローン2台がランナーのCPUを分け合うため、並列実行でも45分を超えることがある。実測を取るために余裕を持たせる。\n\nCo-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 1,
+          "patch": "@@ -29,10 +29,11 @@ jobs:\n             timeout: 30\n           - name: UI tests\n             target: SeasoningManagerUITests\n-            timeout: 45\n+            timeout: 60\n     # iOS 27.0 is the minimum deployment target decided in #13.\n     runs-on: xcode-27\n     # UI全件とビルドが30分で繰り返し中断されたため、UIジョブだけ余裕を持たせる。\n+    # クローン2台がランナーのCPUを分けるため、直列より遅くなる場合があり60分にする。\n     timeout-minutes: ${{ matrix.timeout }}\n     env:\n       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer",
+          "patchLines": 13,
+          "truncated": false
+        }
+      ]
     }
   ],
   "dependencies": [
     {
       "from": ".github/workflows/ios-tests.yml",
+      "to": "harness/ci-report.py",
+      "status": "kept"
+    },
+    {
+      "from": ".github/workflows/ios-tests.yml",
       "to": "harness/test-ios.sh",
+      "status": "kept"
+    },
+    {
+      "from": "harness/tests/test_ci_report.py",
+      "to": ".github/workflows/ios-tests.yml",
       "status": "kept"
     },
     {
