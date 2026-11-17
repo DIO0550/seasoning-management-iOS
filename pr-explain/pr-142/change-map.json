@@ -1,0 +1,103 @@
+{
+  "version": 2,
+  "pr": 142,
+  "headBranch": "test/parallel-ui-tests",
+  "baseBranch": "master",
+  "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
+  "head": "e90192d9e639def440a9b1a29198986828a0266f",
+  "groups": [
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 46,
+          "deletions": 29,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "ハーネス",
+      "files": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "changed": false
+        },
+        {
+          "path": "harness/test-ios.sh",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 1,
+          "changed": true,
+          "target": null
+        },
+        {
+          "path": "harness/tests/test_harness.py",
+          "changed": false
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "e90192d9e639def440a9b1a29198986828a0266f",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-17T07:12:22-08:00",
+      "subject": "UIテストを2クラスに分けシミュレータ2台で並列実行する",
+      "body": "Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": "harness/test-ios.sh",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 1,
+          "patch": "@@ -47,7 +47,8 @@ test_command=(xcodebuild test \\\n   -configuration Debug \\\n   -destination \"$destination\" \\\n   -destination-timeout 120 \\\n-  -parallel-testing-enabled NO \\\n+  -parallel-testing-enabled YES \\\n+  -parallel-testing-worker-count 2 \\\n   CODE_SIGNING_ALLOWED=NO)\n \n if [[ \"$target\" != \"all\" ]]; then",
+          "patchLines": 10,
+          "truncated": false,
+          "hunkOpeningLines": [
+            {
+              "old": null,
+              "new": null
+            }
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 46,
+          "deletions": 29,
+          "patch": "@@ -7,8 +7,7 @@\n \n import XCTest\n \n-final class SeasoningManagerUITests: XCTestCase {\n-\n+final class SeasoningManagerInventoryUITests: XCTestCase {\n     override func setUpWithError() throws {\n         // Put setup code here. This method is called before the invocation of each test method in the class.\n \n@@ -343,6 +342,21 @@ final class SeasoningManagerUITests: XCTestCase {\n \n         XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)\n     }\n+}\n+\n+final class SeasoningManagerProductUITests: XCTestCase {\n+    override func setUpWithError() throws {\n+        // Put setup code here. This method is called before the invocation of each test method in the class.\n+\n+        // In UI tests it is usually best to stop immediately when a failure occurs.\n+        continueAfterFailure = false\n+\n+        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.\n+    }\n+\n+    override func tearDownWithError() throws {\n+        // Put teardown code here. This method is called after the invocation of each test method in the class.\n+    }\n \n     @MainActor\n     func testProductRegistrationCancelAndBackDiscardInput() throws {\n@@ -697,12 +711,24 @@ final class SeasoningManagerUITests: XCTestCase {\n         try assertBlankOptionalField(\"product-form-basis-unit\", in: app)\n     }\n \n-    private enum FormInputFailure: Error {\n-        case unavailable\n+    @MainActor\n+    func testLaunchPerformance() throws {\n+        // This measures how long it takes to launch your application.\n+        let app = makeApplication()\n+        measure(metrics: [XCTApplicationLaunchMetric()]) {\n+            app.launch()\n+        }\n     }\n+}\n+\n+private enum FormInputFailure: Error {\n+    case unavailable\n+}\n \n+@MainActor\n+extension XCTestCase {\n     @MainActor\n-    private func detailElement(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n+    fileprivate func detailElement(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n         let element = app.descendants(matching: .any)[identifier]\n         for _ in 0..<24 {\n             let safeFrame = try formInteractionFrame(in: app)\n@@ -718,7 +744,7 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n+    fileprivate func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n         let field = app.textFields[identifier]\n         // 未生成のセルは、上端へ戻してから下へ探す。各操作の前に領域を取り直す。\n         if !field.exists {\n@@ -751,7 +777,7 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func formInteractionFrame(in app: XCUIApplication) throws -> CGRect {\n+    fileprivate func formInteractionFrame(in app: XCUIApplication) throws -> CGRect {\n         let form = app.collectionViews.firstMatch\n         let frame = form.frame.intersection(app.frame)\n         let navigationBar = app.navigationBars.firstMatch\n@@ -772,7 +798,7 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func scrollForm(towardTop: Bool, in app: XCUIApplication) throws {\n+    fileprivate func scrollForm(towardTop: Bool, in app: XCUIApplication) throws {\n         let safeFrame = try formInteractionFrame(in: app)\n         let distance = min(safeFrame.height * 0.35, 140)\n         let offset = towardTop ? distance : -distance\n@@ -785,14 +811,14 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func assertBlankOptionalField(_ identifier: String, in app: XCUIApplication) throws {\n+    fileprivate func assertBlankOptionalField(_ identifier: String, in app: XCUIApplication) throws {\n         let field = try formField(identifier, in: app)\n         let value = try XCTUnwrap(field.value as? String)\n         XCTAssertTrue([\"\", field.placeholderValue ?? \"\"].contains(value))\n     }\n \n     @MainActor\n-    private func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) throws {\n+    fileprivate func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) throws {\n         openRegistration(in: app)\n         try enterProduct(name: name, type: type, in: app)\n         app.buttons[\"product-form-save\"].tap()\n@@ -803,7 +829,7 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func openEditing(in app: XCUIApplication) {\n+    fileprivate func openEditing(in app: XCUIApplication) {\n         let detail = app.navigationBars[\"商品詳細\"]\n         XCTAssertTrue(detail.waitForExistence(timeout: 5))\n         let edit = detail.buttons[\"product-detail-edit\"]\n@@ -814,13 +840,13 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func assertForm(name: String, type: String, in app: XCUIApplication) {\n+    fileprivate func assertForm(name: String, type: String, in app: XCUIApplication) {\n         XCTAssertEqual(app.textFields[\"product-form-name\"].value as? String, name)\n         XCTAssertEqual(app.textFields[\"product-form-type\"].value as? String, type)\n     }\n \n     @MainActor\n-    private func assertDetail(name: String, type: String, in app: XCUIApplication) {\n+    fileprivate func assertDetail(name: String, type: String, in app: XCUIApplication) {\n         XCTAssertTrue(app.navigationBars[\"商品詳細\"].waitForExistence(timeout: 5))\n         let nameRow = app.descendants(matching: .any)[\"product-detail-name\"]\n         XCTAssertTrue(nameRow.waitForExistence(timeout: 5))\n@@ -829,7 +855,7 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {\n+    fileprivate func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {\n         var focusedField: XCUIElement?\n         let keyboard = app.keyboards.firstMatch\n         // タップ後に現れるキーボードで領域が変わるため、改めて欄全体を確認する。\n@@ -865,7 +891,7 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func waitForFormValue(_ value: String, field: XCUIElement) throws {\n+    fileprivate func waitForFormValue(_ value: String, field: XCUIElement) throws {\n         let expected = value.isEmpty ? [\"\", field.placeholderValue ?? \"\"] : [value]\n         let expectation = XCTNSPredicateExpectation(\n             predicate: NSPredicate(format: \"value IN %@\", expected as NSArray), object: field\n@@ -886,14 +912,14 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func makeApplication() -> XCUIApplication {\n+    fileprivate func makeApplication() -> XCUIApplication {\n         let app = XCUIApplication()\n         app.launchArguments = [\"--ui-test-store-id\", UUID().uuidString]\n         return app\n     }\n \n     @MainActor\n-    private func openRegistration(in app: XCUIApplication) {\n+    fileprivate func openRegistration(in app: XCUIApplication) {\n         let productList = app.navigationBars[\"商品一覧\"]\n         XCTAssertTrue(productList.waitForExistence(timeout: 5))\n         let registerButton = productList.buttons[\"product-list-register\"]\n@@ -904,13 +930,13 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func enterProduct(name: String, type: String, in app: XCUIApplication) throws {\n+    fileprivate func enterProduct(name: String, type: String, in app: XCUIApplication) throws {\n         try replaceFormValue(name, field: \"product-form-name\", in: app)\n         try replaceFormValue(type, field: \"product-form-type\", in: app)\n     }\n \n     @MainActor\n-    private func assertBlankForm(in app: XCUIApplication) throws {\n+    fileprivate func assertBlankForm(in app: XCUIApplication) throws {\n         let name = try XCTUnwrap(app.textFields[\"product-form-name\"].value as? String)\n         let type = try XCTUnwrap(app.textFields[\"product-form-type\"].value as? String)\n \n@@ -921,17 +947,8 @@ final class SeasoningManagerUITests: XCTestCase {\n     }\n \n     @MainActor\n-    private func productRow(name: String, type: String, unopened: Int = 0, in app: XCUIApplication) -> XCUIElement {\n+    fileprivate func productRow(name: String, type: String, unopened: Int = 0, in app: XCUIApplication) -> XCUIElement {\n         let label = \"商品名、\\(name)、種類、\\(type)、未開封、\\(unopened)本、使用中、0本\"\n         return app.descendants(matching: .any).matching(NSPredicate(format: \"label == %@\", label)).firstMatch\n     }\n-\n-    @MainActor\n-    func testLaunchPerformance() throws {\n-        // This measures how long it takes to launch your application.\n-        let app = makeApplication()\n-        measure(metrics: [XCTApplicationLaunchMetric()]) {\n-            app.launch()\n-        }\n-    }\n }",
+          "patchLines": 199,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "from": ".github/workflows/ios-tests.yml",
+      "to": "harness/test-ios.sh",
+      "status": "kept"
+    },
+    {
+      "from": "harness/tests/test_harness.py",
+      "to": "harness/test-ios.sh",
+      "status": "kept"
+    }
+  ]
+}
