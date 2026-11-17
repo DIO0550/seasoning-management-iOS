@@ -4,7 +4,7 @@
   "headBranch": "feat/issue-56-expiration-status",
   "baseBranch": "master",
   "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
-  "head": "cfb79d046df9c836e9d770e068749048a21fb65c",
+  "head": "8799cab4df8965bf1d8932aa63a8453b7798b251",
   "groups": [
     {
       "label": "単体テスト",
@@ -15,6 +15,20 @@
           "oldPath": null,
           "additions": 66,
           "deletions": 10,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 7,
+          "deletions": 12,
           "changed": true,
           "target": null
         }
@@ -53,7 +67,8 @@
     ],
     "removed": [],
     "files": [
-      "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+      "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
     ]
   },
   "commits": [
@@ -93,6 +108,26 @@
           "deletions": 10,
           "patch": "@@ -1,5 +1,6 @@\n import Foundation\n import SwiftData\n+import SwiftUI\n import Testing\n \n @testable import SeasoningManager\n@@ -95,13 +96,68 @@ struct InventoryListTests {\n         context.insert(undated)\n         try context.save()\n \n-        let datedRow = InventoryItemRow(item: dated, status: .inUse)\n-        let undatedRow = InventoryItemRow(item: undated, status: .unopened)\n+        let datedRow = InventoryItemRow(item: dated, status: .inUse, now: date)\n+        let undatedRow = InventoryItemRow(item: undated, status: .unopened, now: date)\n         #expect(datedRow.productLabels.name == \"しょうゆ\")\n         #expect(datedRow.productLabels.type == \"調味料\")\n         let expectedDate = date.formatted(date: .abbreviated, time: .omitted)\n-        #expect(datedRow.expirationText == \"賞味期限: \\(expectedDate)\")\n-        #expect(undatedRow.expirationText == \"期限未設定\")\n+        #expect(datedRow.expirationPresentation().rowText == \"賞味期限: \\(expectedDate)（期限が近い）\")\n+        #expect(undatedRow.expirationPresentation().rowText == \"期限未設定\")\n+    }\n+\n+    @Test(\n+        arguments: [\n+            (-1 as Int?, \"期限切れ\" as String?, Color.red as Color?),\n+            (0, \"期限が近い\", .orange),\n+            (7, \"期限が近い\", .orange),\n+            (8, nil, nil),\n+            (nil, nil, nil),\n+        ],\n+        [ItemStatus.unopened, .inUse]\n+    )\n+    func expirationWarningsMatchInListAndDetail(\n+        _ sample: (daysFromToday: Int?, warning: String?, color: Color?), _ status: ItemStatus\n+    ) throws {\n+        var calendar = Calendar(identifier: .gregorian)\n+        calendar.timeZone = try #require(TimeZone(identifier: \"Asia/Tokyo\"))\n+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 10)))\n+        let tonight = try #require(calendar.date(bySettingHour: 23, minute: 0, second: 0, of: now))\n+        let expirationDate = try sample.daysFromToday.map { days in\n+            try #require(calendar.date(byAdding: .day, value: days, to: tonight))\n+        }\n+\n+        let container = try makeContainer()\n+        let context = ModelContext(container)\n+        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n+        let openingDate = status == .inUse ? now : nil\n+        let item = Item(product: product, expirationDate: expirationDate, status: status, openingDate: openingDate)\n+        context.insert(product)\n+        context.insert(item)\n+        try context.save()\n+\n+        let row = InventoryItemRow(item: item, status: status, now: now)\n+        let detail = try ItemDetailContent.resolve(candidates: [item]).get()\n+        let rowExpiration = row.expirationPresentation(calendar: calendar)\n+        let detailExpiration = detail.expirationPresentation(now: now, calendar: calendar)\n+\n+        let expectedRow: String\n+        let expectedDetail: String\n+        if let expirationDate {\n+            let dateStyle = Date.FormatStyle(\n+                date: .abbreviated, time: .omitted, calendar: calendar, timeZone: calendar.timeZone\n+            )\n+            let date = expirationDate.formatted(dateStyle)\n+            expectedDetail = sample.warning.map { \"\\(date)（\\($0)）\" } ?? date\n+            expectedRow = \"賞味期限: \\(expectedDetail)\"\n+        } else {\n+            expectedDetail = \"期限未設定\"\n+            expectedRow = \"期限未設定\"\n+        }\n+\n+        #expect(rowExpiration.rowText == expectedRow)\n+        #expect(detailExpiration.detailText == expectedDetail)\n+        #expect(rowExpiration.warningColor == sample.color)\n+        #expect(detailExpiration.warningColor == sample.color)\n     }\n \n     @Test func detailLooksUpEachItemIDForSameProduct() throws {\n@@ -125,14 +181,14 @@ struct InventoryListTests {\n \n         let unopenedDetail = try ItemDetailContent.resolve(candidates: unopenedMatches).get()\n         #expect(unopenedDetail.status == \"未開封\")\n-        #expect(unopenedDetail.expiration == \"期限未設定\")\n+        #expect(unopenedDetail.expirationDate == nil)\n         #expect(unopenedDetail.opening == \"未設定\")\n \n         let inUseDetail = try ItemDetailContent.resolve(candidates: inUseMatches).get()\n         #expect(inUseDetail.product.name == \"しょうゆ\")\n         #expect(inUseDetail.product.type == \"調味料\")\n         #expect(inUseDetail.status == \"使用中\")\n-        #expect(inUseDetail.expiration == expiration.formatted(date: .abbreviated, time: .omitted))\n+        #expect(inUseDetail.expirationDate == expiration)\n         #expect(inUseDetail.opening == opening.formatted(date: .abbreviated, time: .omitted))\n         #expect(!reader.hasChanges)\n     }\n@@ -220,7 +276,7 @@ struct InventoryListTests {\n         context.insert(item)\n         try context.save()\n \n-        let row = InventoryItemRow(item: item, status: .unopened)\n+        let row = InventoryItemRow(item: item, status: .unopened, now: item.updatedAt)\n         #expect(row.productLabels.name == \"名前未設定\")\n         #expect(row.productLabels.type == \"種類未設定\")\n \n@@ -254,11 +310,11 @@ struct InventoryListTests {\n         #expect(items.map(\\.id) == [item.id])\n         let saved = try #require(items.first)\n         #expect(saved.product == nil)\n-        let row = InventoryItemRow(item: saved, status: .inUse)\n+        let row = InventoryItemRow(item: saved, status: .inUse, now: opening)\n         #expect(row.productLabels.name == \"商品情報なし\")\n         #expect(row.productLabels.type == \"種類不明\")\n         let expectedExpiration = expiration.formatted(date: .abbreviated, time: .omitted)\n-        #expect(row.expirationText == \"賞味期限: \\(expectedExpiration)\")\n+        #expect(row.expirationPresentation().rowText == \"賞味期限: \\(expectedExpiration)\")\n \n         let candidates = try reader.fetch(ItemDetailView.descriptor(for: item.id))\n         #expect(candidates.map(\\.id) == [item.id])\n@@ -266,7 +322,7 @@ struct InventoryListTests {\n         #expect(detail.product.name == \"商品情報なし\")\n         #expect(detail.product.type == \"種類不明\")\n         #expect(detail.status == \"使用中\")\n-        #expect(detail.expiration == expectedExpiration)\n+        #expect(detail.expirationPresentation(now: opening).detailText == expectedExpiration)\n         #expect(detail.opening == opening.formatted(date: .abbreviated, time: .omitted))\n         #expect(!reader.hasChanges)\n     }",
           "patchLines": 129,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "8799cab4df8965bf1d8932aa63a8453b7798b251",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-17T20:06:12+09:00",
+      "subject": "test: 期限入力欄の表示を待ってスイッチを確認する",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 7,
+          "deletions": 12,
+          "patch": "@@ -325,23 +325,18 @@ final class SeasoningManagerUITests: XCTestCase {\n \n     @MainActor\n     private func assertItemExpiration(isEnabled: Bool, in app: XCUIApplication) {\n-        let toggle = app.switches[\"item-form-has-expiration\"]\n-        XCTAssertTrue(toggle.waitForExistence(timeout: 5), app.debugDescription)\n-        let expectedValue = isEnabled ? \"1\" : \"0\"\n-        let toggleExpectation = XCTNSPredicateExpectation(\n-            predicate: NSPredicate(format: \"value == %@\", expectedValue), object: toggle\n-        )\n-        XCTAssertEqual(\n-            XCTWaiter.wait(for: [toggleExpectation], timeout: 5), .completed, app.debugDescription\n-        )\n-\n         let dateField = app.descendants(matching: .any).matching(identifier: \"item-form-expiration\").firstMatch\n         if isEnabled {\n             XCTAssertTrue(dateField.waitForExistence(timeout: 5), app.debugDescription)\n-            return\n+        } else {\n+            let unsetLabel = app.staticTexts[\"期限未設定\"]\n+            XCTAssertTrue(unsetLabel.waitForExistence(timeout: 5), app.debugDescription)\n+            XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)\n         }\n \n-        XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)\n+        let toggle = app.switches[\"item-form-has-expiration\"]\n+        let expectedValue = isEnabled ? \"1\" : \"0\"\n+        XCTAssertEqual(toggle.value as? String, expectedValue, app.debugDescription)\n     }\n \n     @MainActor",
+          "patchLines": 31,
           "truncated": false
         }
       ]
