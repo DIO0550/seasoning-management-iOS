@@ -19,21 +19,28 @@ jobs:
     # Distinct keys combine both matrix results regardless of completion order.
     outputs:
       unit_report: ${{ steps.collect.outputs.unit_report }}
-      ui_report: ${{ steps.collect.outputs.ui_report }}
+      ui_inventory_report: ${{ steps.collect.outputs.ui_inventory_report }}
+      ui_product_report: ${{ steps.collect.outputs.ui_product_report }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Unit tests
             target: SeasoningManagerTests
+            bundle: SeasoningManagerTests
             timeout: 30
-          - name: UI tests
-            target: SeasoningManagerUITests
-            timeout: 60
+          - name: UI tests (在庫)
+            target: SeasoningManagerUITests/SeasoningManagerInventoryUITests
+            bundle: SeasoningManagerUITests-inventory
+            timeout: 45
+          - name: UI tests (商品)
+            target: SeasoningManagerUITests/SeasoningManagerProductUITests
+            bundle: SeasoningManagerUITests-product
+            timeout: 45
     # iOS 27.0 is the minimum deployment target decided in #13.
     runs-on: xcode-27
-    # UI全件とビルドが30分で繰り返し中断されたため、UIジョブだけ余裕を持たせる。
-    # クローン2台がランナーのCPUを分けるため、直列より遅くなる場合があり60分にする。
+    # UI全件とビルドが30分で繰り返し中断され、シミュレータクローン2台の並列でも
+    # ランナーのCPU分割で遅くなるため、UIテストをクラス別の2ジョブに分けて並行させる。
     timeout-minutes: ${{ matrix.timeout }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
@@ -70,7 +77,7 @@ jobs:
 
       - name: Run tests
         env:
-          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.target }}.xcresult
+          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.bundle }}.xcresult
         run: |
           bash harness/test-ios.sh "$TEST_TARGET" "platform=iOS Simulator,id=$SIMULATOR_ID"
 
@@ -78,7 +85,7 @@ jobs:
         id: collect
         if: always()
         env:
-          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.target }}.xcresult
+          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.bundle }}.xcresult
         run: |
           python3 harness/ci-report.py
 
@@ -99,7 +106,8 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           UNIT_REPORT: ${{ needs.tests.outputs.unit_report }}
-          UI_REPORT: ${{ needs.tests.outputs.ui_report }}
+          UI_INVENTORY_REPORT: ${{ needs.tests.outputs.ui_inventory_report }}
+          UI_PRODUCT_REPORT: ${{ needs.tests.outputs.ui_product_report }}
         with:
           script: |
             const marker = '<!-- seasoning-ios-test-report -->';
@@ -253,7 +261,9 @@ jobs:
               '| --- | --- | ---: | ---: | ---: |'
             ];
             const reports = [
-              ['Unit tests', 'Unit', 'UNIT_REPORT'], ['UI tests', 'UI', 'UI_REPORT']
+              ['Unit tests', 'Unit', 'UNIT_REPORT'],
+              ['UI tests (在庫)', 'UI(在庫)', 'UI_INVENTORY_REPORT'],
+              ['UI tests (商品)', 'UI(商品)', 'UI_PRODUCT_REPORT']
             ].map(([jobName, name, variable]) => {
               const job = jobs.find(job => job.name === jobName);
               // Partial reruns can retain older outputs; never display those as this attempt.

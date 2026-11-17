@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: bash harness/test-ios.sh <SeasoningManagerTests|SeasoningManagerUITests|all> <destination>"
+  echo "Usage: bash harness/test-ios.sh <SeasoningManagerTests|SeasoningManagerUITests|<target>/<class>|all> <destination>"
 }
 
 if [[ "${1:-}" == "--help" ]]; then
@@ -18,7 +18,7 @@ fi
 target="$1"
 destination="$2"
 case "$target" in
-  SeasoningManagerTests|SeasoningManagerUITests)
+  SeasoningManagerTests|SeasoningManagerUITests|SeasoningManagerTests/*|SeasoningManagerUITests/*)
     ;;
   all)
     ;;
