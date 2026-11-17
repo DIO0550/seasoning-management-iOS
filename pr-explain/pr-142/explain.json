@@ -1,0 +1,337 @@
+{
+  "version": 1,
+  "pr": 142,
+  "sha": "e90192d9e639def440a9b1a29198986828a0266f",
+  "overview": {
+    "title": "UIテストを2クラスに分けシミュレータ2台で並列実行する",
+    "lead": "UI テストジョブが 36〜38 分かかっていたため、XCTest の並列実行を有効にする。並列分散はテストクラス単位でシミュレータクローンへ振り分けるので、18 件が 1 クラスに集中していた構成を 2 クラスに分けて分散を効かせる。",
+    "before": [
+      {
+        "text": "UI テスト 18 件が 1 つのシミュレータで順番に実行され、ジョブ全体が 38 分かかっていた"
+      }
+    ],
+    "after": [
+      {
+        "text": "在庫系と商品系の 2 クラスがクローン 2 台へ分かれて並列に実行される",
+        "message": "run-tests"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "クラスの分割",
+        "text": "テスト内容は変えずにクラスだけを分ける。並列分散の前提になる変更",
+        "go": {
+          "kind": "file",
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+        }
+      },
+      {
+        "title": "並列実行の有効化",
+        "text": "テストコマンドにクローン 2 台の指定を足す",
+        "go": {
+          "kind": "file",
+          "path": "harness/test-ios.sh"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "parallel",
+      "label": "UIテストの並列実行",
+      "role": "テストクラスをシミュレータクローンへ振り分けて壁時間を短くする"
+    }
+  ],
+  "layerRoles": [
+    {
+      "layer": "UI テスト",
+      "role": "画面操作を通した回帰の検証。クラスを分けて並列分散の単位にする"
+    },
+    {
+      "layer": "ハーネス",
+      "role": "テストの実行コマンドと CI 配線。並列の台数を指定する"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "UIテスト群",
+      "role": "商品と在庫の画面操作を XCTest で確かめる",
+      "feature": "parallel",
+      "change": "1 クラスを在庫系と商品系の 2 クラスに分割。共通の操作ヘルパーをファイル末尾の `extension XCTestCase` へ移す"
+    },
+    {
+      "path": "harness/test-ios.sh",
+      "name": "テスト実行スクリプト",
+      "role": "xcodebuild test の引数を組み立てて実行する",
+      "feature": "parallel",
+      "change": "並列実行を有効にし、ワーカー数を 2 に指定する"
+    },
+    {
+      "path": ".github/workflows/ios-tests.yml",
+      "name": "CIワークフロー",
+      "role": "UI ジョブでテスト実行スクリプトを呼ぶ",
+      "feature": "parallel"
+    }
+  ],
+  "messages": [
+    {
+      "id": "run-tests",
+      "from": ".github/workflows/ios-tests.yml",
+      "to": "harness/test-ios.sh",
+      "kind": "cmd",
+      "name": "テストを実行する",
+      "code": "bash harness/test-ios.sh \"$TEST_TARGET\" \"platform=iOS Simulator,id=$SIMULATOR_ID\"",
+      "via": "exec",
+      "payload": "テスト対象とシミュレータの指定",
+      "returns": "テスト結果",
+      "status": "changed"
+    },
+    {
+      "id": "spawn-clones",
+      "from": "harness/test-ios.sh",
+      "to": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "kind": "cmd",
+      "name": "クラスをクローンへ振り分ける",
+      "code": "xcodebuild test -parallel-testing-enabled YES -parallel-testing-worker-count 2",
+      "via": "exec",
+      "payload": "2 台のシミュレータクローン",
+      "returns": "クラスごとの実行結果",
+      "status": "changed"
+    }
+  ],
+  "flows": [
+    {
+      "id": "ci-run",
+      "label": "CI が UI テストを実行するとき",
+      "steps": [
+        "run-tests",
+        "spawn-clones"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "e90192d9e639def440a9b1a29198986828a0266f",
+      "phase": "core",
+      "role": "テストクラスを分けて並列実行を有効にする",
+      "why": "並列分散はクラス単位なので、分割とフラグの有効化は分けても動かず 1 コミットにまとめる。",
+      "flows": [
+        "ci-run"
+      ],
+      "review": [
+        "テストメソッドと断言が変わっていないこと",
+        "共通ヘルパーが両クラスから届くこと"
+      ],
+      "before": [
+        {
+          "text": "18 件が 1 クラスで、並列有効化の単位にならない"
+        }
+      ],
+      "after": [
+        {
+          "text": "2 クラスが 2 台へ分散される",
+          "message": "spawn-clones"
+        }
+      ],
+      "notes": [
+        {
+          "path": "harness/test-ios.sh",
+          "start": 50,
+          "end": 51,
+          "text": "並列を有効にしワーカーを 2 に指定する"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "start": 728,
+          "end": 731,
+          "text": "共有ヘルパーを両クラスから届くファイル内の拡張へ置く"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "ui",
+      "label": "画面操作の回帰",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "inventory-cancel",
+      "suite": "ui",
+      "name": "testEmptyInventoryCancelsProductRegistrationWithoutAddingStock()",
+      "techniques": [
+        "state",
+        "boundary"
+      ],
+      "why": "空の在庫から商品登録をやめたとき在庫が増えないことを確かめる",
+      "given": "商品も在庫も空の状態",
+      "when": "個体追加から商品登録へ進んでキャンセルする",
+      "then": "商品も個体も増えず、空の表示に戻る",
+      "targets": [
+        "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+      ]
+    },
+    {
+      "id": "picker-reselect",
+      "suite": "ui",
+      "name": "testProductPickerReselectionAndBackPreserveExpiration()",
+      "techniques": [
+        "state",
+        "equivalence"
+      ],
+      "why": "商品を選び直して戻っても賞味期限の入力が保たれることを確かめる",
+      "given": "登録済みの商品が 2 つある状態",
+      "when": "個体フォームで商品を選び直し、期限を入れて戻る",
+      "then": "期限の値が消えずに残る",
+      "targets": [
+        "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+      ]
+    },
+    {
+      "id": "product-relaunch",
+      "suite": "ui",
+      "name": "testProductRegistrationSavesAndSurvivesRelaunch()",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "登録した商品がアプリの再起動後も残ることを確かめる",
+      "given": "空の商品一覧",
+      "when": "前後の空白を含む名前と種類を登録し再起動する",
+      "then": "整形された商品が一覧に残る",
+      "targets": [
+        "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+      ]
+    },
+    {
+      "id": "optional-save",
+      "suite": "ui",
+      "name": "testOptionalInputsSaveAndReopenAfterRelaunch()",
+      "techniques": [
+        "boundary",
+        "state"
+      ],
+      "why": "任意入力の価格・栄養素・基準量が保存と再表示で消えないことを確かめる",
+      "given": "商品登録画面",
+      "when": "任意欄を入れて保存し再起動して編集を開く",
+      "then": "入れた値と未入力の欄がそれぞれ保たれる",
+      "targets": [
+        "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "UIテストの完了が早くなる",
+    "lead": "変更の確認に使う画面操作の検証が、2 台に分かれて並行して進むようになります。",
+    "changed": {
+      "before": [
+        {
+          "text": "画面操作の検証が 1 台で順番に進み、結果を待つ時間が長かった"
+        }
+      ],
+      "after": [
+        {
+          "text": "検証が 2 台に分かれて並行して進み、半分ほどの時間で結果が出る"
+        }
+      ],
+      "text": "検証の内容と件数は変わりません。"
+    },
+    "kept": [
+      {
+        "text": "画面操作の検証内容と件数は変わらない",
+        "tests": [
+          "inventory-cancel",
+          "picker-reselect",
+          "product-relaunch",
+          "optional-save"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "xctest-parallel",
+      "kind": "language",
+      "category": "テスト",
+      "label": "XCTest の並列実行",
+      "gist": "xcodebuild がテストクラスをシミュレータクローンへ振り分ける仕組み",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "xcodebuild test の `-parallel-testing-enabled` は、テストクラスをシミュレータのクローンへ振り分けて並行して走らせる。分散の単位はテストクラスなので、メソッドがいくつあっても 1 クラスでは分かれない。`-parallel-testing-worker-count` でクローンの数を指定する。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "harness/test-ios.sh",
+            "start": 44,
+            "end": 52,
+            "emphasis": [
+              {
+                "start": 50,
+                "end": 51
+              }
+            ],
+            "text": "test_command=(xcodebuild test \\\n  -project src/SeasoningManager/SeasoningManager.xcodeproj \\\n  -scheme SeasoningManager \\\n  -configuration Debug \\\n  -destination \"$destination\" \\\n  -destination-timeout 120 \\\n  -parallel-testing-enabled YES \\\n  -parallel-testing-worker-count 2 \\\n  CODE_SIGNING_ALLOWED=NO)"
+          }
+        },
+        {
+          "kind": "caution",
+          "text": "クローンはそれぞれ独立したコンテナを持つ。共有の状態に依存するテストは並列で衝突する。このアプリは起動引数でテストごとのストアを分けているため衝突しない。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "harness/test-ios.sh",
+          "lineRange": {
+            "start": 44,
+            "end": 52
+          },
+          "text": "並列実行とワーカー数の指定",
+          "shas": [
+            "e90192d9e639def440a9b1a29198986828a0266f"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shared-extension",
+      "kind": "codebase",
+      "category": "テスト",
+      "label": "ファイル内で共有する拡張",
+      "gist": "2 クラスから届く操作ヘルパーを `extension XCTestCase` に置く",
+      "status": "changed",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "クラスを分けると、片方のクラスに置いた `private` メソッドはもう一方から呼べない。両クラスが使うフォーム操作とクエリのヘルパーは、同じファイルの末尾の `extension XCTestCase` に `fileprivate` で置く。ファイルの外からは見えない。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 728,
+            "end": 733,
+            "text": "@MainActor\nextension XCTestCase {\n    @MainActor\n    fileprivate func detailElement(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n        let element = app.descendants(matching: .any)[identifier]\n        for _ in 0..<24 {"
+          }
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "lineRange": {
+            "start": 728,
+            "end": 733
+          },
+          "text": "共有ヘルパーの拡張",
+          "shas": [
+            "e90192d9e639def440a9b1a29198986828a0266f"
+          ]
+        }
+      ]
+    }
+  ]
+}
