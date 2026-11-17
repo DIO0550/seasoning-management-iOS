@@ -4,7 +4,7 @@
   "headBranch": "feat/issue-56-expiration-status",
   "baseBranch": "master",
   "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
-  "head": "8799cab4df8965bf1d8932aa63a8453b7798b251",
+  "head": "ea1070eeeccccf1f63636c48d16c0bf6d4eae8d6",
   "groups": [
     {
       "label": "単体テスト",
@@ -27,8 +27,8 @@
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 7,
-          "deletions": 12,
+          "additions": 12,
+          "deletions": 15,
           "changed": true,
           "target": null
         }
@@ -128,6 +128,26 @@
           "deletions": 12,
           "patch": "@@ -325,23 +325,18 @@ final class SeasoningManagerUITests: XCTestCase {\n \n     @MainActor\n     private func assertItemExpiration(isEnabled: Bool, in app: XCUIApplication) {\n-        let toggle = app.switches[\"item-form-has-expiration\"]\n-        XCTAssertTrue(toggle.waitForExistence(timeout: 5), app.debugDescription)\n-        let expectedValue = isEnabled ? \"1\" : \"0\"\n-        let toggleExpectation = XCTNSPredicateExpectation(\n-            predicate: NSPredicate(format: \"value == %@\", expectedValue), object: toggle\n-        )\n-        XCTAssertEqual(\n-            XCTWaiter.wait(for: [toggleExpectation], timeout: 5), .completed, app.debugDescription\n-        )\n-\n         let dateField = app.descendants(matching: .any).matching(identifier: \"item-form-expiration\").firstMatch\n         if isEnabled {\n             XCTAssertTrue(dateField.waitForExistence(timeout: 5), app.debugDescription)\n-            return\n+        } else {\n+            let unsetLabel = app.staticTexts[\"期限未設定\"]\n+            XCTAssertTrue(unsetLabel.waitForExistence(timeout: 5), app.debugDescription)\n+            XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)\n         }\n \n-        XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)\n+        let toggle = app.switches[\"item-form-has-expiration\"]\n+        let expectedValue = isEnabled ? \"1\" : \"0\"\n+        XCTAssertEqual(toggle.value as? String, expectedValue, app.debugDescription)\n     }\n \n     @MainActor",
           "patchLines": 31,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "ea1070eeeccccf1f63636c48d16c0bf6d4eae8d6",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-17T13:43:10Z",
+      "subject": "test: 登録フォーム内にUI要素の検索を限定する",
+      "body": "Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 5,
+          "deletions": 3,
+          "patch": "@@ -265,8 +265,10 @@ final class SeasoningManagerUITests: XCTestCase {\n \n     @MainActor\n     private func assertSelectedItemProduct(name: String, type: String, in app: XCUIApplication) {\n-        let nameRow = app.descendants(matching: .any).matching(identifier: \"item-form-product-name\").firstMatch\n-        let typeRow = app.descendants(matching: .any).matching(identifier: \"item-form-product-type\").firstMatch\n+        let form = app.collectionViews.element\n+        XCTAssertTrue(form.waitForExistence(timeout: 5))\n+        let nameRow = form.descendants(matching: .any).matching(identifier: \"item-form-product-name\").element\n+        let typeRow = form.descendants(matching: .any).matching(identifier: \"item-form-product-type\").element\n         XCTAssertTrue(nameRow.waitForExistence(timeout: 5))\n         XCTAssertTrue(typeRow.waitForExistence(timeout: 5))\n         XCTAssertEqual(nameRow.label, \"名前、\\(name)\")\n@@ -325,7 +327,7 @@ final class SeasoningManagerUITests: XCTestCase {\n \n     @MainActor\n     private func assertItemExpiration(isEnabled: Bool, in app: XCUIApplication) {\n-        let dateField = app.descendants(matching: .any).matching(identifier: \"item-form-expiration\").firstMatch\n+        let dateField = app.datePickers[\"item-form-expiration\"]\n         if isEnabled {\n             XCTAssertTrue(dateField.waitForExistence(timeout: 5), app.debugDescription)\n         } else {",
+          "patchLines": 22,
           "truncated": false
         }
       ]
