@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 141,
-  "sha": "cfb79d046df9c836e9d770e068749048a21fb65c",
+  "sha": "8799cab4df8965bf1d8932aa63a8453b7798b251",
   "issue": 56,
   "overview": {
     "title": "在庫一覧と個体詳細に賞味期限の警告を表示する",
@@ -132,6 +132,23 @@
           "text": "画面に出した期限文字列を読み上げにも渡す。"
         }
       ]
+    },
+    {
+      "sha": "8799cab4df8965bf1d8932aa63a8453b7798b251",
+      "phase": "revise",
+      "role": "個体登録のUIテストで、フォームが表示された時点をそろえる。",
+      "why": "CI でスイッチの値を待つ処理が時間切れになった。直後に取得した画面ではスイッチがオフで「期限未設定」が表示されていたため、フォームの表示を待ってから値を確認する。",
+      "review": [
+        "日付欄の表示を待った後も、スイッチのオン・オフ両方を検証していることを確認する。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "start": 326,
+          "end": 340,
+          "text": "日付欄または未設定の表示でフォームを同期し、次にスイッチの値を確認する。"
+        }
+      ]
     }
   ],
   "suites": [
@@ -139,6 +156,11 @@
       "id": "inventory",
       "label": "在庫表示の単体テスト",
       "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+    },
+    {
+      "id": "registration-ui",
+      "label": "個体登録の UI テスト",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
     }
   ],
   "tests": [
@@ -217,6 +239,25 @@
             ]
           }
         ]
+      }
+    },
+    {
+      "id": "reopen-form",
+      "suite": "registration-ui",
+      "name": "testBackDiscardsItemInputAndNextFormCanSaveExpiration",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "前のフォームで切り替えたスイッチの状態が、次の個体登録に持ち越される回帰を検出する。",
+      "given": "個体を追加する画面で商品を選び、賞味期限の設定をオンにして戻る。",
+      "when": "同じ在庫一覧からもう一度個体の登録画面を開く。",
+      "then": "スイッチがオフで期限は未設定になり、設定をオンにして保存すると一覧で期限日を確認できる。",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 150,
+        "end": 182,
+        "text": "    @MainActor\n    func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {\n        let app = makeApplication()\n        app.launch()\n        openRegistration(in: app)\n        try enterProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        app.tabBars.buttons[\"在庫\"].tap()\n        XCTAssertTrue(app.buttons[\"inventory-empty-add\"].waitForExistence(timeout: 5))\n        app.buttons[\"inventory-empty-add\"].tap()\n        try selectItemProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        assertItemExpiration(isEnabled: false, in: app)\n        tapItemExpirationToggle(in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        app.navigationBars[\"個体を追加\"].buttons[\"在庫一覧\"].tap()\n        XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].waitForExistence(timeout: 5))\n\n        app.navigationBars[\"在庫一覧\"].buttons[\"inventory-list-add\"].tap()\n        XCTAssertTrue(app.navigationBars[\"個体を追加\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(app.buttons[\"item-form-save\"].isEnabled)\n        assertItemExpiration(isEnabled: false, in: app)\n        try selectItemProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n        tapItemExpirationToggle(in: app)\n        assertItemExpiration(isEnabled: true, in: app)\n        app.buttons[\"item-form-save\"].tap()\n        XCTAssertTrue(app.navigationBars[\"在庫一覧\"].waitForExistence(timeout: 5))\n        let row = app.descendants(matching: .any).matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", \"赤みそ\", \"賞味期限:\")\n        ).firstMatch\n        XCTAssertTrue(row.waitForExistence(timeout: 5))\n        XCTAssertFalse(row.label.contains(\"期限未設定\"))\n    }"
       }
     }
   ],
@@ -630,6 +671,45 @@
       "flows": [
         "read-list",
         "read-detail"
+      ]
+    },
+    {
+      "id": "wait-for-form",
+      "kind": "language",
+      "category": "XCTest",
+      "label": "画面の表示を待ってから値を確認する",
+      "gist": "UI テストは画面の要素が表示される時点を待ち、その要素やスイッチの値で実際の画面状態を確かめます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`XCUIElement` はテストから画面の項目を探して操作するための型です。`waitForExistence` は対象が現れるまで待ち、`waitForNonExistence` は消えるまで待ちます。`XCTAssertEqual` は確認時点に取得した値を期待値と比較します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 326,
+            "end": 340,
+            "text": "    @MainActor\n    private func assertItemExpiration(isEnabled: Bool, in app: XCUIApplication) {\n        let dateField = app.descendants(matching: .any).matching(identifier: \"item-form-expiration\").firstMatch\n        if isEnabled {\n            XCTAssertTrue(dateField.waitForExistence(timeout: 5), app.debugDescription)\n        } else {\n            let unsetLabel = app.staticTexts[\"期限未設定\"]\n            XCTAssertTrue(unsetLabel.waitForExistence(timeout: 5), app.debugDescription)\n            XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)\n        }\n\n        let toggle = app.switches[\"item-form-has-expiration\"]\n        let expectedValue = isEnabled ? \"1\" : \"0\"\n        XCTAssertEqual(toggle.value as? String, expectedValue, app.debugDescription)\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "オンの場合は日付欄の出現を待ちます。オフの場合は「期限未設定」が現れるのを待ってから日付欄の消失を確認します。オフ時にも項目の出現を待つので、フォーム全体がまだ表示されていない時点を区別できます。最後にスイッチの値を文字列として取り出します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "lineRange": {
+            "start": 326,
+            "end": 340
+          },
+          "text": "期限設定の表示条件がそろった後にスイッチの値を確認する。",
+          "shas": [
+            "8799cab4df8965bf1d8932aa63a8453b7798b251"
+          ]
+        }
       ]
     }
   ]
