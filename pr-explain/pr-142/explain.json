@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 142,
-  "sha": "4ae91cb697397cd540a861222c5b56f809065fc2",
+  "sha": "0011382fc5b329a380ca44c1e0ef46a3dc30c09a",
   "overview": {
     "title": "UIテストをクラス別の2ジョブに分けて並行実行する",
     "lead": "UI テストジョブが 36〜38 分かかっていたため、テストクラスを 2 つに分け、CI でクラス別のジョブへ振り分けて並行して走らせる。シミュレータクローンの並列実行はランナーの CPU 分割で遅くなったため、ジョブ分割を採る。",
@@ -211,6 +211,37 @@
           "text": "脚別の出力を集約する"
         }
       ]
+    },
+    {
+      "sha": "0011382fc5b329a380ca44c1e0ef46a3dc30c09a",
+      "phase": "core",
+      "role": "CI の脚は直列に戻す",
+      "why": "1 クラスの脚でも 55 分で打ち切られた。単一クラスに 2 クローンを起こすオーバーヘッドを切り分けるため CI では直列にする。ローカルでは並列のまま。",
+      "flows": [
+        "ci-run"
+      ],
+      "review": [
+        "脚の実行時間"
+      ],
+      "before": [
+        {
+          "text": "脚がクローン起動のオーバーヘッドを伴っていた"
+        }
+      ],
+      "after": [
+        {
+          "text": "脚は 1 シミュレータで直列に走る",
+          "message": "spawn-clones"
+        }
+      ],
+      "notes": [
+        {
+          "path": "harness/test-ios.sh",
+          "start": 52,
+          "end": 57,
+          "text": "環境変数で並列を切る"
+        }
+      ]
     }
   ],
   "suites": [
@@ -338,7 +369,7 @@
                 "end": 51
               }
             ],
-            "text": "test_command=(xcodebuild test \\\n  -project src/SeasoningManager/SeasoningManager.xcodeproj \\\n  -scheme SeasoningManager \\\n  -configuration Debug \\\n  -destination \"$destination\" \\\n  -destination-timeout 120 \\\n  -parallel-testing-enabled YES \\\n  -parallel-testing-worker-count 2 \\\n  CODE_SIGNING_ALLOWED=NO)"
+            "text": "test_command=(xcodebuild test \\\n  -project src/SeasoningManager/SeasoningManager.xcodeproj \\\n  -scheme SeasoningManager \\\n  -configuration Debug \\\n  -destination \"$destination\" \\\n  -destination-timeout 120 \\\n  CODE_SIGNING_ALLOWED=NO)\n\n# クローン並列は小さい CI ランナーでは CPU を分けて遅くなるため、CI は NO で直列にする。"
           }
         },
         {
@@ -355,7 +386,7 @@
           },
           "text": "テストコマンドの組み立て",
           "shas": [
-            "4ae91cb697397cd540a861222c5b56f809065fc2"
+            "0011382fc5b329a380ca44c1e0ef46a3dc30c09a"
           ]
         }
       ]
@@ -391,7 +422,7 @@
           },
           "text": "共有ヘルパーの拡張",
           "shas": [
-            "4ae91cb697397cd540a861222c5b56f809065fc2"
+            "0011382fc5b329a380ca44c1e0ef46a3dc30c09a"
           ]
         }
       ]
