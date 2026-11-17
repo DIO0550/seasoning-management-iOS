@@ -1,10 +1,10 @@
 {
   "version": 1,
   "pr": 142,
-  "sha": "2177b10005f26fd5d26f812e2a204ea82e3bad27",
+  "sha": "e79eb1dd314e339bd723eaef25d3d850e3e52b2e",
   "overview": {
-    "title": "UIテストを2クラスに分けシミュレータ2台で並列実行する",
-    "lead": "UI テストジョブが 36〜38 分かかっていたため、XCTest の並列実行を有効にする。並列分散はテストクラス単位でシミュレータクローンへ振り分けるので、18 件が 1 クラスに集中していた構成を 2 クラスに分けて分散を効かせる。",
+    "title": "UIテストをクラス別の2ジョブに分けて並行実行する",
+    "lead": "UI テストジョブが 36〜38 分かかっていたため、テストクラスを 2 つに分け、CI でクラス別のジョブへ振り分けて並行して走らせる。シミュレータクローンの並列実行はランナーの CPU 分割で遅くなったため、ジョブ分割を採る。",
     "before": [
       {
         "text": "UI テスト 18 件が 1 つのシミュレータで順番に実行され、ジョブ全体が 38 分かかっていた"
@@ -12,7 +12,7 @@
     ],
     "after": [
       {
-        "text": "在庫系と商品系の 2 クラスがクローン 2 台へ分かれて並列に実行される",
+        "text": "在庫系と商品系が別ランナーで並行して実行される",
         "message": "run-tests"
       }
     ],
@@ -39,7 +39,7 @@
     {
       "id": "parallel",
       "label": "UIテストの並列実行",
-      "role": "テストクラスをシミュレータクローンへ振り分けて壁時間を短くする"
+      "role": "テストクラスを別の CI ジョブへ振り分けて壁時間を短くする"
     }
   ],
   "layerRoles": [
@@ -49,7 +49,7 @@
     },
     {
       "layer": "ハーネス",
-      "role": "テストの実行コマンドと CI 配線。並列の台数を指定する"
+      "role": "テストの実行コマンドと CI 配線。クラス別のジョブを定義する"
     }
   ],
   "concepts": [
@@ -65,13 +65,14 @@
       "name": "テスト実行スクリプト",
       "role": "xcodebuild test の引数を組み立てて実行する",
       "feature": "parallel",
-      "change": "並列実行を有効にし、ワーカー数を 2 に指定する"
+      "change": "クラスを限定する -only-testing 指定を受け入れる"
     },
     {
       "path": ".github/workflows/ios-tests.yml",
       "name": "CIワークフロー",
-      "role": "UI ジョブでテスト実行スクリプトを呼ぶ",
-      "feature": "parallel"
+      "role": "テストクラス別のジョブでテスト実行スクリプトを呼ぶ",
+      "feature": "parallel",
+      "change": "UI テストをクラス別の 2 ジョブに分割し、結果を脚ごとに集約する"
     }
   ],
   "messages": [
@@ -80,10 +81,10 @@
       "from": ".github/workflows/ios-tests.yml",
       "to": "harness/test-ios.sh",
       "kind": "cmd",
-      "name": "テストを実行する",
+      "name": "クラス別にテストを実行する",
       "code": "bash harness/test-ios.sh \"$TEST_TARGET\" \"platform=iOS Simulator,id=$SIMULATOR_ID\"",
       "via": "exec",
-      "payload": "テスト対象とシミュレータの指定",
+      "payload": "クラスを限定するテスト対象とシミュレータの指定",
       "returns": "テスト結果",
       "status": "changed"
     },
@@ -92,11 +93,11 @@
       "from": "harness/test-ios.sh",
       "to": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
       "kind": "cmd",
-      "name": "クラスをクローンへ振り分ける",
-      "code": "xcodebuild test -parallel-testing-enabled YES -parallel-testing-worker-count 2",
+      "name": "指定クラスのテストを走らせる",
+      "code": "xcodebuild test -only-testing:SeasoningManagerUITests/<class>",
       "via": "exec",
-      "payload": "2 台のシミュレータクローン",
-      "returns": "クラスごとの実行結果",
+      "payload": "1 台のシミュレータ",
+      "returns": "クラスの実行結果",
       "status": "changed"
     }
   ],
@@ -150,33 +151,33 @@
       ]
     },
     {
-      "sha": "2177b10005f26fd5d26f812e2a204ea82e3bad27",
+      "sha": "e79eb1dd314e339bd723eaef25d3d850e3e52b2e",
       "phase": "core",
-      "role": "UI ジョブのタイムアウトを 60 分に延ばす",
-      "why": "シミュレータクローン 2 台がランナーの CPU を分け合うため、並列実行でも 45 分を超えることがある。実測を取るために余裕を持たせる。",
+      "role": "CI をクラス別の 2 ジョブに分ける",
+      "why": "シミュレータクローン 2 台の並列実行はランナーの CPU 分割で遅くなり、45 分・60 分のタイムアウトに打ち切られた。クラスを別ジョブへ振り分けて並行させる。",
       "flows": [
         "ci-run"
       ],
       "review": [
-        "実際の実行時間で並列化の効果を確かめる"
+        "脚ごとの結果が集約されること"
       ],
       "before": [
         {
-          "text": "UI ジョブが 45 分で打ち切られていた"
+          "text": "1 ジョブが 45〜60 分で打ち切られていた"
         }
       ],
       "after": [
         {
-          "text": "60 分まで走る",
+          "text": "2 脚が別ランナーで並行して走る",
           "message": "run-tests"
         }
       ],
       "notes": [
         {
           "path": ".github/workflows/ios-tests.yml",
-          "start": 31,
-          "end": 32,
-          "text": "UI ジョブの上限を 60 分にする"
+          "start": 32,
+          "end": 36,
+          "text": "UI をクラス別の 2 脚に分ける"
         }
       ]
     }
@@ -265,7 +266,7 @@
       ],
       "after": [
         {
-          "text": "検証が 2 台に分かれて並行して進み、半分ほどの時間で結果が出る"
+          "text": "検証が 2 つのジョブに分かれて並行して進み、短い時間で結果が出る"
         }
       ],
       "text": "検証の内容と件数は変わりません。"
@@ -288,11 +289,11 @@
       "kind": "language",
       "category": "テスト",
       "label": "XCTest の並列実行",
-      "gist": "xcodebuild がテストクラスをシミュレータクローンへ振り分ける仕組み",
+      "gist": "xcodebuild の -only-testing でテストクラスを限定して走らせる",
       "passages": [
         {
           "kind": "text",
-          "text": "xcodebuild test の `-parallel-testing-enabled` は、テストクラスをシミュレータのクローンへ振り分けて並行して走らせる。分散の単位はテストクラスなので、メソッドがいくつあっても 1 クラスでは分かれない。`-parallel-testing-worker-count` でクローンの数を指定する。"
+          "text": "xcodebuild test の -only-testing:<ターゲット>/<クラス> でテストクラスを限定できる。CI のマトリックスでクラスを別ジョブへ振り分けると、それぞれ別のランナーで並行して走る。シミュレータクローンの並列実行(-parallel-testing-enabled)は同じランナーで CPU を分けるため、小さいランナーでは遅くなることがある。"
         },
         {
           "kind": "excerpt",
@@ -321,10 +322,9 @@
             "start": 44,
             "end": 52
           },
-          "text": "並列実行とワーカー数の指定",
+          "text": "テストコマンドの組み立て",
           "shas": [
-            "e90192d9e639def440a9b1a29198986828a0266f",
-            "2177b10005f26fd5d26f812e2a204ea82e3bad27"
+            "e79eb1dd314e339bd723eaef25d3d850e3e52b2e"
           ]
         }
       ]
@@ -360,8 +360,7 @@
           },
           "text": "共有ヘルパーの拡張",
           "shas": [
-            "e90192d9e639def440a9b1a29198986828a0266f",
-            "2177b10005f26fd5d26f812e2a204ea82e3bad27"
+            "e79eb1dd314e339bd723eaef25d3d850e3e52b2e"
           ]
         }
       ]
