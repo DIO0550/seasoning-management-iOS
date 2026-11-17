@@ -47,6 +47,8 @@ jobs:
       PROJECT: src/SeasoningManager/SeasoningManager.xcodeproj
       SCHEME: SeasoningManager
       TEST_TARGET: ${{ matrix.target }}
+      # クローン2台がランナーのCPUを分けて遅くなるため、CIでは直列にする。
+      HARNESS_PARALLEL_TESTS: NO
     defaults:
       run:
         shell: bash

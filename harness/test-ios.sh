@@ -47,9 +47,14 @@ test_command=(xcodebuild test \
   -configuration Debug \
   -destination "$destination" \
   -destination-timeout 120 \
-  -parallel-testing-enabled YES \
-  -parallel-testing-worker-count 2 \
   CODE_SIGNING_ALLOWED=NO)
+
+# クローン並列は小さい CI ランナーでは CPU を分けて遅くなるため、CI は NO で直列にする。
+if [[ "${HARNESS_PARALLEL_TESTS:-YES}" == "YES" ]]; then
+  test_command+=(-parallel-testing-enabled YES -parallel-testing-worker-count 2)
+else
+  test_command+=(-parallel-testing-enabled NO)
+fi
 
 if [[ "$target" != "all" ]]; then
   test_command+=("-only-testing:$target")
