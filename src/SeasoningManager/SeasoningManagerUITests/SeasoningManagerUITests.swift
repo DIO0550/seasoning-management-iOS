@@ -779,6 +779,10 @@ extension XCTestCase {
     @MainActor
     fileprivate func formInteractionFrame(in app: XCUIApplication) throws -> CGRect {
         let form = app.collectionViews.firstMatch
+        // 画面遷移の途中では一覧のスナップショットがまだ無いことがある。
+        if !form.exists {
+            _ = form.waitForExistence(timeout: 10)
+        }
         let frame = form.frame.intersection(app.frame)
         let navigationBar = app.navigationBars.firstMatch
         let top = max(frame.minY, navigationBar.frame.maxY) + 12
@@ -857,15 +861,17 @@ extension XCTestCase {
     @MainActor
     fileprivate func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {
         var focusedField: XCUIElement?
+        var keyboardShown = false
         let keyboard = app.keyboards.firstMatch
         // タップ後に現れるキーボードで領域が変わるため、改めて欄全体を確認する。
         for _ in 0..<3 {
             let candidate = try formField(field, in: app)
             candidate.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+            // タップが欄を拾わないとキーボードが出ないため、短く待って再タップする。
             guard keyboard.waitForExistence(timeout: 5) else {
-                XCTFail("キーボードが表示されない: \(field)")
-                throw FormInputFailure.unavailable
+                continue
             }
+            keyboardShown = true
 
             let safeFrame = try formInteractionFrame(in: app)
             if safeFrame.contains(candidate.frame), candidate.isHittable {
@@ -874,6 +880,10 @@ extension XCTestCase {
             }
         }
 
+        if !keyboardShown {
+            XCTFail("キーボードが表示されない: \(field)")
+            throw FormInputFailure.unavailable
+        }
         let textField = try XCTUnwrap(focusedField, "キーボード表示後に入力欄全体を操作できない: \(field)")
         let current = try XCTUnwrap(textField.value as? String)
         let content = current == textField.placeholderValue ? "" : current
