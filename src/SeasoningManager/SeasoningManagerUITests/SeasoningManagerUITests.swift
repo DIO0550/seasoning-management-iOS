@@ -325,23 +325,18 @@ final class SeasoningManagerUITests: XCTestCase {
 
     @MainActor
     private func assertItemExpiration(isEnabled: Bool, in app: XCUIApplication) {
-        let toggle = app.switches["item-form-has-expiration"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 5), app.debugDescription)
-        let expectedValue = isEnabled ? "1" : "0"
-        let toggleExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", expectedValue), object: toggle
-        )
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [toggleExpectation], timeout: 5), .completed, app.debugDescription
-        )
-
         let dateField = app.descendants(matching: .any).matching(identifier: "item-form-expiration").firstMatch
         if isEnabled {
             XCTAssertTrue(dateField.waitForExistence(timeout: 5), app.debugDescription)
-            return
+        } else {
+            let unsetLabel = app.staticTexts["期限未設定"]
+            XCTAssertTrue(unsetLabel.waitForExistence(timeout: 5), app.debugDescription)
+            XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)
         }
 
-        XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)
+        let toggle = app.switches["item-form-has-expiration"]
+        let expectedValue = isEnabled ? "1" : "0"
+        XCTAssertEqual(toggle.value as? String, expectedValue, app.debugDescription)
     }
 
     @MainActor
