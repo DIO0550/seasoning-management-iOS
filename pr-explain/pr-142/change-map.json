@@ -4,7 +4,7 @@
   "headBranch": "test/parallel-ui-tests",
   "baseBranch": "master",
   "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
-  "head": "e79eb1dd314e339bd723eaef25d3d850e3e52b2e",
+  "head": "4ae91cb697397cd540a861222c5b56f809065fc2",
   "groups": [
     {
       "label": "UI テスト",
@@ -27,8 +27,8 @@
           "path": ".github/workflows/ios-tests.yml",
           "status": "M",
           "oldPath": null,
-          "additions": 19,
-          "deletions": 8,
+          "additions": 21,
+          "deletions": 10,
           "changed": true,
           "target": null
         },
@@ -52,7 +52,12 @@
         },
         {
           "path": "harness/tests/test_ci_report.py",
-          "changed": false
+          "status": "M",
+          "oldPath": null,
+          "additions": 18,
+          "deletions": 11,
+          "changed": true,
+          "target": null
         },
         {
           "path": "harness/tests/test_harness.py",
@@ -65,6 +70,7 @@
     "added": [],
     "removed": [],
     "files": [
+      "harness/tests/test_ci_report.py",
       "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
     ]
   },
@@ -172,6 +178,36 @@
               "new": null
             }
           ]
+        }
+      ]
+    },
+    {
+      "sha": "4ae91cb697397cd540a861222c5b56f809065fc2",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-17T09:08:22-08:00",
+      "subject": "レポート集約のテストを3脚構成に合わせる",
+      "body": "脚名・出力キー・詳細テーブルの件数と予算を更新。脚が3になったため\n詳細テーブルの予算を5000に下げてコメント上限内に収める。\n\nCo-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 2,
+          "patch": "@@ -317,7 +317,7 @@ jobs:\n               const files = report?.coverage?.files;\n               if (Array.isArray(files) && files.length) {\n                 const sorted = [...files].sort((a, b) => String(a?.path).localeCompare(String(b?.path)));\n-                lines.push(...table(fileHeaders, sorted.map(fileRow), 10_000));\n+                lines.push(...table(fileHeaders, sorted.map(fileRow), 5_000));\n               } else {\n                 lines.push(Array.isArray(files) ? '0件' : '⚪ 未取得');\n               }\n@@ -354,7 +354,7 @@ jobs:\n               const tests = report?.tests;\n               if (Array.isArray(tests) && tests.length) {\n                 const sorted = [...tests].sort((a, b) => String(a?.name).localeCompare(String(b?.name)));\n-                lines.push(...table(testHeaders, sorted.map(testRow), 10_000));\n+                lines.push(...table(testHeaders, sorted.map(testRow), 5_000));\n               } else {\n                 lines.push(Array.isArray(tests) ? '0件' : '⚪ 未取得');\n               }",
+          "patchLines": 18,
+          "truncated": false
+        },
+        {
+          "path": "harness/tests/test_ci_report.py",
+          "status": "M",
+          "oldPath": null,
+          "additions": 18,
+          "deletions": 11,
+          "patch": "@@ -242,12 +242,14 @@ class CIReportTests(unittest.TestCase):\n                     \"completed_at\": \"2026-10-10T14:04:30Z\",\n                 }],\n             }\n-            for name in (\"Unit tests\", \"UI tests\")\n+            for name in (\"Unit tests\", \"UI tests (在庫)\", \"UI tests (商品)\")\n         ]\n         self.env = dict(os.environ, GITHUB_RUN_ID=\"1234\", GITHUB_RUN_ATTEMPT=\"2\")\n         self.reports = {}\n         self.raw_reports = {}\n-        for target in (\"SeasoningManagerTests\", \"SeasoningManagerUITests\"):\n+        for target in (\"SeasoningManagerTests\",\n+                       \"SeasoningManagerUITests/SeasoningManagerInventoryUITests\",\n+                       \"SeasoningManagerUITests/SeasoningManagerProductUITests\"):\n             self.reports[target] = {\"runId\": \"1234\", \"attempt\": \"2\", \"errors\": [], \"omitted\": {}}\n             self.write_report(target, \"summary\", {\n                 \"passedTests\": 5, \"failedTests\": 1, \"skippedTests\": 2,\n@@ -274,7 +276,11 @@ class CIReportTests(unittest.TestCase):\n \n     def run_report(self):\n         env = dict(self.env)\n-        for target, variable in ((\"SeasoningManagerTests\", \"UNIT_REPORT\"), (\"SeasoningManagerUITests\", \"UI_REPORT\")):\n+        for target, variable in (\n+            (\"SeasoningManagerTests\", \"UNIT_REPORT\"),\n+            (\"SeasoningManagerUITests/SeasoningManagerInventoryUITests\", \"UI_INVENTORY_REPORT\"),\n+            (\"SeasoningManagerUITests/SeasoningManagerProductUITests\", \"UI_PRODUCT_REPORT\"),\n+        ):\n             env[variable] = self.raw_reports.get(target, json.dumps(self.reports.get(target)))\n         request = {\n             \"script\": SCRIPT, \"context\": self.context, \"current\": self.current,\n@@ -294,7 +300,8 @@ class CIReportTests(unittest.TestCase):\n         result = self.run_report()\n         body = self.mutations(result)[0][\"body\"]\n         self.assertIn(\"| Unit | ✅ 成功 | 5 | 1 | 2 |\", body)\n-        self.assertIn(\"| UI | ✅ 成功 | 5 | 1 | 2 |\", body)\n+        self.assertIn(\"| UI(在庫) | ✅ 成功 | 5 | 1 | 2 |\", body)\n+        self.assertIn(\"| UI(商品) | ✅ 成功 | 5 | 1 | 2 |\", body)\n         self.assertIn(\"| Unit | 🟠 25.00% (25/100行) |\", body)\n         self.assertIn(\"| Unit | 2分30秒 | 6分0秒 |\", body)\n         self.assertLess(body.index(\"#### 🧪 テスト結果\"), body.index(\"#### 📊 カバレッジ\"))\n@@ -330,8 +337,8 @@ class CIReportTests(unittest.TestCase):\n         self.assertIn(\"Suite/skipped() | ⏭️ スキップ | 未実施\", details)\n         self.assertIn(\"Suite/unknown() | ✅ 成功 | 未取得\", details)\n         self.assertNotIn(\"/Users/runner\", body)\n-        self.assertEqual(body.count(\"<details>\"), 4)\n-        self.assertEqual(body.count(\"</details>\"), 4)\n+        self.assertEqual(body.count(\"<details>\"), 6)\n+        self.assertEqual(body.count(\"</details>\"), 6)\n         self.assertNotIn(\"<details open\", body)\n \n     def test_only_ten_slowest_tests_are_highlighted_but_all_remain_in_details(self):\n@@ -342,7 +349,7 @@ class CIReportTests(unittest.TestCase):\n         body = self.run_report()[\"summary\"]\n         times = body.split(\"#### ⏱️ 実行時間\", 1)[1]\n         highlights, details = times.split(\"<details>\", 1)\n-        slow = highlights.split(\"##### 🐢 遅いテスト\", 1)[1].split(\"**UI**\", 1)[0]\n+        slow = highlights.split(\"##### 🐢 遅いテスト\", 1)[1].split(\"**UI(在庫)**\", 1)[0]\n         self.assertEqual(slow.count(\"Suite/test\"), 10)\n         self.assertLess(slow.index(\"test11\"), slow.index(\"test10\"))\n         self.assertNotIn(\"test01\", slow)\n@@ -372,7 +379,7 @@ class CIReportTests(unittest.TestCase):\n         self.assertNotIn(\"[link]\", body)\n         self.assertNotIn(\"*bold*\", body)\n         self.assertIn(\"evil&#124;&#96;&#91;link&#93;\", body)\n-        self.assertEqual(body.count(\"</details>\"), 4)\n+        self.assertEqual(body.count(\"</details>\"), 6)\n \n     def test_large_details_fit_comment_limit_and_explicitly_report_omissions(self):\n         for target in self.reports:\n@@ -433,8 +440,8 @@ class CIReportTests(unittest.TestCase):\n     def test_partial_rerun_does_not_reuse_previous_attempt_data(self):\n         self.jobs.pop()\n         body = self.run_report()[\"summary\"]\n-        self.assertIn(\"| UI | ⚪ 未完了・未取得 | 未取得 | 未取得 | 未取得 |\", body)\n-        self.assertIn(\"| UI | 未取得 | 未取得 |\", body)\n+        self.assertIn(\"| UI(商品) | ⚪ 未完了・未取得 | 未取得 | 未取得 | 未取得 |\", body)\n+        self.assertIn(\"| UI(商品) | 未取得 | 未取得 |\", body)\n \n     def test_zero_percent_is_measured_when_executable_lines_exist(self):\n         self.write_report(\"SeasoningManagerTests\", \"coverage\", {\n@@ -487,7 +494,7 @@ class CIReportTests(unittest.TestCase):\n         self.jobs.pop()\n         body = self.run_report()[\"summary\"]\n         self.assertIn(\"| 未実施 | 6分0秒 |\", body)\n-        self.assertIn(\"| UI | ⚪ 未完了・未取得 |\", body)\n+        self.assertIn(\"| UI(商品) | ⚪ 未完了・未取得 |\", body)\n \n     def test_invalid_or_negative_timestamps_are_unavailable(self):\n         self.jobs[0][\"completed_at\"] = \"invalid\"",
+          "patchLines": 89,
+          "truncated": false
         }
       ]
     }
