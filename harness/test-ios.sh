@@ -47,7 +47,8 @@ test_command=(xcodebuild test \
   -configuration Debug \
   -destination "$destination" \
   -destination-timeout 120 \
-  -parallel-testing-enabled NO \
+  -parallel-testing-enabled YES \
+  -parallel-testing-worker-count 2 \
   CODE_SIGNING_ALLOWED=NO)
 
 if [[ "$target" != "all" ]]; then
