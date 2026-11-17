@@ -4,7 +4,7 @@
   "headBranch": "test/parallel-ui-tests",
   "baseBranch": "master",
   "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
-  "head": "2177b10005f26fd5d26f812e2a204ea82e3bad27",
+  "head": "e79eb1dd314e339bd723eaef25d3d850e3e52b2e",
   "groups": [
     {
       "label": "UI テスト",
@@ -27,21 +27,26 @@
           "path": ".github/workflows/ios-tests.yml",
           "status": "M",
           "oldPath": null,
-          "additions": 2,
-          "deletions": 1,
+          "additions": 19,
+          "deletions": 8,
           "changed": true,
           "target": null
         },
         {
           "path": "harness/ci-report.py",
-          "changed": false
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 0,
+          "changed": true,
+          "target": null
         },
         {
           "path": "harness/test-ios.sh",
           "status": "M",
           "oldPath": null,
-          "additions": 2,
-          "deletions": 1,
+          "additions": 4,
+          "deletions": 3,
           "changed": true,
           "target": null
         },
@@ -119,6 +124,56 @@
           "truncated": false
         }
       ]
+    },
+    {
+      "sha": "e79eb1dd314e339bd723eaef25d3d850e3e52b2e",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-17T09:07:02-08:00",
+      "subject": "UIテストをクラス別の2ジョブに分けて並行実行する",
+      "body": "シミュレータクローン2台の並列はランナーのCPU分割で遅くなり、\n45分・60分のタイムアウトに2回打ち切られた。クラスごとのジョブへ分けて\n並行させる方式へ切り替える。各脚は1クラスのため並列フラグは効かないが、\nローカル実行では引き続き有効。\n\nCo-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "status": "M",
+          "oldPath": null,
+          "additions": 20,
+          "deletions": 10,
+          "patch": "@@ -19,21 +19,28 @@ jobs:\n     # Distinct keys combine both matrix results regardless of completion order.\n     outputs:\n       unit_report: ${{ steps.collect.outputs.unit_report }}\n-      ui_report: ${{ steps.collect.outputs.ui_report }}\n+      ui_inventory_report: ${{ steps.collect.outputs.ui_inventory_report }}\n+      ui_product_report: ${{ steps.collect.outputs.ui_product_report }}\n     strategy:\n       fail-fast: false\n       matrix:\n         include:\n           - name: Unit tests\n             target: SeasoningManagerTests\n+            bundle: SeasoningManagerTests\n             timeout: 30\n-          - name: UI tests\n-            target: SeasoningManagerUITests\n-            timeout: 60\n+          - name: UI tests (在庫)\n+            target: SeasoningManagerUITests/SeasoningManagerInventoryUITests\n+            bundle: SeasoningManagerUITests-inventory\n+            timeout: 45\n+          - name: UI tests (商品)\n+            target: SeasoningManagerUITests/SeasoningManagerProductUITests\n+            bundle: SeasoningManagerUITests-product\n+            timeout: 45\n     # iOS 27.0 is the minimum deployment target decided in #13.\n     runs-on: xcode-27\n-    # UI全件とビルドが30分で繰り返し中断されたため、UIジョブだけ余裕を持たせる。\n-    # クローン2台がランナーのCPUを分けるため、直列より遅くなる場合があり60分にする。\n+    # UI全件とビルドが30分で繰り返し中断され、シミュレータクローン2台の並列でも\n+    # ランナーのCPU分割で遅くなるため、UIテストをクラス別の2ジョブに分けて並行させる。\n     timeout-minutes: ${{ matrix.timeout }}\n     env:\n       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer\n@@ -70,7 +77,7 @@ jobs:\n \n       - name: Run tests\n         env:\n-          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.target }}.xcresult\n+          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.bundle }}.xcresult\n         run: |\n           bash harness/test-ios.sh \"$TEST_TARGET\" \"platform=iOS Simulator,id=$SIMULATOR_ID\"\n \n@@ -78,7 +85,7 @@ jobs:\n         id: collect\n         if: always()\n         env:\n-          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.target }}.xcresult\n+          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.bundle }}.xcresult\n         run: |\n           python3 harness/ci-report.py\n \n@@ -99,7 +106,8 @@ jobs:\n         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0\n         env:\n           UNIT_REPORT: ${{ needs.tests.outputs.unit_report }}\n-          UI_REPORT: ${{ needs.tests.outputs.ui_report }}\n+          UI_INVENTORY_REPORT: ${{ needs.tests.outputs.ui_inventory_report }}\n+          UI_PRODUCT_REPORT: ${{ needs.tests.outputs.ui_product_report }}\n         with:\n           script: |\n             const marker = '<!-- seasoning-ios-test-report -->';\n@@ -253,7 +261,9 @@ jobs:\n               '| --- | --- | ---: | ---: | ---: |'\n             ];\n             const reports = [\n-              ['Unit tests', 'Unit', 'UNIT_REPORT'], ['UI tests', 'UI', 'UI_REPORT']\n+              ['Unit tests', 'Unit', 'UNIT_REPORT'],\n+              ['UI tests (在庫)', 'UI(在庫)', 'UI_INVENTORY_REPORT'],\n+              ['UI tests (商品)', 'UI(商品)', 'UI_PRODUCT_REPORT']\n             ].map(([jobName, name, variable]) => {\n               const job = jobs.find(job => job.name === jobName);\n               // Partial reruns can retain older outputs; never display those as this attempt.",
+          "patchLines": 74,
+          "truncated": false
+        },
+        {
+          "path": "harness/ci-report.py",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 0,
+          "patch": "@@ -13,6 +13,8 @@ from pathlib import Path\n OUTPUTS = {\n     \"SeasoningManagerTests\": \"unit_report\",\n     \"SeasoningManagerUITests\": \"ui_report\",\n+    \"SeasoningManagerUITests/SeasoningManagerInventoryUITests\": \"ui_inventory_report\",\n+    \"SeasoningManagerUITests/SeasoningManagerProductUITests\": \"ui_product_report\",\n }\n MAX_OUTPUT_CHARACTERS = 60_000  # ASCII JSON fits Actions outputs and a Linux env variable.\n ",
+          "patchLines": 9,
+          "truncated": false
+        },
+        {
+          "path": "harness/test-ios.sh",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 2,
+          "patch": "@@ -2,7 +2,7 @@\n set -euo pipefail\n \n usage() {\n-  echo \"Usage: bash harness/test-ios.sh <SeasoningManagerTests|SeasoningManagerUITests|all> <destination>\"\n+  echo \"Usage: bash harness/test-ios.sh <SeasoningManagerTests|SeasoningManagerUITests|<target>/<class>|all> <destination>\"\n }\n \n if [[ \"${1:-}\" == \"--help\" ]]; then\n@@ -18,7 +18,7 @@ fi\n target=\"$1\"\n destination=\"$2\"\n case \"$target\" in\n-  SeasoningManagerTests|SeasoningManagerUITests)\n+  SeasoningManagerTests|SeasoningManagerUITests|SeasoningManagerTests/*|SeasoningManagerUITests/*)\n     ;;\n   all)\n     ;;",
+          "patchLines": 18,
+          "truncated": false,
+          "hunkOpeningLines": [
+            {
+              "old": null,
+              "new": null
+            },
+            {
+              "old": null,
+              "new": null
+            }
+          ]
+        }
+      ]
     }
   ],
   "dependencies": [
@@ -135,6 +190,11 @@
     {
       "from": "harness/tests/test_ci_report.py",
       "to": ".github/workflows/ios-tests.yml",
+      "status": "kept"
+    },
+    {
+      "from": "harness/tests/test_ci_report.py",
+      "to": "harness/ci-report.py",
       "status": "kept"
     },
     {
