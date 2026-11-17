@@ -317,7 +317,7 @@ jobs:
               const files = report?.coverage?.files;
               if (Array.isArray(files) && files.length) {
                 const sorted = [...files].sort((a, b) => String(a?.path).localeCompare(String(b?.path)));
-                lines.push(...table(fileHeaders, sorted.map(fileRow), 10_000));
+                lines.push(...table(fileHeaders, sorted.map(fileRow), 5_000));
               } else {
                 lines.push(Array.isArray(files) ? '0件' : '⚪ 未取得');
               }
@@ -354,7 +354,7 @@ jobs:
               const tests = report?.tests;
               if (Array.isArray(tests) && tests.length) {
                 const sorted = [...tests].sort((a, b) => String(a?.name).localeCompare(String(b?.name)));
-                lines.push(...table(testHeaders, sorted.map(testRow), 10_000));
+                lines.push(...table(testHeaders, sorted.map(testRow), 5_000));
               } else {
                 lines.push(Array.isArray(tests) ? '0件' : '⚪ 未取得');
               }
