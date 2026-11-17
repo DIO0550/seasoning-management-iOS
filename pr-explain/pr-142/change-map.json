@@ -4,7 +4,7 @@
   "headBranch": "test/parallel-ui-tests",
   "baseBranch": "master",
   "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
-  "head": "0011382fc5b329a380ca44c1e0ef46a3dc30c09a",
+  "head": "19e8f5f6824325eb323e46f0acfd69ce38c94db2",
   "groups": [
     {
       "label": "UI テスト",
@@ -13,8 +13,8 @@
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 46,
-          "deletions": 29,
+          "additions": 58,
+          "deletions": 31,
           "changed": true,
           "target": null
         }
@@ -244,6 +244,26 @@
               "new": null
             }
           ]
+        }
+      ]
+    },
+    {
+      "sha": "19e8f5f6824325eb323e46f0acfd69ce38c94db2",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-17T10:51:03-08:00",
+      "subject": "遅いCIランナーでフレークした箇所の待機を補強する",
+      "body": "商品脚で2件失敗。遷移中は一覧のスナップショットが無く frame が空になる、\nタップが欄を拾わずキーボードが出ない、の2点に waitForExistence と\n再タップを入れた。テスト本体は変更なし。\n\nCo-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 12,
+          "deletions": 2,
+          "patch": "@@ -779,6 +779,10 @@ extension XCTestCase {\n     @MainActor\n     fileprivate func formInteractionFrame(in app: XCUIApplication) throws -> CGRect {\n         let form = app.collectionViews.firstMatch\n+        // 画面遷移の途中では一覧のスナップショットがまだ無いことがある。\n+        if !form.exists {\n+            _ = form.waitForExistence(timeout: 10)\n+        }\n         let frame = form.frame.intersection(app.frame)\n         let navigationBar = app.navigationBars.firstMatch\n         let top = max(frame.minY, navigationBar.frame.maxY) + 12\n@@ -857,15 +861,17 @@ extension XCTestCase {\n     @MainActor\n     fileprivate func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {\n         var focusedField: XCUIElement?\n+        var keyboardShown = false\n         let keyboard = app.keyboards.firstMatch\n         // タップ後に現れるキーボードで領域が変わるため、改めて欄全体を確認する。\n         for _ in 0..<3 {\n             let candidate = try formField(field, in: app)\n             candidate.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()\n+            // タップが欄を拾わないとキーボードが出ないため、短く待って再タップする。\n             guard keyboard.waitForExistence(timeout: 5) else {\n-                XCTFail(\"キーボードが表示されない: \\(field)\")\n-                throw FormInputFailure.unavailable\n+                continue\n             }\n+            keyboardShown = true\n \n             let safeFrame = try formInteractionFrame(in: app)\n             if safeFrame.contains(candidate.frame), candidate.isHittable {\n@@ -874,6 +880,10 @@ extension XCTestCase {\n             }\n         }\n \n+        if !keyboardShown {\n+            XCTFail(\"キーボードが表示されない: \\(field)\")\n+            throw FormInputFailure.unavailable\n+        }\n         let textField = try XCTUnwrap(focusedField, \"キーボード表示後に入力欄全体を操作できない: \\(field)\")\n         let current = try XCTUnwrap(textField.value as? String)\n         let content = current == textField.placeholderValue ? \"\" : current",
+          "patchLines": 42,
+          "truncated": false
         }
       ]
     }
