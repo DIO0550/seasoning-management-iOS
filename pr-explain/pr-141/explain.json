@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 141,
-  "sha": "8799cab4df8965bf1d8932aa63a8453b7798b251",
+  "sha": "ea1070eeeccccf1f63636c48d16c0bf6d4eae8d6",
   "issue": 56,
   "overview": {
     "title": "在庫一覧と個体詳細に賞味期限の警告を表示する",
@@ -147,6 +147,30 @@
           "start": 326,
           "end": 340,
           "text": "日付欄または未設定の表示でフォームを同期し、次にスイッチの値を確認する。"
+        }
+      ]
+    },
+    {
+      "sha": "ea1070eeeccccf1f63636c48d16c0bf6d4eae8d6",
+      "phase": "revise",
+      "role": "登録フォーム内にUIテストの検索を限定する。",
+      "why": "商品を選び直した直後、種類行のアクセシビリティ・スナップショット検索がCIでタイムアウトした。アプリ全体ではなくフォーム内を検索し、日付欄は型を指定して取得する。XCTest内部の根本原因は未確定。",
+      "review": [
+        "名前と種類のラベル、期限のオン・オフ、保存後の一覧の検証を削っていない。",
+        "本番の動作、待ち時間、CIの実行条件は変えない。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "start": 266,
+          "end": 275,
+          "text": "フォームが存在することを待ち、識別子に対応する一意の行を検索する。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "start": 328,
+          "end": 341,
+          "text": "既存の日付値取得と同じ日付入力の検索を使い、未設定表示とスイッチ値の検証は維持する。"
         }
       ]
     }
@@ -688,9 +712,9 @@
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
-            "start": 326,
-            "end": 340,
-            "text": "    @MainActor\n    private func assertItemExpiration(isEnabled: Bool, in app: XCUIApplication) {\n        let dateField = app.descendants(matching: .any).matching(identifier: \"item-form-expiration\").firstMatch\n        if isEnabled {\n            XCTAssertTrue(dateField.waitForExistence(timeout: 5), app.debugDescription)\n        } else {\n            let unsetLabel = app.staticTexts[\"期限未設定\"]\n            XCTAssertTrue(unsetLabel.waitForExistence(timeout: 5), app.debugDescription)\n            XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)\n        }\n\n        let toggle = app.switches[\"item-form-has-expiration\"]\n        let expectedValue = isEnabled ? \"1\" : \"0\"\n        XCTAssertEqual(toggle.value as? String, expectedValue, app.debugDescription)\n    }"
+            "start": 328,
+            "end": 342,
+            "text": "    @MainActor\n    private func assertItemExpiration(isEnabled: Bool, in app: XCUIApplication) {\n        let dateField = app.datePickers[\"item-form-expiration\"]\n        if isEnabled {\n            XCTAssertTrue(dateField.waitForExistence(timeout: 5), app.debugDescription)\n        } else {\n            let unsetLabel = app.staticTexts[\"期限未設定\"]\n            XCTAssertTrue(unsetLabel.waitForExistence(timeout: 5), app.debugDescription)\n            XCTAssertTrue(dateField.waitForNonExistence(timeout: 5), app.debugDescription)\n        }\n\n        let toggle = app.switches[\"item-form-has-expiration\"]\n        let expectedValue = isEnabled ? \"1\" : \"0\"\n        XCTAssertEqual(toggle.value as? String, expectedValue, app.debugDescription)\n    }"
           }
         },
         {
@@ -702,12 +726,51 @@
         {
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "lineRange": {
-            "start": 326,
-            "end": 340
+            "start": 328,
+            "end": 342
           },
           "text": "期限設定の表示条件がそろった後にスイッチの値を確認する。",
           "shas": [
-            "8799cab4df8965bf1d8932aa63a8453b7798b251"
+            "ea1070eeeccccf1f63636c48d16c0bf6d4eae8d6"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scoped-ui-query",
+      "kind": "language",
+      "category": "XCTest",
+      "label": "検索する画面と要素を絞る",
+      "gist": "UIテストの検索は、対象のフォームを決めてから識別子で行を探す。日付入力は型で絞って探す。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`collectionViews.element` でフォームを取得し、その子孫から名前と種類の識別子を検索する。`.element` は一致する要素が一つであることを要求するため、重複を先頭の要素で隠さない。画面のラベルも従来どおり比較する。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 266,
+            "end": 275,
+            "text": "    @MainActor\n    private func assertSelectedItemProduct(name: String, type: String, in app: XCUIApplication) {\n        let form = app.collectionViews.element\n        XCTAssertTrue(form.waitForExistence(timeout: 5))\n        let nameRow = form.descendants(matching: .any).matching(identifier: \"item-form-product-name\").element\n        let typeRow = form.descendants(matching: .any).matching(identifier: \"item-form-product-type\").element\n        XCTAssertTrue(nameRow.waitForExistence(timeout: 5))\n        XCTAssertTrue(typeRow.waitForExistence(timeout: 5))\n        XCTAssertEqual(nameRow.label, \"名前、\\(name)\")\n        XCTAssertEqual(typeRow.label, \"種類、\\(type)\")"
+          }
+        },
+        {
+          "kind": "caution",
+          "text": "この変更はスナップショット取得のタイムアウトへの対処であり、XCTest内部の原因を確定したものではない。Swiftの構文検査や整形だけでは実行結果を保証しないため、iOSのCIで確認する。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "lineRange": {
+            "start": 266,
+            "end": 275
+          },
+          "text": "商品選択後の検証をフォーム内で行う。",
+          "shas": [
+            "ea1070eeeccccf1f63636c48d16c0bf6d4eae8d6"
           ]
         }
       ]
