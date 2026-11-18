@@ -4,7 +4,7 @@
   "headBranch": "test/parallel-ui-tests",
   "baseBranch": "master",
   "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
-  "head": "e8ba3a7db3beb64fec9d1847f8a845be54a665b2",
+  "head": "1d6ce33462a1ec90aa771bf44634088a75a4977e",
   "groups": [
     {
       "label": "UI テスト",
@@ -45,7 +45,7 @@
           "path": "harness/test-ios.sh",
           "status": "M",
           "oldPath": null,
-          "additions": 9,
+          "additions": 11,
           "deletions": 3,
           "changed": true,
           "target": null
@@ -284,6 +284,32 @@
       "subject": "CI 再実行（商品脚のスナップショットタイムアウトフレーク）",
       "body": "Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
       "files": []
+    },
+    {
+      "sha": "1d6ce33462a1ec90aa771bf44634088a75a4977e",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-18T06:30:52-08:00",
+      "subject": "失敗したテストをその場で一度再実行する",
+      "body": "混んだCIランナーで交互の脚がスナップショット評価タイムアウトで\n落ち続けるため、-retry-tests-on-failure でフレークを吸収する。\n\nCo-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": "harness/test-ios.sh",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 0,
+          "patch": "@@ -47,6 +47,8 @@ test_command=(xcodebuild test \\\n   -configuration Debug \\\n   -destination \"$destination\" \\\n   -destination-timeout 120 \\\n+  # 混んだランナーで出るスナップショット評価タイムアウトを再試行で吸収する。\n+  -retry-tests-on-failure \\\n   CODE_SIGNING_ALLOWED=NO)\n \n # クローン並列は小さい CI ランナーでは CPU を分けて遅くなるため、CI は NO で直列にする。",
+          "patchLines": 9,
+          "truncated": false,
+          "hunkOpeningLines": [
+            {
+              "old": null,
+              "new": null
+            }
+          ]
+        }
+      ]
     }
   ],
   "dependencies": [
