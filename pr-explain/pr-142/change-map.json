@@ -4,7 +4,7 @@
   "headBranch": "test/parallel-ui-tests",
   "baseBranch": "master",
   "mergeBase": "c1614807f43e29dd3e29ff9d0ee286f6f1cab9c9",
-  "head": "fda8bd73c27be8a2f0784cd54d148edab6f70bc6",
+  "head": "e8ba3a7db3beb64fec9d1847f8a845be54a665b2",
   "groups": [
     {
       "label": "UI テスト",
@@ -273,6 +273,15 @@
       "author": "DIO0550",
       "date": "2026-11-17T11:26:11-08:00",
       "subject": "CI 再実行（在庫脚のスナップショットタイムアウトフレーク）",
+      "body": "Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": []
+    },
+    {
+      "sha": "e8ba3a7db3beb64fec9d1847f8a845be54a665b2",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-18T05:51:07-08:00",
+      "subject": "CI 再実行（商品脚のスナップショットタイムアウトフレーク）",
       "body": "Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
       "files": []
     }
