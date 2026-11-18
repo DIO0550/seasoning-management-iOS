@@ -1,9 +1,12 @@
+import Combine
 import Foundation
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct InventoryListView: View {
     @Query private var items: [Item]
+    @State private var expirationReferenceDate = Date.now
 
     init() {
         _items = Query(Self.descriptor())
@@ -20,6 +23,7 @@ struct InventoryListView: View {
 
     var body: some View {
         let availableItems = items.filter { !$0.isDeleted && $0.modelContext != nil }
+        let now = expirationReferenceDate
 
         Group {
             if let error = _items.fetchError {
@@ -42,13 +46,19 @@ struct InventoryListView: View {
                 }
             } else {
                 List {
-                    inventorySection(for: .unopened, items: availableItems)
-                    inventorySection(for: .inUse, items: availableItems)
+                    inventorySection(for: .unopened, items: availableItems, now: now)
+                    inventorySection(for: .inUse, items: availableItems, now: now)
                 }
             }
         }
         .navigationDestination(for: ItemDetailRoute.self) { route in
             ItemDetailView(itemID: route.itemID)
+        }
+        .onAppear {
+            expirationReferenceDate = .now
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            expirationReferenceDate = .now
         }
         .navigationTitle("在庫一覧")
         .toolbar {
@@ -64,14 +74,14 @@ struct InventoryListView: View {
     }
 
     @ViewBuilder
-    private func inventorySection(for status: ItemStatus, items: [Item]) -> some View {
+    private func inventorySection(for status: ItemStatus, items: [Item], now: Date) -> some View {
         let matchingItems = items.filter { $0.status == status }
 
         if !matchingItems.isEmpty {
             Section(status.displayName) {
                 ForEach(matchingItems, id: \.persistentModelID) { item in
                     NavigationLink(value: ItemDetailRoute(itemID: item.id)) {
-                        InventoryItemRow(item: item, status: status)
+                        InventoryItemRow(item: item, status: status, now: now)
                     }
                 }
             }
@@ -86,28 +96,26 @@ private nonisolated struct ItemDetailRoute: Hashable {
 struct InventoryItemRow: View {
     let item: Item
     let status: ItemStatus
+    let now: Date
 
     var productLabels: InventoryProductLabels {
         InventoryProductLabels(product: item.product)
     }
 
-    var expirationText: String {
-        guard let date = item.expirationDate else {
-            return "期限未設定"
-        }
-
-        return "賞味期限: \(date.formatted(date: .abbreviated, time: .omitted))"
+    func expirationPresentation(calendar: Calendar = .current) -> InventoryExpirationPresentation {
+        InventoryExpirationPresentation(expirationDate: item.expirationDate, now: now, calendar: calendar)
     }
 
     var body: some View {
         let product = productLabels
+        let expiration = expirationPresentation()
 
         VStack(alignment: .leading, spacing: 4) {
             Text(product.name)
                 .font(.headline)
             Group {
                 Text("種類: \(product.type)")
-                Text(expirationText)
+                InventoryExpirationLabel(text: expiration.rowText, warningColor: expiration.warningColor)
                 Text(status.displayName)
             }
             .font(.subheadline)
@@ -115,6 +123,53 @@ struct InventoryItemRow: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
+    }
+}
+
+struct InventoryExpirationPresentation {
+    let rowText: String
+    let detailText: String
+    let warningColor: Color?
+
+    init(expirationDate: Date?, now: Date, calendar: Calendar) {
+        let dateStyle = Date.FormatStyle(
+            date: .abbreviated, time: .omitted, calendar: calendar, timeZone: calendar.timeZone
+        )
+        let dateText = expirationDate?.formatted(dateStyle) ?? "期限未設定"
+        let warning: (text: String, color: Color)?
+        switch ExpirationState.calculate(expirationDate: expirationDate, now: now, calendar: calendar) {
+        case .success(.expired):
+            warning = ("期限切れ", .red)
+        case .success(.expiringSoon):
+            warning = ("期限が近い", .orange)
+        case .success(.normal), .success(.unset), .failure:
+            warning = nil
+        }
+
+        let text = warning.map { "\(dateText)（\($0.text)）" } ?? dateText
+        detailText = text
+        rowText = expirationDate == nil ? text : "賞味期限: \(text)"
+        warningColor = warning?.color
+    }
+}
+
+struct InventoryExpirationLabel: View {
+    let text: String
+    let warningColor: Color?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if let warningColor {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .foregroundStyle(warningColor)
+                    .accessibilityHidden(true)
+            }
+
+            Text(text)
+                .fontWeight(warningColor == nil ? nil : .semibold)
+                .foregroundStyle(warningColor == nil ? Color.secondary : Color.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
