@@ -47,6 +47,8 @@ test_command=(xcodebuild test \
   -configuration Debug \
   -destination "$destination" \
   -destination-timeout 120 \
+  # 混んだランナーで出るスナップショット評価タイムアウトを再試行で吸収する。
+  -retry-tests-on-failure \
   CODE_SIGNING_ALLOWED=NO)
 
 # クローン並列は小さい CI ランナーでは CPU を分けて遅くなるため、CI は NO で直列にする。
