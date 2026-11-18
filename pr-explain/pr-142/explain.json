@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 142,
-  "sha": "fda8bd73c27be8a2f0784cd54d148edab6f70bc6",
+  "sha": "1d6ce33462a1ec90aa771bf44634088a75a4977e",
   "overview": {
     "title": "UIテストをクラス別の2ジョブに分けて並行実行する",
     "lead": "UI テストジョブが 36〜38 分かかっていたため、テストクラスを 2 つに分け、CI でクラス別のジョブへ振り分けて並行して走らせる。シミュレータクローンの並列実行はランナーの CPU 分割で遅くなったため、ジョブ分割を採る。",
@@ -140,13 +140,13 @@
           "path": "harness/test-ios.sh",
           "start": 50,
           "end": 51,
-          "text": "並列を有効にしワーカーを 2 に指定する"
+          "text": "並列フラグの追加"
         },
         {
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "start": 728,
           "end": 731,
-          "text": "共有ヘルパーを両クラスから届くファイル内の拡張へ置く"
+          "text": "共有ヘルパーの移動"
         }
       ]
     },
@@ -177,7 +177,7 @@
           "path": ".github/workflows/ios-tests.yml",
           "start": 32,
           "end": 36,
-          "text": "UI をクラス別の 2 脚に分ける"
+          "text": "マトリックスの脚定義"
         }
       ]
     },
@@ -208,7 +208,7 @@
           "path": ".github/workflows/ios-tests.yml",
           "start": 263,
           "end": 266,
-          "text": "脚別の出力を集約する"
+          "text": "レポートの脚の追加"
         }
       ]
     },
@@ -293,6 +293,37 @@
       "after": [
         {
           "text": "在庫脚は成功、商品脚は別のフレークが残る"
+        }
+      ]
+    },
+    {
+      "sha": "1d6ce33462a1ec90aa771bf44634088a75a4977e",
+      "phase": "revise",
+      "role": "失敗したテストを一度再実行",
+      "why": "交互の脚がスナップショット評価タイムアウトで落ち続けるため、失敗テストだけを再実行してフレークを吸収する。",
+      "flows": [
+        "ci-run"
+      ],
+      "review": [
+        "脚の再実行結果"
+      ],
+      "before": [
+        {
+          "text": "フレークしたテストが脚を赤くしていた"
+        }
+      ],
+      "after": [
+        {
+          "text": "失敗したテストは一度だけ自動で再実行される",
+          "message": "run-tests"
+        }
+      ],
+      "notes": [
+        {
+          "path": "harness/test-ios.sh",
+          "start": 50,
+          "end": 51,
+          "text": "再試行フラグ"
         }
       ]
     }
@@ -422,7 +453,7 @@
                 "end": 51
               }
             ],
-            "text": "test_command=(xcodebuild test \\\n  -project src/SeasoningManager/SeasoningManager.xcodeproj \\\n  -scheme SeasoningManager \\\n  -configuration Debug \\\n  -destination \"$destination\" \\\n  -destination-timeout 120 \\\n  CODE_SIGNING_ALLOWED=NO)\n\n# クローン並列は小さい CI ランナーでは CPU を分けて遅くなるため、CI は NO で直列にする。"
+            "text": "test_command=(xcodebuild test \\\n  -project src/SeasoningManager/SeasoningManager.xcodeproj \\\n  -scheme SeasoningManager \\\n  -configuration Debug \\\n  -destination \"$destination\" \\\n  -destination-timeout 120 \\\n  # 混んだランナーで出るスナップショット評価タイムアウトを再試行で吸収する。\n  -retry-tests-on-failure \\\n  CODE_SIGNING_ALLOWED=NO)"
           }
         },
         {
@@ -439,7 +470,7 @@
           },
           "text": "テストコマンドの組み立て",
           "shas": [
-            "fda8bd73c27be8a2f0784cd54d148edab6f70bc6"
+            "1d6ce33462a1ec90aa771bf44634088a75a4977e"
           ]
         }
       ]
@@ -475,7 +506,7 @@
           },
           "text": "共有ヘルパーの拡張",
           "shas": [
-            "fda8bd73c27be8a2f0784cd54d148edab6f70bc6"
+            "1d6ce33462a1ec90aa771bf44634088a75a4977e"
           ]
         }
       ]
