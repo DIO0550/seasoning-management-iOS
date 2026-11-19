@@ -7,8 +7,7 @@
 
 import XCTest
 
-final class SeasoningManagerUITests: XCTestCase {
-
+final class SeasoningManagerInventoryUITests: XCTestCase {
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
 
@@ -339,6 +338,21 @@ final class SeasoningManagerUITests: XCTestCase {
         let toggle = app.switches["item-form-has-expiration"]
         let expectedValue = isEnabled ? "1" : "0"
         XCTAssertEqual(toggle.value as? String, expectedValue, app.debugDescription)
+    }
+}
+
+final class SeasoningManagerProductUITests: XCTestCase {
+    override func setUpWithError() throws {
+        // Put setup code here. This method is called before the invocation of each test method in the class.
+
+        // In UI tests it is usually best to stop immediately when a failure occurs.
+        continueAfterFailure = false
+
+        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
+    }
+
+    override func tearDownWithError() throws {
+        // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
     @MainActor
@@ -694,12 +708,24 @@ final class SeasoningManagerUITests: XCTestCase {
         try assertBlankOptionalField("product-form-basis-unit", in: app)
     }
 
-    private enum FormInputFailure: Error {
-        case unavailable
-    }
-
     @MainActor
-    private func detailElement(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
+    func testLaunchPerformance() throws {
+        // This measures how long it takes to launch your application.
+        let app = makeApplication()
+        measure(metrics: [XCTApplicationLaunchMetric()]) {
+            app.launch()
+        }
+    }
+}
+
+private enum FormInputFailure: Error {
+    case unavailable
+}
+
+@MainActor
+extension XCTestCase {
+    @MainActor
+    fileprivate func detailElement(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
         let element = app.descendants(matching: .any)[identifier]
         for _ in 0..<24 {
             let safeFrame = try formInteractionFrame(in: app)
@@ -715,7 +741,7 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
+    fileprivate func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
         let field = app.textFields[identifier]
         // 未生成のセルは、上端へ戻してから下へ探す。各操作の前に領域を取り直す。
         if !field.exists {
@@ -748,8 +774,12 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func formInteractionFrame(in app: XCUIApplication) throws -> CGRect {
+    fileprivate func formInteractionFrame(in app: XCUIApplication) throws -> CGRect {
         let form = app.collectionViews.firstMatch
+        // 画面遷移の途中では一覧のスナップショットがまだ無いことがある。
+        if !form.exists {
+            _ = form.waitForExistence(timeout: 10)
+        }
         let frame = form.frame.intersection(app.frame)
         let navigationBar = app.navigationBars.firstMatch
         let top = max(frame.minY, navigationBar.frame.maxY) + 12
@@ -769,7 +799,7 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func scrollForm(towardTop: Bool, in app: XCUIApplication) throws {
+    fileprivate func scrollForm(towardTop: Bool, in app: XCUIApplication) throws {
         let safeFrame = try formInteractionFrame(in: app)
         let distance = min(safeFrame.height * 0.35, 140)
         let offset = towardTop ? distance : -distance
@@ -782,14 +812,14 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func assertBlankOptionalField(_ identifier: String, in app: XCUIApplication) throws {
+    fileprivate func assertBlankOptionalField(_ identifier: String, in app: XCUIApplication) throws {
         let field = try formField(identifier, in: app)
         let value = try XCTUnwrap(field.value as? String)
         XCTAssertTrue(["", field.placeholderValue ?? ""].contains(value))
     }
 
     @MainActor
-    private func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) throws {
+    fileprivate func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) throws {
         openRegistration(in: app)
         try enterProduct(name: name, type: type, in: app)
         app.buttons["product-form-save"].tap()
@@ -800,7 +830,7 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func openEditing(in app: XCUIApplication) {
+    fileprivate func openEditing(in app: XCUIApplication) {
         let detail = app.navigationBars["商品詳細"]
         XCTAssertTrue(detail.waitForExistence(timeout: 5))
         let edit = detail.buttons["product-detail-edit"]
@@ -811,13 +841,13 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func assertForm(name: String, type: String, in app: XCUIApplication) {
+    fileprivate func assertForm(name: String, type: String, in app: XCUIApplication) {
         XCTAssertEqual(app.textFields["product-form-name"].value as? String, name)
         XCTAssertEqual(app.textFields["product-form-type"].value as? String, type)
     }
 
     @MainActor
-    private func assertDetail(name: String, type: String, in app: XCUIApplication) {
+    fileprivate func assertDetail(name: String, type: String, in app: XCUIApplication) {
         XCTAssertTrue(app.navigationBars["商品詳細"].waitForExistence(timeout: 5))
         let nameRow = app.descendants(matching: .any)["product-detail-name"]
         XCTAssertTrue(nameRow.waitForExistence(timeout: 5))
@@ -826,17 +856,19 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {
+    fileprivate func replaceFormValue(_ value: String, field: String, in app: XCUIApplication) throws {
         var focusedField: XCUIElement?
+        var keyboardShown = false
         let keyboard = app.keyboards.firstMatch
         // タップ後に現れるキーボードで領域が変わるため、改めて欄全体を確認する。
         for _ in 0..<3 {
             let candidate = try formField(field, in: app)
             candidate.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+            // タップが欄を拾わないとキーボードが出ないため、短く待って再タップする。
             guard keyboard.waitForExistence(timeout: 5) else {
-                XCTFail("キーボードが表示されない: \(field)")
-                throw FormInputFailure.unavailable
+                continue
             }
+            keyboardShown = true
 
             let safeFrame = try formInteractionFrame(in: app)
             if safeFrame.contains(candidate.frame), candidate.isHittable {
@@ -845,6 +877,10 @@ final class SeasoningManagerUITests: XCTestCase {
             }
         }
 
+        if !keyboardShown {
+            XCTFail("キーボードが表示されない: \(field)")
+            throw FormInputFailure.unavailable
+        }
         let textField = try XCTUnwrap(focusedField, "キーボード表示後に入力欄全体を操作できない: \(field)")
         let current = try XCTUnwrap(textField.value as? String)
         let content = current == textField.placeholderValue ? "" : current
@@ -862,7 +898,7 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func waitForFormValue(_ value: String, field: XCUIElement) throws {
+    fileprivate func waitForFormValue(_ value: String, field: XCUIElement) throws {
         let expected = value.isEmpty ? ["", field.placeholderValue ?? ""] : [value]
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value IN %@", expected as NSArray), object: field
@@ -883,14 +919,14 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func makeApplication() -> XCUIApplication {
+    fileprivate func makeApplication() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-store-id", UUID().uuidString]
         return app
     }
 
     @MainActor
-    private func openRegistration(in app: XCUIApplication) {
+    fileprivate func openRegistration(in app: XCUIApplication) {
         let productList = app.navigationBars["商品一覧"]
         XCTAssertTrue(productList.waitForExistence(timeout: 5))
         let registerButton = productList.buttons["product-list-register"]
@@ -901,13 +937,13 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func enterProduct(name: String, type: String, in app: XCUIApplication) throws {
+    fileprivate func enterProduct(name: String, type: String, in app: XCUIApplication) throws {
         try replaceFormValue(name, field: "product-form-name", in: app)
         try replaceFormValue(type, field: "product-form-type", in: app)
     }
 
     @MainActor
-    private func assertBlankForm(in app: XCUIApplication) throws {
+    fileprivate func assertBlankForm(in app: XCUIApplication) throws {
         let name = try XCTUnwrap(app.textFields["product-form-name"].value as? String)
         let type = try XCTUnwrap(app.textFields["product-form-type"].value as? String)
 
@@ -918,17 +954,8 @@ final class SeasoningManagerUITests: XCTestCase {
     }
 
     @MainActor
-    private func productRow(name: String, type: String, unopened: Int = 0, in app: XCUIApplication) -> XCUIElement {
+    fileprivate func productRow(name: String, type: String, unopened: Int = 0, in app: XCUIApplication) -> XCUIElement {
         let label = "商品名、\(name)、種類、\(type)、未開封、\(unopened)本、使用中、0本"
         return app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
-    }
-
-    @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        let app = makeApplication()
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            app.launch()
-        }
     }
 }

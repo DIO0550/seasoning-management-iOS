@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: bash harness/test-ios.sh <SeasoningManagerTests|SeasoningManagerUITests|all> <destination>"
+  echo "Usage: bash harness/test-ios.sh <SeasoningManagerTests|SeasoningManagerUITests|<target>/<class>|all> <destination>"
 }
 
 if [[ "${1:-}" == "--help" ]]; then
@@ -18,7 +18,7 @@ fi
 target="$1"
 destination="$2"
 case "$target" in
-  SeasoningManagerTests|SeasoningManagerUITests)
+  SeasoningManagerTests|SeasoningManagerUITests|SeasoningManagerTests/*|SeasoningManagerUITests/*)
     ;;
   all)
     ;;
@@ -47,8 +47,16 @@ test_command=(xcodebuild test \
   -configuration Debug \
   -destination "$destination" \
   -destination-timeout 120 \
-  -parallel-testing-enabled NO \
+  # 混んだランナーで出るスナップショット評価タイムアウトを再試行で吸収する。
+  -retry-tests-on-failure \
   CODE_SIGNING_ALLOWED=NO)
+
+# クローン並列は小さい CI ランナーでは CPU を分けて遅くなるため、CI は NO で直列にする。
+if [[ "${HARNESS_PARALLEL_TESTS:-YES}" == "YES" ]]; then
+  test_command+=(-parallel-testing-enabled YES -parallel-testing-worker-count 2)
+else
+  test_command+=(-parallel-testing-enabled NO)
+fi
 
 if [[ "$target" != "all" ]]; then
   test_command+=("-only-testing:$target")

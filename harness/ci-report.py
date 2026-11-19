@@ -13,6 +13,8 @@ from pathlib import Path
 OUTPUTS = {
     "SeasoningManagerTests": "unit_report",
     "SeasoningManagerUITests": "ui_report",
+    "SeasoningManagerUITests/SeasoningManagerInventoryUITests": "ui_inventory_report",
+    "SeasoningManagerUITests/SeasoningManagerProductUITests": "ui_product_report",
 }
 MAX_OUTPUT_CHARACTERS = 60_000  # ASCII JSON fits Actions outputs and a Linux env variable.
 

@@ -242,12 +242,14 @@ class CIReportTests(unittest.TestCase):
                     "completed_at": "2026-10-10T14:04:30Z",
                 }],
             }
-            for name in ("Unit tests", "UI tests")
+            for name in ("Unit tests", "UI tests (在庫)", "UI tests (商品)")
         ]
         self.env = dict(os.environ, GITHUB_RUN_ID="1234", GITHUB_RUN_ATTEMPT="2")
         self.reports = {}
         self.raw_reports = {}
-        for target in ("SeasoningManagerTests", "SeasoningManagerUITests"):
+        for target in ("SeasoningManagerTests",
+                       "SeasoningManagerUITests/SeasoningManagerInventoryUITests",
+                       "SeasoningManagerUITests/SeasoningManagerProductUITests"):
             self.reports[target] = {"runId": "1234", "attempt": "2", "errors": [], "omitted": {}}
             self.write_report(target, "summary", {
                 "passedTests": 5, "failedTests": 1, "skippedTests": 2,
@@ -274,7 +276,11 @@ class CIReportTests(unittest.TestCase):
 
     def run_report(self):
         env = dict(self.env)
-        for target, variable in (("SeasoningManagerTests", "UNIT_REPORT"), ("SeasoningManagerUITests", "UI_REPORT")):
+        for target, variable in (
+            ("SeasoningManagerTests", "UNIT_REPORT"),
+            ("SeasoningManagerUITests/SeasoningManagerInventoryUITests", "UI_INVENTORY_REPORT"),
+            ("SeasoningManagerUITests/SeasoningManagerProductUITests", "UI_PRODUCT_REPORT"),
+        ):
             env[variable] = self.raw_reports.get(target, json.dumps(self.reports.get(target)))
         request = {
             "script": SCRIPT, "context": self.context, "current": self.current,
@@ -294,7 +300,8 @@ class CIReportTests(unittest.TestCase):
         result = self.run_report()
         body = self.mutations(result)[0]["body"]
         self.assertIn("| Unit | ✅ 成功 | 5 | 1 | 2 |", body)
-        self.assertIn("| UI | ✅ 成功 | 5 | 1 | 2 |", body)
+        self.assertIn("| UI(在庫) | ✅ 成功 | 5 | 1 | 2 |", body)
+        self.assertIn("| UI(商品) | ✅ 成功 | 5 | 1 | 2 |", body)
         self.assertIn("| Unit | 🟠 25.00% (25/100行) |", body)
         self.assertIn("| Unit | 2分30秒 | 6分0秒 |", body)
         self.assertLess(body.index("#### 🧪 テスト結果"), body.index("#### 📊 カバレッジ"))
@@ -330,8 +337,8 @@ class CIReportTests(unittest.TestCase):
         self.assertIn("Suite/skipped() | ⏭️ スキップ | 未実施", details)
         self.assertIn("Suite/unknown() | ✅ 成功 | 未取得", details)
         self.assertNotIn("/Users/runner", body)
-        self.assertEqual(body.count("<details>"), 4)
-        self.assertEqual(body.count("</details>"), 4)
+        self.assertEqual(body.count("<details>"), 6)
+        self.assertEqual(body.count("</details>"), 6)
         self.assertNotIn("<details open", body)
 
     def test_only_ten_slowest_tests_are_highlighted_but_all_remain_in_details(self):
@@ -342,7 +349,7 @@ class CIReportTests(unittest.TestCase):
         body = self.run_report()["summary"]
         times = body.split("#### ⏱️ 実行時間", 1)[1]
         highlights, details = times.split("<details>", 1)
-        slow = highlights.split("##### 🐢 遅いテスト", 1)[1].split("**UI**", 1)[0]
+        slow = highlights.split("##### 🐢 遅いテスト", 1)[1].split("**UI(在庫)**", 1)[0]
         self.assertEqual(slow.count("Suite/test"), 10)
         self.assertLess(slow.index("test11"), slow.index("test10"))
         self.assertNotIn("test01", slow)
@@ -372,7 +379,7 @@ class CIReportTests(unittest.TestCase):
         self.assertNotIn("[link]", body)
         self.assertNotIn("*bold*", body)
         self.assertIn("evil&#124;&#96;&#91;link&#93;", body)
-        self.assertEqual(body.count("</details>"), 4)
+        self.assertEqual(body.count("</details>"), 6)
 
     def test_large_details_fit_comment_limit_and_explicitly_report_omissions(self):
         for target in self.reports:
@@ -433,8 +440,8 @@ class CIReportTests(unittest.TestCase):
     def test_partial_rerun_does_not_reuse_previous_attempt_data(self):
         self.jobs.pop()
         body = self.run_report()["summary"]
-        self.assertIn("| UI | ⚪ 未完了・未取得 | 未取得 | 未取得 | 未取得 |", body)
-        self.assertIn("| UI | 未取得 | 未取得 |", body)
+        self.assertIn("| UI(商品) | ⚪ 未完了・未取得 | 未取得 | 未取得 | 未取得 |", body)
+        self.assertIn("| UI(商品) | 未取得 | 未取得 |", body)
 
     def test_zero_percent_is_measured_when_executable_lines_exist(self):
         self.write_report("SeasoningManagerTests", "coverage", {
@@ -487,7 +494,7 @@ class CIReportTests(unittest.TestCase):
         self.jobs.pop()
         body = self.run_report()["summary"]
         self.assertIn("| 未実施 | 6分0秒 |", body)
-        self.assertIn("| UI | ⚪ 未完了・未取得 |", body)
+        self.assertIn("| UI(商品) | ⚪ 未完了・未取得 |", body)
 
     def test_invalid_or_negative_timestamps_are_unavailable(self):
         self.jobs[0]["completed_at"] = "invalid"
