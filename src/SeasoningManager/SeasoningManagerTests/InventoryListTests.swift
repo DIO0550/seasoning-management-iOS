@@ -193,6 +193,90 @@ struct InventoryListTests {
         #expect(!reader.hasChanges)
     }
 
+    @Test(arguments: [true, false])
+    func detailDateEditSavesPastOrRemovedExpirationOnlyForTheSelectedItem(keepsExpiration: Bool) throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let actions = ItemActions(context: context)
+        let now = Date(timeIntervalSince1970: 1_720_000_000)
+        let originalExpiration = now.addingTimeInterval(86_400)
+        let pastExpiration = now.addingTimeInterval(-86_400)
+        let product = try Product(name: "しょうゆ", type: "調味料")
+        context.insert(product)
+        try context.save()
+        let selected = try actions.create(for: product, expirationDate: originalExpiration).get()
+        let sibling = try actions.create(for: product, expirationDate: originalExpiration).get()
+        let selectedDescriptor = ItemDetailView.descriptor(for: selected.id)
+        let siblingDescriptor = ItemDetailView.descriptor(for: sibling.id)
+
+        var draft = ItemDateEditState(item: selected, now: now)
+        #expect(draft.hasExpirationDate)
+        #expect(draft.expirationDate == originalExpiration)
+        #expect(draft.openingDate == nil)
+        draft.hasExpirationDate = keepsExpiration
+        draft.expirationDate = pastExpiration
+        #expect(selected.expirationDate == originalExpiration)
+
+        try draft.save(item: selected, using: actions, now: now).get()
+
+        let reader = ModelContext(container)
+        let saved = try #require(reader.fetch(selectedDescriptor).first)
+        let unaffected = try #require(reader.fetch(siblingDescriptor).first)
+        #expect(saved.expirationDate == (keepsExpiration ? pastExpiration : nil))
+        #expect(saved.status == .unopened)
+        #expect(saved.openingDate == nil)
+        #expect(unaffected.expirationDate == originalExpiration)
+    }
+
+    @Test func detailDateEditKeepsBothInputsWhenOpeningIsInTheFutureAndCanRetry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let actions = ItemActions(context: context)
+        let now = Date(timeIntervalSince1970: 1_720_000_000)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let originalOpening = now.addingTimeInterval(-2 * 86_400)
+        let correctedOpening = now.addingTimeInterval(-86_400)
+        let futureOpening = now.addingTimeInterval(86_400)
+        let editedExpiration = now.addingTimeInterval(-3 * 86_400)
+        let product = try Product(name: "しょうゆ", type: "調味料")
+        context.insert(product)
+        try context.save()
+        let item = try actions.create(for: product).get()
+        try actions.open(item, openingDate: originalOpening, now: now, calendar: calendar).get()
+        let descriptor = ItemDetailView.descriptor(for: item.id)
+
+        var draft = ItemDateEditState(item: item, now: now)
+        #expect(draft.openingDate == originalOpening)
+        draft.hasExpirationDate = true
+        draft.expirationDate = editedExpiration
+        draft.openingDate = futureOpening
+
+        let result = draft.save(item: item, using: actions, now: now, calendar: calendar)
+        guard case .failure(.validation(.futureOpeningDate)) = result else {
+            Issue.record("未来の開封日が拒否されなかった")
+            return
+        }
+        #expect(draft.saveErrorMessage?.contains("未来") == true)
+        #expect(draft.hasExpirationDate)
+        #expect(draft.expirationDate == editedExpiration)
+        #expect(draft.openingDate == futureOpening)
+        let beforeRetry = ModelContext(container)
+        let unchanged = try #require(beforeRetry.fetch(descriptor).first)
+        #expect(unchanged.expirationDate == nil)
+        #expect(unchanged.openingDate == originalOpening)
+
+        draft.openingDate = correctedOpening
+        try draft.save(item: item, using: actions, now: now, calendar: calendar).get()
+
+        let afterRetry = ModelContext(container)
+        let saved = try #require(afterRetry.fetch(descriptor).first)
+        #expect(saved.expirationDate == editedExpiration)
+        #expect(saved.openingDate == correctedOpening)
+        #expect(saved.status == .inUse)
+        #expect(draft.saveErrorMessage == nil)
+    }
+
     @Test func insertedItemOnlyBecomesAvailableAfterSave() throws {
         let container = try makeContainer()
         let context = ModelContext(container)

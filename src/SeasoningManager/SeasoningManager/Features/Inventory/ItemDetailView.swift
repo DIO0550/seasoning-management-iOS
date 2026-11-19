@@ -7,6 +7,7 @@ import UIKit
 struct ItemDetailView: View {
     @Query private var items: [Item]
     @State private var expirationReferenceDate = Date.now
+    @State private var dateEditTarget: Item?
 
     init(itemID: UUID) {
         _items = Query(Self.descriptor(for: itemID))
@@ -53,6 +54,9 @@ struct ItemDetailView: View {
         }
         .navigationTitle("個体詳細")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $dateEditTarget) { item in
+            ItemDateEditor(item: item)
+        }
     }
 
     private func details(_ detail: ItemDetailContent) -> some View {
@@ -68,6 +72,12 @@ struct ItemDetailView: View {
                 .accessibilityLabel("賞味期限、\(expiration.detailText)")
                 .accessibilityIdentifier("item-detail-expiration")
                 LabeledContent("開封日", value: detail.opening)
+                if detail.item.status != nil {
+                    Button("日付を編集") {
+                        dateEditTarget = detail.item
+                    }
+                    .accessibilityIdentifier("item-detail-edit-dates")
+                }
             }
 
             Section("商品情報") {
@@ -84,6 +94,7 @@ struct ItemDetailContent {
         case duplicateID
     }
 
+    fileprivate let item: Item
     let product: InventoryProductLabels
     let status: String
     let expirationDate: Date?
@@ -106,9 +117,132 @@ struct ItemDetailContent {
     }
 
     private init(item: Item) {
+        self.item = item
         product = InventoryProductLabels(product: item.product)
         status = item.status?.displayName ?? "不明な状態"
         expirationDate = item.expirationDate
         opening = item.openingDate?.formatted(date: .abbreviated, time: .omitted) ?? "未設定"
+    }
+}
+
+private struct ItemDateEditor: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var state: ItemDateEditState
+
+    private let item: Item
+
+    init(item: Item) {
+        self.item = item
+        _state = State(initialValue: ItemDateEditState(item: item))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let message = state.saveErrorMessage {
+                    Section {
+                        Text(message)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("item-date-edit-error")
+                    }
+                }
+
+                Section("賞味期限（任意）") {
+                    Toggle("賞味期限を設定", isOn: $state.hasExpirationDate)
+                        .accessibilityIdentifier("item-date-edit-has-expiration")
+                    if state.hasExpirationDate {
+                        DatePicker("賞味期限", selection: $state.expirationDate, displayedComponents: .date)
+                            .accessibilityIdentifier("item-date-edit-expiration")
+                    }
+                }
+
+                Section("開封日") {
+                    if let openingDate = Binding($state.openingDate) {
+                        DatePicker("開封日", selection: openingDate, displayedComponents: .date)
+                            .accessibilityIdentifier("item-date-edit-opening")
+                    } else {
+                        Text("未開封の個体は開封日を編集できません。")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("日付を編集")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { dismiss() }
+                        .accessibilityIdentifier("item-date-edit-cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存", action: save)
+                        .accessibilityIdentifier("item-date-edit-save")
+                }
+            }
+        }
+    }
+
+    private func save() {
+        if case .success = state.save(item: item, using: ItemActions(context: modelContext)) {
+            dismiss()
+        }
+    }
+}
+
+struct ItemDateEditState {
+    var hasExpirationDate: Bool
+    var expirationDate: Date
+    var openingDate: Date?
+    private var saveError: ItemActions.ActionError?
+
+    init(item: Item, now: Date = .now) {
+        hasExpirationDate = item.expirationDate != nil
+        expirationDate = item.expirationDate ?? now
+        switch item.status {
+        case .inUse, .consumed:
+            openingDate = item.openingDate ?? now
+        case .unopened, nil:
+            openingDate = nil
+        }
+    }
+
+    mutating func save(
+        item: Item, using actions: ItemActions, now: Date = .now, calendar: Calendar = .current
+    ) -> Result<Void, ItemActions.ActionError> {
+        guard !item.isDeleted else {
+            saveError = .itemNotInContext
+            return .failure(.itemNotInContext)
+        }
+
+        let result = actions.updateDates(
+            item, expirationDate: hasExpirationDate ? expirationDate : nil, openingDate: openingDate,
+            now: now, calendar: calendar
+        )
+        switch result {
+        case .success:
+            saveError = nil
+        case .failure(let error):
+            saveError = error
+        }
+        return result
+    }
+
+    var saveErrorMessage: String? {
+        switch saveError {
+        case nil:
+            return nil
+        case .validation(.futureOpeningDate):
+            return "開封日に未来の日付は設定できません。今日以前の日付を選んでください。"
+        case .validation(.consumedDateBeforeOpeningDate):
+            return "開封日は使い切り日以前の日付を選んでください。"
+        case .itemNotInContext:
+            return "編集する個体が見つかりません。在庫一覧から選び直してください。"
+        case .pendingChanges:
+            return "ほかの変更の保存が終わってから、もう一度「保存」を押してください。"
+        case .persistence:
+            return "日付を保存できませんでした。もう一度「保存」を押してください。"
+        case .productNotInContext, .deletionNotConfirmed, .validation:
+            return "日付を保存できませんでした。入力内容と個体の状態を確認してください。"
+        }
     }
 }
