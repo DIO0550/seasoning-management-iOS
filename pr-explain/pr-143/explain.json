@@ -1,0 +1,299 @@
+{
+  "version": 1,
+  "pr": 143,
+  "sha": "54d873ec03a5b8c995a73f5e156d322e1b9db1c1",
+  "issue": 57,
+  "overview": {
+    "title": "個体詳細で賞味期限と開封日を編集する",
+    "lead": "在庫の個体詳細から編集を開き、選んだ1本の日付を更新できるようにする。",
+    "before": [
+      {
+        "text": "個体詳細では賞味期限と開封日の表示だけができた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "賞味期限は過去日を保存でき、スイッチを切ると削除できる。"
+      },
+      {
+        "text": "開封済みの個体の開封日に未来日を選ぶと、入力を残してエラーを表示する。"
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "dates",
+      "label": "個体の日付編集",
+      "role": "入力を一時的に保持し、保存を押したときだけ対象の個体を更新する。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "name": "個体詳細と日付入力",
+      "role": "選んだ個体の日付を表示する。",
+      "feature": "dates",
+      "change": "別のシートで日付を入力し、保存できるようにした。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "name": "個体の保存",
+      "role": "対象と保存可否を確認し、両方の日付を同じ保存で確定する。",
+      "feature": "dates"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "name": "個体",
+      "role": "状態と日付の組み合わせを検証し、成立するときだけ更新する。",
+      "feature": "dates"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+      "name": "在庫の回帰テスト",
+      "role": "別の読み取り用コンテキストで個体ごとの保存結果を確かめる。",
+      "feature": "dates",
+      "change": "期限の削除・過去日と、無効な開封日からの再試行を追加した。"
+    }
+  ],
+  "messages": [
+    {
+      "id": "save-dates",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "kind": "cmd",
+      "name": "対象個体の日付を保存する",
+      "code": "actions.updateDates",
+      "via": "call",
+      "payload": "対象の1本と入力中の賞味期限・開封日",
+      "returns": "保存成功、または入力・保存エラー",
+      "status": "added"
+    },
+    {
+      "id": "validate-dates",
+      "from": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "kind": "cmd",
+      "name": "日付を検証して更新する",
+      "code": "item.updateDates",
+      "via": "call",
+      "returns": "状態と日付が矛盾するときは保存前に失敗する。"
+    }
+  ],
+  "flows": [
+    {
+      "id": "persist",
+      "label": "日付の保存",
+      "steps": [
+        "save-dates",
+        "validate-dates"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "54d873ec03a5b8c995a73f5e156d322e1b9db1c1",
+      "phase": "core",
+      "role": "既存の保存処理を個体詳細につなぐ。",
+      "why": "編集ごとに個体を直接更新する案では、キャンセルや不正入力で保存値を保てない。編集画面の入力を保存値から分離した。",
+      "review": [
+        "保存処理が成功したときだけ編集画面を閉じることを確認する。",
+        "開封前後の状態を日付編集で切り替えないことを確認する。"
+      ],
+      "flows": [
+        "persist"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "start": 185,
+          "end": 189,
+          "text": "成功の場合だけ閉じるため、エラーなら同じ画面で修正できる。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "inventory",
+      "label": "在庫の単体テスト",
+      "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "expiration",
+      "suite": "inventory",
+      "name": "detailDateEditSavesPastOrRemovedExpirationOnlyForTheSelectedItem",
+      "techniques": [
+        "boundary",
+        "state"
+      ],
+      "why": "期限なしと過去日を区別して保存し、同じ商品の別個体には波及しないことを確かめる。",
+      "given": "同じ商品で、期限が設定された未開封の個体が2本ある。",
+      "when": "片方の期限を過去日に変更するか、設定をオフにして保存する。",
+      "then": "変更した1本だけに過去日または未設定が反映され、未開封のままとなる。",
+      "commit": "54d873ec03a5b8c995a73f5e156d322e1b9db1c1",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 196,
+        "end": 229,
+        "text": "    @Test(arguments: [true, false])\n    func detailDateEditSavesPastOrRemovedExpirationOnlyForTheSelectedItem(keepsExpiration: Bool) throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let actions = ItemActions(context: context)\n        let now = Date(timeIntervalSince1970: 1_720_000_000)\n        let originalExpiration = now.addingTimeInterval(86_400)\n        let pastExpiration = now.addingTimeInterval(-86_400)\n        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(product)\n        try context.save()\n        let selected = try actions.create(for: product, expirationDate: originalExpiration).get()\n        let sibling = try actions.create(for: product, expirationDate: originalExpiration).get()\n        let selectedDescriptor = ItemDetailView.descriptor(for: selected.id)\n        let siblingDescriptor = ItemDetailView.descriptor(for: sibling.id)\n\n        var draft = ItemDateEditState(item: selected, now: now)\n        #expect(draft.hasExpirationDate)\n        #expect(draft.expirationDate == originalExpiration)\n        #expect(draft.openingDate == nil)\n        draft.hasExpirationDate = keepsExpiration\n        draft.expirationDate = pastExpiration\n        #expect(selected.expirationDate == originalExpiration)\n\n        try draft.save(item: selected, using: actions, now: now).get()\n\n        let reader = ModelContext(container)\n        let saved = try #require(reader.fetch(selectedDescriptor).first)\n        let unaffected = try #require(reader.fetch(siblingDescriptor).first)\n        #expect(saved.expirationDate == (keepsExpiration ? pastExpiration : nil))\n        #expect(saved.status == .unopened)\n        #expect(saved.openingDate == nil)\n        #expect(unaffected.expirationDate == originalExpiration)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+        "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift"
+      ],
+      "covers": [
+        "save-dates",
+        "validate-dates"
+      ]
+    },
+    {
+      "id": "future",
+      "suite": "inventory",
+      "name": "detailDateEditKeepsBothInputsWhenOpeningIsInTheFutureAndCanRetry",
+      "techniques": [
+        "boundary",
+        "error",
+        "state"
+      ],
+      "why": "不正な開封日で保存を拒否するだけでなく、編集のやり直しを不要にする。",
+      "given": "開封日のある使用中の個体があり、設定済みの賞味期限はない。",
+      "when": "賞味期限と未来の開封日を入力して保存し、その後開封日だけを訂正して再試行する。",
+      "then": "失敗時には保存値が変わらず、訂正後は最初に入力した賞味期限と正しい開封日が反映される。",
+      "commit": "54d873ec03a5b8c995a73f5e156d322e1b9db1c1",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 231,
+        "end": 278,
+        "text": "    @Test func detailDateEditKeepsBothInputsWhenOpeningIsInTheFutureAndCanRetry() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let actions = ItemActions(context: context)\n        let now = Date(timeIntervalSince1970: 1_720_000_000)\n        var calendar = Calendar(identifier: .gregorian)\n        calendar.timeZone = .gmt\n        let originalOpening = now.addingTimeInterval(-2 * 86_400)\n        let correctedOpening = now.addingTimeInterval(-86_400)\n        let futureOpening = now.addingTimeInterval(86_400)\n        let editedExpiration = now.addingTimeInterval(-3 * 86_400)\n        let product = try Product(name: \"しょうゆ\", type: \"調味料\")\n        context.insert(product)\n        try context.save()\n        let item = try actions.create(for: product).get()\n        try actions.open(item, openingDate: originalOpening, now: now, calendar: calendar).get()\n        let descriptor = ItemDetailView.descriptor(for: item.id)\n\n        var draft = ItemDateEditState(item: item, now: now)\n        #expect(draft.openingDate == originalOpening)\n        draft.hasExpirationDate = true\n        draft.expirationDate = editedExpiration\n        draft.openingDate = futureOpening\n\n        let result = draft.save(item: item, using: actions, now: now, calendar: calendar)\n        guard case .failure(.validation(.futureOpeningDate)) = result else {\n            Issue.record(\"未来の開封日が拒否されなかった\")\n            return\n        }\n        #expect(draft.saveErrorMessage?.contains(\"未来\") == true)\n        #expect(draft.hasExpirationDate)\n        #expect(draft.expirationDate == editedExpiration)\n        #expect(draft.openingDate == futureOpening)\n        let beforeRetry = ModelContext(container)\n        let unchanged = try #require(beforeRetry.fetch(descriptor).first)\n        #expect(unchanged.expirationDate == nil)\n        #expect(unchanged.openingDate == originalOpening)\n\n        draft.openingDate = correctedOpening\n        try draft.save(item: item, using: actions, now: now, calendar: calendar).get()\n\n        let afterRetry = ModelContext(container)\n        let saved = try #require(afterRetry.fetch(descriptor).first)\n        #expect(saved.expirationDate == editedExpiration)\n        #expect(saved.openingDate == correctedOpening)\n        #expect(saved.status == .inUse)\n        #expect(draft.saveErrorMessage == nil)\n    }"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+        "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift"
+      ],
+      "covers": [
+        "save-dates",
+        "validate-dates"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "個体ごとの日付を直す",
+    "lead": "同じ商品を複数本持っていても、開いた1本の日付だけを直せる。",
+    "changed": {
+      "before": [
+        {
+          "text": "詳細では日付を見られるだけだった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "「日付を編集」から過去の賞味期限を入力したり、賞味期限を削除したりできる。"
+        }
+      ]
+    },
+    "added": [
+      {
+        "label": "未来の開封日を入力したとき",
+        "before": [],
+        "after": [
+          {
+            "text": "保存されず、入力した日付を残したまま開封日のエラーが表示される。"
+          }
+        ],
+        "tests": [
+          "future"
+        ]
+      }
+    ],
+    "kept": [
+      {
+        "text": "同じ商品に属する別の個体と、編集した個体の開封状態は変わらない。",
+        "tests": [
+          "expiration"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "binding",
+      "kind": "language",
+      "category": "SwiftUI",
+      "label": "状態と入力をつなぐ",
+      "gist": "画面が保持する編集中の値には、画面が描き直されても残る状態を使う。入力部品には値を書き戻せるつながりを渡す。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 151,
+            "end": 167,
+            "text": "                Section(\"賞味期限（任意）\") {\n                    Toggle(\"賞味期限を設定\", isOn: $state.hasExpirationDate)\n                        .accessibilityIdentifier(\"item-date-edit-has-expiration\")\n                    if state.hasExpirationDate {\n                        DatePicker(\"賞味期限\", selection: $state.expirationDate, displayedComponents: .date)\n                            .accessibilityIdentifier(\"item-date-edit-expiration\")\n                    }\n                }\n\n                Section(\"開封日\") {\n                    if let openingDate = Binding($state.openingDate) {\n                        DatePicker(\"開封日\", selection: openingDate, displayedComponents: .date)\n                            .accessibilityIdentifier(\"item-date-edit-opening\")\n                    } else {\n                        Text(\"未開封の個体は開封日を編集できません。\")\n                            .foregroundStyle(.secondary)\n                    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "スイッチや日付入力で使う `$` 付きの参照は、入力を一時的な状態に書き戻す。モデルを直接参照しないので、フォームを触っただけでは保存されない。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 151,
+            "end": 167
+          },
+          "text": "この PR の該当箇所",
+          "shas": [
+            "54d873ec03a5b8c995a73f5e156d322e1b9db1c1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "saving",
+      "kind": "codebase",
+      "category": "在庫",
+      "label": "日付をまとめて保存する",
+      "gist": "賞味期限の設定をオフにする操作は「日付なし」に変換する。編集画面は両方の日付を既存の個体保存処理に渡す。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 209,
+            "end": 227,
+            "text": "    mutating func save(\n        item: Item, using actions: ItemActions, now: Date = .now, calendar: Calendar = .current\n    ) -> Result<Void, ItemActions.ActionError> {\n        guard !item.isDeleted else {\n            saveError = .itemNotInContext\n            return .failure(.itemNotInContext)\n        }\n\n        let result = actions.updateDates(\n            item, expirationDate: hasExpirationDate ? expirationDate : nil, openingDate: openingDate,\n            now: now, calendar: calendar\n        )\n        switch result {\n        case .success:\n            saveError = nil\n        case .failure(let error):\n            saveError = error\n        }\n        return result"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "保存結果は成功か失敗のどちらかになる。失敗分岐ではエラーだけを記録し、選んだ日付は書き換えない。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 209,
+            "end": 227
+          },
+          "text": "この PR の該当箇所",
+          "shas": [
+            "54d873ec03a5b8c995a73f5e156d322e1b9db1c1"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "expiration",
+        "future"
+      ],
+      "flows": [
+        "persist"
+      ]
+    }
+  ]
+}
