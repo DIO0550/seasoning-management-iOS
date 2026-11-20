@@ -106,7 +106,8 @@ struct ItemDetailView: View {
             Button("削除する", role: .destructive) { delete(target) }
             Button("キャンセル", role: .cancel) {}
         } message: { target in
-            Text("「\(target.product.name)」の\(target.status)の1本（\(expiration.rowText)）を削除します。この操作は取り消せません。")
+            let expirationText = target.expirationPresentation(now: expirationReferenceDate).rowText
+            Text("「\(target.product.name)」の\(target.status)の1本（\(expirationText)）を削除します。この操作は取り消せません。")
         }
     }
 

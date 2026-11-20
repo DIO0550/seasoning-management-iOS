@@ -152,6 +152,7 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
         let name = "Soy Sauce"
         let type = "Sauce"
         app.launch()
+        XCTAssertTrue(app.navigationBars["商品一覧"].waitForExistence(timeout: 5))
         app.tabBars.buttons["在庫"].tap()
         app.buttons["inventory-empty-add"].tap()
         app.buttons["item-form-register-product"].tap()
