@@ -5,9 +5,13 @@ import SwiftUI
 import UIKit
 
 struct ItemDetailView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Query private var items: [Item]
     @State private var expirationReferenceDate = Date.now
     @State private var dateEditTarget: Item?
+    @State private var showsDeletionConfirmation = false
+    @State private var deletionError: String?
 
     init(itemID: UUID) {
         _items = Query(Self.descriptor(for: itemID))
@@ -84,6 +88,45 @@ struct ItemDetailView: View {
                 LabeledContent("商品名", value: detail.product.name)
                 LabeledContent("種類", value: detail.product.type)
             }
+
+            Section {
+                if let deletionError {
+                    Text(deletionError)
+                        .foregroundStyle(.red)
+                }
+                if detail.canDeleteFromInventory {
+                    Button("この1本を削除", role: .destructive) {
+                        deletionError = nil
+                        showsDeletionConfirmation = true
+                    }
+                }
+            }
+        }
+        .alert("この1本を削除しますか？", isPresented: $showsDeletionConfirmation, presenting: detail) { target in
+            Button("削除する", role: .destructive) { delete(target) }
+            Button("キャンセル", role: .cancel) {}
+        } message: { target in
+            Text("「\(target.product.name)」の\(target.status)の1本（\(expiration.rowText)）を削除します。この操作は取り消せません。")
+        }
+    }
+
+    private func delete(_ target: ItemDetailContent) {
+        guard _items.fetchError == nil, items.count == 1, items.first === target.item,
+            !target.item.isDeleted, target.item.modelContext === modelContext, target.canDeleteFromInventory
+        else {
+            deletionError = "削除できる在庫が見つかりません。在庫一覧から選び直してください。"
+            return
+        }
+
+        switch ItemActions(context: modelContext).delete(target.item, confirmed: true) {
+        case .success:
+            dismiss()
+        case .failure(.pendingChanges):
+            deletionError = "ほかの変更の保存が終わってから、もう一度削除してください。"
+        case .failure(.persistence(let error)):
+            deletionError = "削除を保存できませんでした。\(error.localizedDescription) もう一度削除してください。"
+        case .failure:
+            deletionError = "削除できませんでした。在庫一覧から選び直してください。"
         }
     }
 }
@@ -99,6 +142,10 @@ struct ItemDetailContent {
     let status: String
     let expirationDate: Date?
     let opening: String
+
+    fileprivate var canDeleteFromInventory: Bool {
+        item.status == .unopened || item.status == .inUse
+    }
 
     func expirationPresentation(now: Date, calendar: Calendar = .current) -> InventoryExpirationPresentation {
         InventoryExpirationPresentation(expirationDate: expirationDate, now: now, calendar: calendar)

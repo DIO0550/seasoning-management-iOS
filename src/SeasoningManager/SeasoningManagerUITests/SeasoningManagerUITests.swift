@@ -147,6 +147,52 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
     }
 
     @MainActor
+    func testDeletingOneItemRequiresConfirmationAndKeepsSibling() throws {
+        let app = makeApplication()
+        let name = "Soy Sauce"
+        let type = "Sauce"
+        app.launch()
+        app.tabBars.buttons["在庫"].tap()
+        app.buttons["inventory-empty-add"].tap()
+        app.buttons["item-form-register-product"].tap()
+        try enterProduct(name: name, type: type, in: app)
+        app.buttons["product-form-save"].tap()
+        app.buttons["item-form-save"].tap()
+
+        let inventory = app.navigationBars["在庫一覧"]
+        XCTAssertTrue(inventory.waitForExistence(timeout: 5))
+        inventory.buttons["inventory-list-add"].tap()
+        try selectItemProduct(name: name, type: type, in: app)
+        tapItemExpirationToggle(in: app)
+        app.buttons["item-form-save"].tap()
+        XCTAssertTrue(inventory.waitForExistence(timeout: 5))
+
+        let target = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", name, "期限未設定")
+        ).firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 5))
+        target.tap()
+        let delete = app.buttons["この1本を削除"]
+        delete.tap()
+        let confirmation = app.alerts["この1本を削除しますか？"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.staticTexts["「\(name)」の未開封の1本（期限未設定）を削除します。この操作は取り消せません。"].exists)
+        confirmation.buttons["キャンセル"].firstMatch.tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["個体詳細"].exists)
+
+        delete.tap()
+        confirmation.buttons["削除する"].firstMatch.tap()
+        XCTAssertTrue(inventory.waitForExistence(timeout: 5))
+        XCTAssertFalse(target.exists)
+        assertInventoryItemDetail(name: name, hasExpiration: true, in: app)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(productRow(name: name, type: type, unopened: 1, in: app).waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {
         let app = makeApplication()
         app.launch()
