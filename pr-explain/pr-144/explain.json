@@ -2,7 +2,7 @@
   "version": 1,
   "pr": 144,
   "issue": 58,
-  "sha": "cb8aaeae747c346f9c888f84bf544eb9bf670d69",
+  "sha": "cbc67558f43c824be05fc8e478f357f265f02503",
   "overview": {
     "title": "在庫から選んだ1本を削除する",
     "lead": "未開封・使用中の個体詳細に削除の入口を設け、確認後に既存の保存処理を呼ぶ。",
@@ -87,6 +87,15 @@
           "text": "表示中の個体と照会結果を照合し、保存成功時に詳細を閉じる。"
         }
       ]
+    },
+    {
+      "sha": "cbc67558f43c824be05fc8e478f357f265f02503",
+      "phase": "revise",
+      "role": "確認文の期限も対象個体から取得する",
+      "why": "商品名・状態・期限の参照元を揃え、UI テストでは商品一覧の表示後にタブを操作する。",
+      "flows": [
+        "delete-one"
+      ]
     }
   ],
   "suites": [
@@ -112,8 +121,8 @@
       "commit": "cb8aaeae747c346f9c888f84bf544eb9bf670d69",
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
-        "start": 170,
-        "end": 192,
+        "start": 171,
+        "end": 193,
         "text": "        let target = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n        ).firstMatch\n        XCTAssertTrue(target.waitForExistence(timeout: 5))\n        target.tap()\n        let delete = app.buttons[\"この1本を削除\"]\n        delete.tap()\n        let confirmation = app.alerts[\"この1本を削除しますか？\"]\n        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n        XCTAssertTrue(confirmation.staticTexts[\"「\\(name)」の未開封の1本（期限未設定）を削除します。この操作は取り消せません。\"].exists)\n        confirmation.buttons[\"キャンセル\"].firstMatch.tap()\n        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))\n        XCTAssertTrue(app.navigationBars[\"個体詳細\"].exists)\n\n        delete.tap()\n        confirmation.buttons[\"削除する\"].firstMatch.tap()\n        XCTAssertTrue(inventory.waitForExistence(timeout: 5))\n        XCTAssertFalse(target.exists)\n        assertInventoryItemDetail(name: name, hasExpiration: true, in: app)\n\n        app.terminate()\n        app.launch()\n        XCTAssertTrue(productRow(name: name, type: type, unopened: 1, in: app).waitForExistence(timeout: 5))"
       },
       "targets": [
@@ -168,8 +177,8 @@
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
             "start": 105,
-            "end": 110,
-            "text": "        .alert(\"この1本を削除しますか？\", isPresented: $showsDeletionConfirmation, presenting: detail) { target in\n            Button(\"削除する\", role: .destructive) { delete(target) }\n            Button(\"キャンセル\", role: .cancel) {}\n        } message: { target in\n            Text(\"「\\(target.product.name)」の\\(target.status)の1本（\\(expiration.rowText)）を削除します。この操作は取り消せません。\")\n        }"
+            "end": 111,
+            "text": "        .alert(\"この1本を削除しますか？\", isPresented: $showsDeletionConfirmation, presenting: detail) { target in\n            Button(\"削除する\", role: .destructive) { delete(target) }\n            Button(\"キャンセル\", role: .cancel) {}\n        } message: { target in\n            let expirationText = target.expirationPresentation(now: expirationReferenceDate).rowText\n            Text(\"「\\(target.product.name)」の\\(target.status)の1本（\\(expirationText)）を削除します。この操作は取り消せません。\")\n        }"
           }
         },
         {
@@ -182,11 +191,11 @@
           "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
           "lineRange": {
             "start": 105,
-            "end": 110
+            "end": 111
           },
           "text": "確認ボタンとキャンセル",
           "shas": [
-            "cb8aaeae747c346f9c888f84bf544eb9bf670d69"
+            "cbc67558f43c824be05fc8e478f357f265f02503"
           ]
         }
       ]
@@ -202,8 +211,8 @@
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
-            "start": 113,
-            "end": 130,
+            "start": 114,
+            "end": 131,
             "text": "    private func delete(_ target: ItemDetailContent) {\n        guard _items.fetchError == nil, items.count == 1, items.first === target.item,\n            !target.item.isDeleted, target.item.modelContext === modelContext, target.canDeleteFromInventory\n        else {\n            deletionError = \"削除できる在庫が見つかりません。在庫一覧から選び直してください。\"\n            return\n        }\n\n        switch ItemActions(context: modelContext).delete(target.item, confirmed: true) {\n        case .success:\n            dismiss()\n        case .failure(.pendingChanges):\n            deletionError = \"ほかの変更の保存が終わってから、もう一度削除してください。\"\n        case .failure(.persistence(let error)):\n            deletionError = \"削除を保存できませんでした。\\(error.localizedDescription) もう一度削除してください。\"\n        case .failure:\n            deletionError = \"削除できませんでした。在庫一覧から選び直してください。\"\n        }"
           }
         },
@@ -216,12 +225,12 @@
         {
           "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
           "lineRange": {
-            "start": 113,
-            "end": 130
+            "start": 114,
+            "end": 131
           },
           "text": "対象の再確認と保存結果の分岐",
           "shas": [
-            "cb8aaeae747c346f9c888f84bf544eb9bf670d69"
+            "cbc67558f43c824be05fc8e478f357f265f02503"
           ]
         }
       ],
