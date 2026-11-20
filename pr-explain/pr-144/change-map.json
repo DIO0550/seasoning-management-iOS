@@ -4,7 +4,7 @@
   "headBranch": "devin/1795185662-confirm-inventory-deletion",
   "baseBranch": "master",
   "mergeBase": "be86c12fdc00707a6c50aae05cdd7e29c54c8c4e",
-  "head": "cb8aaeae747c346f9c888f84bf544eb9bf670d69",
+  "head": "cbc67558f43c824be05fc8e478f357f265f02503",
   "groups": [
     {
       "label": "UI テスト",
@@ -13,7 +13,7 @@
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 46,
+          "additions": 47,
           "deletions": 0,
           "changed": true,
           "target": null
@@ -27,7 +27,7 @@
           "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 47,
+          "additions": 48,
           "deletions": 0,
           "changed": true,
           "target": null
@@ -74,6 +74,36 @@
           "deletions": 0,
           "patch": "@@ -146,6 +146,52 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n         XCTAssertTrue(secondSavedRow.waitForExistence(timeout: 5), app.debugDescription)\n     }\n \n+    @MainActor\n+    func testDeletingOneItemRequiresConfirmationAndKeepsSibling() throws {\n+        let app = makeApplication()\n+        let name = \"Soy Sauce\"\n+        let type = \"Sauce\"\n+        app.launch()\n+        app.tabBars.buttons[\"在庫\"].tap()\n+        app.buttons[\"inventory-empty-add\"].tap()\n+        app.buttons[\"item-form-register-product\"].tap()\n+        try enterProduct(name: name, type: type, in: app)\n+        app.buttons[\"product-form-save\"].tap()\n+        app.buttons[\"item-form-save\"].tap()\n+\n+        let inventory = app.navigationBars[\"在庫一覧\"]\n+        XCTAssertTrue(inventory.waitForExistence(timeout: 5))\n+        inventory.buttons[\"inventory-list-add\"].tap()\n+        try selectItemProduct(name: name, type: type, in: app)\n+        tapItemExpirationToggle(in: app)\n+        app.buttons[\"item-form-save\"].tap()\n+        XCTAssertTrue(inventory.waitForExistence(timeout: 5))\n+\n+        let target = app.buttons.matching(\n+            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n+        ).firstMatch\n+        XCTAssertTrue(target.waitForExistence(timeout: 5))\n+        target.tap()\n+        let delete = app.buttons[\"この1本を削除\"]\n+        delete.tap()\n+        let confirmation = app.alerts[\"この1本を削除しますか？\"]\n+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))\n+        XCTAssertTrue(confirmation.staticTexts[\"「\\(name)」の未開封の1本（期限未設定）を削除します。この操作は取り消せません。\"].exists)\n+        confirmation.buttons[\"キャンセル\"].firstMatch.tap()\n+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))\n+        XCTAssertTrue(app.navigationBars[\"個体詳細\"].exists)\n+\n+        delete.tap()\n+        confirmation.buttons[\"削除する\"].firstMatch.tap()\n+        XCTAssertTrue(inventory.waitForExistence(timeout: 5))\n+        XCTAssertFalse(target.exists)\n+        assertInventoryItemDetail(name: name, hasExpiration: true, in: app)\n+\n+        app.terminate()\n+        app.launch()\n+        XCTAssertTrue(productRow(name: name, type: type, unopened: 1, in: app).waitForExistence(timeout: 5))\n+    }\n+\n     @MainActor\n     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {\n         let app = makeApplication()",
           "patchLines": 53,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "cbc67558f43c824be05fc8e478f357f265f02503",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-20T07:17:48-08:00",
+      "subject": "削除確認の期限を対象から取得しテストの起動画面を待つ",
+      "body": "Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 2,
+          "deletions": 1,
+          "patch": "@@ -106,7 +106,8 @@ struct ItemDetailView: View {\n             Button(\"削除する\", role: .destructive) { delete(target) }\n             Button(\"キャンセル\", role: .cancel) {}\n         } message: { target in\n-            Text(\"「\\(target.product.name)」の\\(target.status)の1本（\\(expiration.rowText)）を削除します。この操作は取り消せません。\")\n+            let expirationText = target.expirationPresentation(now: expirationReferenceDate).rowText\n+            Text(\"「\\(target.product.name)」の\\(target.status)の1本（\\(expirationText)）を削除します。この操作は取り消せません。\")\n         }\n     }\n ",
+          "patchLines": 10,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 1,
+          "deletions": 0,
+          "patch": "@@ -152,6 +152,7 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n         let name = \"Soy Sauce\"\n         let type = \"Sauce\"\n         app.launch()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n         app.tabBars.buttons[\"在庫\"].tap()\n         app.buttons[\"inventory-empty-add\"].tap()\n         app.buttons[\"item-form-register-product\"].tap()",
+          "patchLines": 8,
           "truncated": false
         }
       ]
