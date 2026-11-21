@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "pr": 146,
+  "headBranch": "devin/1795250840-search-lower-form-field",
+  "baseBranch": "master",
+  "mergeBase": "46cbbcc3d35aa466b19e9b15ede6da979d64d997",
+  "head": "28601aa66c2d5d27555f89de45928081ebd9b500",
+  "groups": [
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 10,
+          "deletions": 6,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "28601aa66c2d5d27555f89de45928081ebd9b500",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-21T08:48:41Z",
+      "subject": "基準量の空欄確認では上端を探さず下の欄へ進む",
+      "body": "Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 10,
+          "deletions": 6,
+          "patch": "@@ -751,7 +751,7 @@ final class SeasoningManagerProductUITests: XCTestCase {\n         openEditing(in: app)\n         try assertBlankOptionalField(\"product-form-price\", in: app)\n         try assertBlankOptionalField(\"product-form-calories\", in: app)\n-        try assertBlankOptionalField(\"product-form-basis-amount\", in: app)\n+        try assertBlankOptionalField(\"product-form-basis-amount\", in: app, searchFromTopIfMissing: false)\n         try assertBlankOptionalField(\"product-form-basis-unit\", in: app)\n     }\n \n@@ -788,10 +788,12 @@ extension XCTestCase {\n     }\n \n     @MainActor\n-    fileprivate func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {\n+    fileprivate func formField(\n+        _ identifier: String, in app: XCUIApplication, searchFromTopIfMissing: Bool = true\n+    ) throws -> XCUIElement {\n         let field = app.textFields[identifier]\n-        // 未生成のセルは、上端へ戻してから下へ探す。各操作の前に領域を取り直す。\n-        if !field.exists {\n+        // 欄の方向が不明なときだけ上端へ戻してから探す。\n+        if searchFromTopIfMissing, !field.exists {\n             for _ in 0..<12 {\n                 if field.exists {\n                     break\n@@ -859,8 +861,10 @@ extension XCTestCase {\n     }\n \n     @MainActor\n-    fileprivate func assertBlankOptionalField(_ identifier: String, in app: XCUIApplication) throws {\n-        let field = try formField(identifier, in: app)\n+    fileprivate func assertBlankOptionalField(\n+        _ identifier: String, in app: XCUIApplication, searchFromTopIfMissing: Bool = true\n+    ) throws {\n+        let field = try formField(identifier, in: app, searchFromTopIfMissing: searchFromTopIfMissing)\n         let value = try XCTUnwrap(field.value as? String)\n         XCTAssertTrue([\"\", field.placeholderValue ?? \"\"].contains(value))\n     }",
+          "patchLines": 38,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
