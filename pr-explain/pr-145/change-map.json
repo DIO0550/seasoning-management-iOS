@@ -1,0 +1,78 @@
+{
+  "version": 2,
+  "pr": 145,
+  "headBranch": "devin/1795232642-seed-ui-test-products",
+  "baseBranch": "master",
+  "mergeBase": "46cbbcc3d35aa466b19e9b15ede6da979d64d997",
+  "head": "a40fc72d8eb79c95dd30e4e81892e44bacf3d193",
+  "groups": [
+    {
+      "label": "画面・起動",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 30,
+          "deletions": 17,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 26,
+          "deletions": 56,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "a40fc72d8eb79c95dd30e4e81892e44bacf3d193",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-21T03:46:01Z",
+      "subject": "商品登録が前提のUIテストを準備済みストアから開始する",
+      "body": "Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 30,
+          "deletions": 17,
+          "patch": "@@ -16,35 +16,48 @@ struct SeasoningManagerApp: App {\n             Item.self,\n             Product.self,\n         ])\n-        let modelConfiguration = SeasoningManagerApp.makeConfiguration(for: schema)\n-\n         do {\n+            #if DEBUG\n+                if let container = try SeasoningManagerApp.makeUITestContainer(for: schema) {\n+                    return container\n+                }\n+            #endif\n+\n+            let modelConfiguration = ModelConfiguration(\n+                schema: schema, isStoredInMemoryOnly: false, cloudKitDatabase: .none\n+            )\n             return try ModelContainer(for: schema, configurations: [modelConfiguration])\n         } catch {\n             fatalError(\"Could not create ModelContainer: \\(error)\")\n         }\n     }()\n \n-    private static func makeConfiguration(for schema: Schema) -> ModelConfiguration {\n-        #if DEBUG\n+    #if DEBUG\n+        private static func makeUITestContainer(for schema: Schema) throws -> ModelContainer? {\n             let arguments = ProcessInfo.processInfo.arguments\n-            if let optionIndex = arguments.firstIndex(of: \"--ui-test-store-id\"),\n+            guard let optionIndex = arguments.firstIndex(of: \"--ui-test-store-id\"),\n                 arguments.indices.contains(optionIndex + 1),\n                 let storeID = UUID(uuidString: arguments[optionIndex + 1])\n-            {\n-                // テストごとに分離し、同じテスト内の再起動では同じストアを読む。\n-                let url = FileManager.default.temporaryDirectory\n-                    .appendingPathComponent(\"SeasoningManagerUITests-\\(storeID.uuidString).store\")\n-                return ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)\n+            else {\n+                return nil\n             }\n-        #endif\n \n-        return ModelConfiguration(\n-            schema: schema,\n-            isStoredInMemoryOnly: false,\n-            cloudKitDatabase: .none\n-        )\n-    }\n+            let url = FileManager.default.temporaryDirectory\n+                .appendingPathComponent(\"SeasoningManagerUITests-\\(storeID.uuidString).store\")\n+            let isNewStore = !FileManager.default.fileExists(atPath: url.path)\n+            let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)\n+            let container = try ModelContainer(for: schema, configurations: [configuration])\n+            // 全商品を削除した後の再起動でも、初期データを復活させない。\n+            if isNewStore, let json = ProcessInfo.processInfo.environment[\"UI_TEST_PRODUCT_TYPES_BY_NAME\"] {\n+                let products = try JSONDecoder().decode([String: String].self, from: Data(json.utf8))\n+                let actions = ProductActions(context: container.mainContext)\n+                for (name, type) in products {\n+                    _ = try actions.create(from: ProductDraft(name: name, type: type)).get()\n+                }\n+            }\n+            return container\n+        }\n+    #endif\n \n     var body: some Scene {\n         WindowGroup {",
+          "patchLines": 66,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 26,
+          "deletions": 56,
+          "patch": "@@ -95,19 +95,15 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n \n     @MainActor\n     func testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave() throws {\n-        let app = makeApplication()\n         let name = \"丸大豆しょうゆ\"\n         let type = \"しょうゆ\"\n+        let app = try launchWithProducts([name: type])\n         let productList = app.navigationBars[\"商品一覧\"]\n         let inventoryList = app.navigationBars[\"在庫一覧\"]\n         let productTab = app.tabBars.buttons[\"商品\"]\n         let inventoryTab = app.tabBars.buttons[\"在庫\"]\n         let saveItem = app.buttons[\"item-form-save\"]\n \n-        app.launch()\n-        openRegistration(in: app)\n-        try enterProduct(name: name, type: type, in: app)\n-        app.buttons[\"product-form-save\"].tap()\n         XCTAssertTrue(productList.waitForExistence(timeout: 5))\n \n         inventoryTab.tap()\n@@ -148,16 +144,13 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n \n     @MainActor\n     func testDeletingOneItemRequiresConfirmationAndKeepsSibling() throws {\n-        let app = makeApplication()\n         let name = \"Soy Sauce\"\n         let type = \"Sauce\"\n-        app.launch()\n+        let app = try launchWithProducts([name: type])\n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n         app.tabBars.buttons[\"在庫\"].tap()\n         app.buttons[\"inventory-empty-add\"].tap()\n-        app.buttons[\"item-form-register-product\"].tap()\n-        try enterProduct(name: name, type: type, in: app)\n-        app.buttons[\"product-form-save\"].tap()\n+        try selectItemProduct(name: name, type: type, in: app)\n         app.buttons[\"item-form-save\"].tap()\n \n         let inventory = app.navigationBars[\"在庫一覧\"]\n@@ -195,11 +188,7 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n \n     @MainActor\n     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        openRegistration(in: app)\n-        try enterProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n-        app.buttons[\"product-form-save\"].tap()\n+        let app = try launchWithProducts([\"赤みそ\": \"みそ\"])\n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n         app.tabBars.buttons[\"在庫\"].tap()\n         XCTAssertTrue(app.buttons[\"inventory-empty-add\"].waitForExistence(timeout: 5))\n@@ -229,11 +218,7 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n \n     @MainActor\n     func testProductPickerBackKeepsUnselectedItemUnsavable() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        openRegistration(in: app)\n-        try enterProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n-        app.buttons[\"product-form-save\"].tap()\n+        let app = try launchWithProducts([\"丸大豆しょうゆ\": \"しょうゆ\"])\n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n         app.tabBars.buttons[\"在庫\"].tap()\n         XCTAssertTrue(app.buttons[\"inventory-empty-add\"].waitForExistence(timeout: 5))\n@@ -255,14 +240,7 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n \n     @MainActor\n     func testProductPickerReselectionAndBackPreserveExpiration() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        openRegistration(in: app)\n-        try enterProduct(name: \"丸大豆しょうゆ\", type: \"しょうゆ\", in: app)\n-        app.buttons[\"product-form-save\"].tap()\n-        openRegistration(in: app)\n-        try enterProduct(name: \"赤みそ\", type: \"みそ\", in: app)\n-        app.buttons[\"product-form-save\"].tap()\n+        let app = try launchWithProducts([\"丸大豆しょうゆ\": \"しょうゆ\", \"赤みそ\": \"みそ\"])\n         XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n         app.tabBars.buttons[\"在庫\"].tap()\n         XCTAssertTrue(app.buttons[\"inventory-empty-add\"].waitForExistence(timeout: 5))\n@@ -466,15 +444,9 @@ final class SeasoningManagerProductUITests: XCTestCase {\n \n     @MainActor\n     func testProductListOpensDetailsAndReturnsToList() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n-        let name = \"Detail-\\(UUID().uuidString)\"\n-        let type = \"!UI-\\(UUID().uuidString)\"\n-\n-        openRegistration(in: app)\n-        try enterProduct(name: name, type: type, in: app)\n-        app.buttons[\"product-form-save\"].tap()\n+        let name = \"Soy Sauce\"\n+        let type = \"Sauce\"\n+        let app = try launchWithProducts([name: type])\n         let row = productRow(name: name, type: type, in: app)\n         XCTAssertTrue(row.waitForExistence(timeout: 5))\n         row.tap()\n@@ -498,9 +470,7 @@ final class SeasoningManagerProductUITests: XCTestCase {\n \n     @MainActor\n     func testProductDeletionRequiresConfirmationAndSurvivesRelaunch() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        try registerAndOpenDetail(name: \"Delete\", type: \"Type\", in: app)\n+        let app = try launchWithProductDetail(name: \"Delete\", type: \"Type\")\n \n         let unopened = try detailElement(\"product-detail-unopened\", in: app)\n         XCTAssertEqual(unopened.label, \"未開封、0件\")\n@@ -572,9 +542,7 @@ final class SeasoningManagerProductUITests: XCTestCase {\n \n     @MainActor\n     func testProductEditingSavesToDetailsAndSurvivesRelaunch() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        try registerAndOpenDetail(name: \"Before\", type: \"Type\", in: app)\n+        let app = try launchWithProductDetail(name: \"Before\", type: \"Type\")\n         openEditing(in: app)\n         assertForm(name: \"Before\", type: \"Type\", in: app)\n \n@@ -601,9 +569,7 @@ final class SeasoningManagerProductUITests: XCTestCase {\n \n     @MainActor\n     func testProductEditingCancelAndBackKeepSavedValues() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        try registerAndOpenDetail(name: \"Before\", type: \"Type\", in: app)\n+        let app = try launchWithProductDetail(name: \"Before\", type: \"Type\")\n         openEditing(in: app)\n         try replaceFormValue(\"Cancelled\", field: \"product-form-name\", in: app)\n         try replaceFormValue(\"Changed\", field: \"product-form-type\", in: app)\n@@ -633,9 +599,7 @@ final class SeasoningManagerProductUITests: XCTestCase {\n \n     @MainActor\n     func testProductEditingRequiredErrorKeepsInputAndAllowsCorrection() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        try registerAndOpenDetail(name: \"Before\", type: \"Type\", in: app)\n+        let app = try launchWithProductDetail(name: \"Before\", type: \"Type\")\n         openEditing(in: app)\n         try replaceFormValue(\"   \", field: \"product-form-name\", in: app)\n         try replaceFormValue(\"Edited\", field: \"product-form-type\", in: app)\n@@ -727,9 +691,7 @@ final class SeasoningManagerProductUITests: XCTestCase {\n \n     @MainActor\n     func testOptionalEditingCancelAndClearLastNutrient() throws {\n-        let app = makeApplication()\n-        app.launch()\n-        try registerAndOpenDetail(name: \"Clear\", type: \"Type\", in: app)\n+        let app = try launchWithProductDetail(name: \"Clear\", type: \"Type\")\n         openEditing(in: app)\n         try replaceFormValue(\"0\", field: \"product-form-price\", in: app)\n         try replaceFormValue(\"0\", field: \"product-form-calories\", in: app)\n@@ -866,14 +828,13 @@ extension XCTestCase {\n     }\n \n     @MainActor\n-    fileprivate func registerAndOpenDetail(name: String, type: String, in app: XCUIApplication) throws {\n-        openRegistration(in: app)\n-        try enterProduct(name: name, type: type, in: app)\n-        app.buttons[\"product-form-save\"].tap()\n+    fileprivate func launchWithProductDetail(name: String, type: String) throws -> XCUIApplication {\n+        let app = try launchWithProducts([name: type])\n         let row = productRow(name: name, type: type, in: app)\n         XCTAssertTrue(row.waitForExistence(timeout: 5))\n         row.tap()\n         assertDetail(name: name, type: type, in: app)\n+        return app\n     }\n \n     @MainActor\n@@ -972,6 +933,15 @@ extension XCTestCase {\n         return app\n     }\n \n+    @MainActor\n+    fileprivate func launchWithProducts(_ typesByName: [String: String]) throws -> XCUIApplication {\n+        let app = makeApplication()\n+        let json = try JSONEncoder().encode(typesByName)\n+        app.launchEnvironment[\"UI_TEST_PRODUCT_TYPES_BY_NAME\"] = String(decoding: json, as: UTF8.self)\n+        app.launch()\n+        return app\n+    }\n+\n     @MainActor\n     fileprivate func openRegistration(in app: XCUIApplication) {\n         let productList = app.navigationBars[\"商品一覧\"]",
+          "patchLines": 190,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
