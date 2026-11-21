@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "pr": 146,
+  "sha": "28601aa66c2d5d27555f89de45928081ebd9b500",
+  "overview": {
+    "title": "基準量を現在位置から探す",
+    "lead": "カロリー欄を確かめた直後は次の欄が下にある。この手がかりをテストの探索だけに使う。",
+    "before": [
+      {
+        "text": "基準量がまだ見えないとき、上方向を最大12回探してから下へ進んでいた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "カロリーの下にある基準量は現在位置から探し、操作できる欄で値を確認する。"
+      }
+    ]
+  },
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "フォームの空欄検証",
+      "role": "実際の編集画面で値の消去を確かめる"
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "28601aa66c2d5d27555f89de45928081ebd9b500",
+      "phase": "core",
+      "role": "位置が分かる欄のための上端探索を省く",
+      "why": "過去の5実行で同じ確認の前に上方向へ12回ドラッグしていた。",
+      "review": [
+        "未発見の欄を空欄として扱っていないか。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "start": 752,
+          "end": 755,
+          "text": "基準量を確かめる1か所だけ指定を変える。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "ui",
+      "label": "商品編集",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "blank",
+      "suite": "ui",
+      "name": "testOptionalEditingCancelAndClearLastNutrient",
+      "techniques": [
+        "regression",
+        "state"
+      ],
+      "why": "栄養素が全て空なのに基準だけが保存される不具合を検出する。",
+      "given": "栄養素と基準を入力した商品がある",
+      "when": "最後の栄養素を消して保存し、編集画面を開き直す",
+      "then": "基準量と基準単位も空欄である",
+      "targets": [
+        "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 747,
+        "end": 755,
+        "text": "        // 最後の栄養素だけ消し、欄に残った基準が保存されないことを再編集で確かめる。\n        try replaceFormValue(\"\", field: \"product-form-price\", in: app)\n        try replaceFormValue(\"\", field: \"product-form-calories\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        openEditing(in: app)\n        try assertBlankOptionalField(\"product-form-price\", in: app)\n        try assertBlankOptionalField(\"product-form-calories\", in: app)\n        try assertBlankOptionalField(\"product-form-basis-amount\", in: app, searchFromTopIfMissing: false)\n        try assertBlankOptionalField(\"product-form-basis-unit\", in: app)"
+      }
+    }
+  ],
+  "impact": {
+    "title": "再編集時の空欄を少ない画面移動で確認する",
+    "lead": "アプリの保存や画面表示に変更はありません。変わるのは自動テストの操作だけです。",
+    "changed": {
+      "before": [
+        {
+          "text": "基準量がまだ見えないとき、上方向を最大12回探してから下へ進んでいた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "カロリーの下にある基準量は現在位置から探し、操作できる欄で値を確認する。"
+        }
+      ]
+    },
+    "kept": [
+      {
+        "text": "最後の栄養素を消して保存すると、基準量と基準単位も空欄であることを確認します。",
+        "tests": [
+          "blank"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "default",
+      "kind": "language",
+      "category": "Swift",
+      "label": "既定の引数で従来の探索を残す",
+      "gist": "Swiftの引数は省略したときに使う値を宣言できます。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 791,
+            "end": 798,
+            "text": "    fileprivate func formField(\n        _ identifier: String, in app: XCUIApplication, searchFromTopIfMissing: Bool = true\n    ) throws -> XCUIElement {\n        let field = app.textFields[identifier]\n        // 欄の方向が不明なときだけ上端へ戻してから探す。\n        if searchFromTopIfMissing, !field.exists {\n            for _ in 0..<12 {\n                if field.exists {"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "指定を省いた呼び出しには true が入り、従来の存在確認を行います。false の場合は上端を探す分岐に入りません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "lineRange": {
+            "start": 791,
+            "end": 798
+          },
+          "text": "既定の引数で従来の探索を残す"
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "kind": "codebase",
+      "category": "UIテスト",
+      "label": "欄を見つけることと空欄であることを分ける",
+      "gist": "見えていない欄を空欄として成功させず、操作できる欄を取得してから実際の値を読みます。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 864,
+            "end": 870,
+            "text": "    fileprivate func assertBlankOptionalField(\n        _ identifier: String, in app: XCUIApplication, searchFromTopIfMissing: Bool = true\n    ) throws {\n        let field = try formField(identifier, in: app, searchFromTopIfMissing: searchFromTopIfMissing)\n        let value = try XCTUnwrap(field.value as? String)\n        XCTAssertTrue([\"\", field.placeholderValue ?? \"\"].contains(value))\n    }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "探索の開始位置が変わっても、実際の値を読み、空文字かプレースホルダーであることを検証します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "lineRange": {
+            "start": 864,
+            "end": 870
+          },
+          "text": "欄を見つけることと空欄であることを分ける"
+        }
+      ]
+    }
+  ]
+}
