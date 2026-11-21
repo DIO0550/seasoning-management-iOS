@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "pr": 145,
+  "sha": "a40fc72d8eb79c95dd30e4e81892e44bacf3d193",
+  "overview": {
+    "title": "登録済みの商品からUIテストを始める",
+    "lead": "11件で検証対象ではない商品入力を省き、編集・削除・在庫の画面操作に直接進む。",
+    "before": [
+      {
+        "text": "編集や在庫の検証でも、前提の商品をフォームから登録していた。"
+      }
+    ],
+    "after": [
+      {
+        "text": "検証に必要な商品だけを初回起動で用意する。",
+        "message": "launch"
+      }
+    ]
+  },
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+      "name": "テスト用の保存先",
+      "role": "初回だけ指定の商品を保存する"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "テストの開始条件",
+      "role": "ケースごとに異なる保存先と商品を指定する"
+    }
+  ],
+  "messages": [
+    {
+      "id": "launch",
+      "from": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "to": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+      "kind": "cmd",
+      "name": "商品を指定して起動",
+      "code": "app.launch()",
+      "via": "exec",
+      "payload": "ストア識別子、名前から種類への対応表",
+      "status": "added"
+    }
+  ],
+  "flows": [
+    {
+      "id": "seed",
+      "label": "初めから商品がある場合",
+      "steps": [
+        "launch"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "a40fc72d8eb79c95dd30e4e81892e44bacf3d193",
+      "phase": "core",
+      "role": "前提作りを登録画面から分離する",
+      "why": "後続操作と無関係なキー入力や要素待ちでCIの時間を使わないため。",
+      "flows": [
+        "seed"
+      ],
+      "review": [
+        "商品を全件削除して再起動したとき、初期データが戻らないか。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+          "start": 47,
+          "end": 51,
+          "text": "ストアを開く前にファイルの有無を確かめる。件数は初回判定に使わない。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "ui",
+      "label": "商品と在庫の操作",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "delete",
+      "suite": "ui",
+      "name": "testProductDeletionRequiresConfirmationAndSurvivesRelaunch",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "削除した初期データが再び現れる不具合を見つける。",
+      "given": "在庫のない商品が1件ある",
+      "when": "削除を確認しアプリを再起動する",
+      "then": "一覧は空のまま",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift"
+      ],
+      "covers": [
+        "launch"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 509,
+        "end": 519,
+        "text": "        confirm.tap()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(row.exists)\n        app.terminate()\n        app.launch()\n\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].waitForExistence(timeout: 5))\n        XCTAssertTrue(app.staticTexts[\"商品はまだありません\"].waitForExistence(timeout: 5))\n        XCTAssertFalse(productRow(name: \"Delete\", type: \"Type\", in: app).exists)"
+      }
+    },
+    {
+      "id": "stock",
+      "suite": "ui",
+      "name": "testDeletingOneItemRequiresConfirmationAndKeepsSibling",
+      "techniques": [
+        "state"
+      ],
+      "why": "同じ商品の別の1本を誤って削除しない。",
+      "given": "同じ商品に期限の異なる2本の在庫がある",
+      "when": "期限未設定の1本だけ削除する",
+      "then": "期限のある1本が残る",
+      "targets": [
+        "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+      ],
+      "covers": [
+        "launch"
+      ],
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 178,
+        "end": 186,
+        "text": "        delete.tap()\n        confirmation.buttons[\"削除する\"].firstMatch.tap()\n        XCTAssertTrue(inventory.waitForExistence(timeout: 5))\n        XCTAssertFalse(target.exists)\n        assertInventoryItemDetail(name: name, hasExpiration: true, in: app)\n\n        app.terminate()\n        app.launch()\n        XCTAssertTrue(productRow(name: name, type: type, unopened: 1, in: app).waitForExistence(timeout: 5))"
+      }
+    }
+  ],
+  "impact": {
+    "title": "商品登録以外の操作をすぐ検証できる",
+    "lead": "利用者の商品一覧や登録画面の操作は変わりません。変わるのは自動テストの開始時点です。",
+    "changed": {
+      "before": [
+        {
+          "text": "編集や在庫の検証でも、前提の商品をフォームから登録していた。"
+        }
+      ],
+      "after": [
+        {
+          "text": "検証に必要な商品だけを初回起動で用意する。",
+          "message": "launch"
+        }
+      ]
+    },
+    "kept": [
+      {
+        "text": "削除して再起動しても商品は復活しません。",
+        "tests": [
+          "delete"
+        ]
+      },
+      {
+        "text": "在庫を1本だけ削除しても、別の1本は残ります。",
+        "tests": [
+          "stock"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "env",
+      "kind": "language",
+      "category": "XCTest",
+      "label": "起動時の環境変数",
+      "gist": "テストを動かすプロセスとアプリは別です。アプリに初期値を伝えるには、起動時の文字列の設定を使えます。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 937,
+            "end": 942,
+            "text": "    fileprivate func launchWithProducts(_ typesByName: [String: String]) throws -> XCUIApplication {\n        let app = makeApplication()\n        let json = try JSONEncoder().encode(typesByName)\n        app.launchEnvironment[\"UI_TEST_PRODUCT_TYPES_BY_NAME\"] = String(decoding: json, as: UTF8.self)\n        app.launch()\n        return app"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`launchEnvironment` に入れるため、辞書をJSONの文字列にします。`launch()` の前に設定すると、新しく起動するアプリがその値を読めます。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "text": "商品名と種類を渡す"
+        }
+      ]
+    },
+    {
+      "id": "once",
+      "kind": "codebase",
+      "category": "SwiftData",
+      "label": "ストアの初回起動",
+      "gist": "再起動のたびに商品を足すと、削除後に空であることを検証できません。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+            "start": 45,
+            "end": 56,
+            "text": "            let url = FileManager.default.temporaryDirectory\n                .appendingPathComponent(\"SeasoningManagerUITests-\\(storeID.uuidString).store\")\n            let isNewStore = !FileManager.default.fileExists(atPath: url.path)\n            let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)\n            let container = try ModelContainer(for: schema, configurations: [configuration])\n            // 全商品を削除した後の再起動でも、初期データを復活させない。\n            if isNewStore, let json = ProcessInfo.processInfo.environment[\"UI_TEST_PRODUCT_TYPES_BY_NAME\"] {\n                let products = try JSONDecoder().decode([String: String].self, from: Data(json.utf8))\n                let actions = ProductActions(context: container.mainContext)\n                for (name, type) in products {\n                    _ = try actions.create(from: ProductDraft(name: name, type: type)).get()\n                }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "識別子に対応するファイルの有無をストアを開く前に調べます。新規かつ商品指定があるときだけ、通常の登録処理で商品を保存します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/SeasoningManagerApp.swift",
+          "text": "新しいテスト用保存先を準備する"
+        }
+      ],
+      "tests": [
+        "delete"
+      ]
+    }
+  ]
+}
