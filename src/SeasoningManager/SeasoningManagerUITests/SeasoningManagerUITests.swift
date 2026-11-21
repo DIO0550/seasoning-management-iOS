@@ -751,7 +751,7 @@ final class SeasoningManagerProductUITests: XCTestCase {
         openEditing(in: app)
         try assertBlankOptionalField("product-form-price", in: app)
         try assertBlankOptionalField("product-form-calories", in: app)
-        try assertBlankOptionalField("product-form-basis-amount", in: app)
+        try assertBlankOptionalField("product-form-basis-amount", in: app, searchFromTopIfMissing: false)
         try assertBlankOptionalField("product-form-basis-unit", in: app)
     }
 
@@ -788,10 +788,12 @@ extension XCTestCase {
     }
 
     @MainActor
-    fileprivate func formField(_ identifier: String, in app: XCUIApplication) throws -> XCUIElement {
+    fileprivate func formField(
+        _ identifier: String, in app: XCUIApplication, searchFromTopIfMissing: Bool = true
+    ) throws -> XCUIElement {
         let field = app.textFields[identifier]
-        // 未生成のセルは、上端へ戻してから下へ探す。各操作の前に領域を取り直す。
-        if !field.exists {
+        // 欄の方向が不明なときだけ上端へ戻してから探す。
+        if searchFromTopIfMissing, !field.exists {
             for _ in 0..<12 {
                 if field.exists {
                     break
@@ -859,8 +861,10 @@ extension XCTestCase {
     }
 
     @MainActor
-    fileprivate func assertBlankOptionalField(_ identifier: String, in app: XCUIApplication) throws {
-        let field = try formField(identifier, in: app)
+    fileprivate func assertBlankOptionalField(
+        _ identifier: String, in app: XCUIApplication, searchFromTopIfMissing: Bool = true
+    ) throws {
+        let field = try formField(identifier, in: app, searchFromTopIfMissing: searchFromTopIfMissing)
         let value = try XCTUnwrap(field.value as? String)
         XCTAssertTrue(["", field.placeholderValue ?? ""].contains(value))
     }
