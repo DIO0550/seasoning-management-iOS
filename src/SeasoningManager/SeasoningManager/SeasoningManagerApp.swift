@@ -16,35 +16,48 @@ struct SeasoningManagerApp: App {
             Item.self,
             Product.self,
         ])
-        let modelConfiguration = SeasoningManagerApp.makeConfiguration(for: schema)
-
         do {
+            #if DEBUG
+                if let container = try SeasoningManagerApp.makeUITestContainer(for: schema) {
+                    return container
+                }
+            #endif
+
+            let modelConfiguration = ModelConfiguration(
+                schema: schema, isStoredInMemoryOnly: false, cloudKitDatabase: .none
+            )
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
 
-    private static func makeConfiguration(for schema: Schema) -> ModelConfiguration {
-        #if DEBUG
+    #if DEBUG
+        private static func makeUITestContainer(for schema: Schema) throws -> ModelContainer? {
             let arguments = ProcessInfo.processInfo.arguments
-            if let optionIndex = arguments.firstIndex(of: "--ui-test-store-id"),
+            guard let optionIndex = arguments.firstIndex(of: "--ui-test-store-id"),
                 arguments.indices.contains(optionIndex + 1),
                 let storeID = UUID(uuidString: arguments[optionIndex + 1])
-            {
-                // テストごとに分離し、同じテスト内の再起動では同じストアを読む。
-                let url = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("SeasoningManagerUITests-\(storeID.uuidString).store")
-                return ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+            else {
+                return nil
             }
-        #endif
 
-        return ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: .none
-        )
-    }
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("SeasoningManagerUITests-\(storeID.uuidString).store")
+            let isNewStore = !FileManager.default.fileExists(atPath: url.path)
+            let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+            let container = try ModelContainer(for: schema, configurations: [configuration])
+            // 全商品を削除した後の再起動でも、初期データを復活させない。
+            if isNewStore, let json = ProcessInfo.processInfo.environment["UI_TEST_PRODUCT_TYPES_BY_NAME"] {
+                let products = try JSONDecoder().decode([String: String].self, from: Data(json.utf8))
+                let actions = ProductActions(context: container.mainContext)
+                for (name, type) in products {
+                    _ = try actions.create(from: ProductDraft(name: name, type: type)).get()
+                }
+            }
+            return container
+        }
+    #endif
 
     var body: some Scene {
         WindowGroup {
