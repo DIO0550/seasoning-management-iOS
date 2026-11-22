@@ -316,7 +316,8 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
 
     @MainActor
     private func assertSelectedItemProduct(name: String, type: String, in app: XCUIApplication) {
-        let form = app.collectionViews.element
+        // 予測変換バーを拾わないよう、formInteractionFrame と同じくアプリのウィンドウに限定する。
+        let form = app.windows.firstMatch.collectionViews.firstMatch
         XCTAssertTrue(form.appears(within: 5))
         let nameRow = form.descendants(matching: .any).matching(identifier: "item-form-product-name").element
         let typeRow = form.descendants(matching: .any).matching(identifier: "item-form-product-type").element
