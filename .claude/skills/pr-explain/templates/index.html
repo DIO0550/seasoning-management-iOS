@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZB+8zIb9TFy7ktuxnc11p67xetvy1scuToz/gTpKkU0='; style-src 'unsafe-inline'; font-src 'none'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-KGaCKrLVeBOb5tj+abwBGDCIX/+YXWjiDfs98u/Kxtc='; style-src 'unsafe-inline'; font-src 'none'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PR 解説</title>
 <style>
@@ -1009,39 +1009,77 @@ button.change-item:hover { background: var(--track); }
       return Token(cursor.text[cursor.at + word.length] === "(" ? "tok-fn" : null, word);
     };
 
+    /** シェルの `${` が待つ `}` の枠。`end` は、閉じたらその `}` の次の位置、行内で閉じなければ -1、まだ分からなければ null。 */
+    const BraceFrame = () => ({ end: null });
+    /** シェルの `${…}` の中の `"…"` が待つ閉じ記号。 */
+    const QuoteClose = '"';
+
     /**
      * シェルの `${` の直後(`from`)から、対応する `}` の次の位置。`'…'` の外の `\` の次の字は飛ばす。`'…'` の中は次の `'` まで
      * 字のまま(`\` も `${` も読まない)。`${` は `"…"` の中でも入れ子にし、`"` と `'` は `}` を待っている間だけ引用符として読む。
+     *
+     * 行の中で閉じない `${` が続くと、`$` ごとに行末まで読み直すことになる。そこで、`}` を待つ枠(`{end}`)を `${` ごとに作り、
+     * `}` を待っている間に通った位置に、その位置で待っていた枠を `ends` へ覚える。読み進める動きは今の閉じ記号と字だけで
+     * 決まるので、覚えた位置から読み直すと、その枠と同じ動きになり、結果は枠の `end`(閉じたらその `}` の次の位置、閉じなければ
+     * -1)と同じになる。覚えた位置に来たら枠の `end` まで飛ぶので、1 行の中で `}` を待つ位置を読むのは 1 度ずつになる。
+     * @param ends 位置から、その位置で `}` を待っていた枠への表。行(と埋め込み)ごとに `readingFrom` が作る
      * @returns 対応する `}` の次の位置。行内で閉じなければ -1
      */
-    const bracedVariableEndOf = (text, from) => {
-      // 待っている閉じ記号(`}` か `"`)を開いた順に並べた文字列。末尾が今の閉じ記号。
-      let closes = "}";
+    const bracedVariableEndOf = (text, from, ends) => {
+      const known = ends.get(from);
+      if (known !== undefined) return known.end;
+      // 待っている閉じ記号を開いた順に並べる。`}` は枠、`"` は QuoteClose。末尾が今の閉じ記号。
+      const closes = [BraceFrame()];
+      // 行内で閉じなかった。まだ開いている枠は、どの位置から読み直しても閉じない。
+      const fail = () => {
+        closes.forEach((close) => {
+          if (close !== QuoteClose) close.end = -1;
+        });
+        return -1;
+      };
+      // 枠を `end` で閉じる。外の閉じ記号が無ければ、読み終わり。
+      const closeBrace = (frame, end) => {
+        frame.end = end;
+        closes.pop();
+        return closes.length === 0;
+      };
       let at = from;
       while (at < text.length) {
-        const char = text[at];
         const close = closes[closes.length - 1];
+        const waitsBrace = close !== QuoteClose;
+        const seen = waitsBrace ? ends.get(at) : undefined;
+        if (seen !== undefined) {
+          // 前に読んだ位置。その枠の結果へ飛ぶ(この読みの枠は、まだ覚えていない位置にしか無い)。
+          if (seen.end < 0) return fail();
+          at = seen.end;
+          if (closeBrace(close, at)) return at;
+          continue;
+        }
+        if (waitsBrace) ends.set(at, close);
+        const char = text[at];
         if (char === "\\") {
           at += 2;
-        } else if (char === close) {
-          closes = closes.slice(0, -1);
-          if (closes === "") return at + 1;
+        } else if (waitsBrace && char === "}") {
+          at += 1;
+          if (closeBrace(close, at)) return at;
+        } else if (!waitsBrace && char === '"') {
+          closes.pop();
           at += 1;
         } else if (text.startsWith("${", at)) {
-          closes += "}";
+          closes.push(BraceFrame());
           at += 2;
-        } else if (close === "}" && char === '"') {
-          closes += '"';
+        } else if (waitsBrace && char === '"') {
+          closes.push(QuoteClose);
           at += 1;
-        } else if (close === "}" && char === "'") {
+        } else if (waitsBrace && char === "'") {
           const quoteEnd = text.indexOf("'", at + 1);
-          if (quoteEnd < 0) return -1;
+          if (quoteEnd < 0) return fail();
           at = quoteEnd + 1;
         } else {
           at += 1;
         }
       }
-      return -1;
+      return fail();
     };
 
     /**
@@ -1054,7 +1092,7 @@ button.change-item:hover { background: var(--track); }
         const variable = matchAt(ShellVariable, cursor);
         return variable ? Token("tok-var", variable) : null;
       }
-      const end = bracedVariableEndOf(cursor.text, cursor.at + 2);
+      const end = bracedVariableEndOf(cursor.text, cursor.at + 2, cursor.variableEnds);
       return end < 0 ? null : Token("tok-var", cursor.text.slice(cursor.at, end));
     };
 
@@ -1264,7 +1302,9 @@ button.change-item:hover { background: var(--track); }
         const grammar = inside === null ? base : grammarIn(inside);
         const closeAt = inside !== null && inside.kind === "element" ? lower.indexOf(`</${inside.name}`, from) : -1;
         const view = closeAt < 0 ? text : text.slice(0, closeAt);
-        return { grammar, closeAt, view, declarationStops: grammar.css === true ? declarationStopsOf(view) : null };
+        // シェルの `${` の読みの結果は、同じ行(と埋め込み)の中で使い回す(bracedVariableEndOf)。
+        const variableEnds = grammar.variables === true ? new Map() : null;
+        return { grammar, closeAt, view, declarationStops: grammar.css === true ? declarationStopsOf(view) : null, variableEnds };
       };
       let { open, region, brackets } = carry;
       let at = 0;
@@ -1283,8 +1323,8 @@ button.change-item:hover { background: var(--track); }
           switchTo(null);
           continue;
         }
-        const { grammar, view, declarationStops } = reading;
-        const cursor = { text: view, at, prev: at > 0 ? text[at - 1] : "\n", lineStart, bracket: brackets.slice(-1), declarationStops, ...solid };
+        const { grammar, view, declarationStops, variableEnds } = reading;
+        const cursor = { text: view, at, prev: at > 0 ? text[at - 1] : "\n", lineStart, bracket: brackets.slice(-1), declarationStops, variableEnds, ...solid };
         const readAt = tokenReaderOf(grammar, cursor.bracket);
         const token = open ? continuationOf(cursor, open) : readAt(cursor, grammar) || Token(null, text[at]);
         tokens.push(token);
