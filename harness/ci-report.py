@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pass compact Xcode results to the comment job without uploading artifacts."""
+"""Pass compact Xcode results to the comment job through a job output (not an artifact)."""
 
 import json
 import math
@@ -10,12 +10,8 @@ import sys
 from pathlib import Path
 
 
-OUTPUTS = {
-    "SeasoningManagerTests": "unit_report",
-    "SeasoningManagerUITests": "ui_report",
-    "SeasoningManagerUITests/SeasoningManagerInventoryUITests": "ui_inventory_report",
-    "SeasoningManagerUITests/SeasoningManagerProductUITests": "ui_product_report",
-}
+# Each matrix job names its own job-output key; the workflow maps it to the comment job.
+REPORT_KEY = re.compile(r"[a-z][a-z0-9_]*_report")
 MAX_OUTPUT_CHARACTERS = 60_000  # ASCII JSON fits Actions outputs and a Linux env variable.
 
 
@@ -115,8 +111,10 @@ def coverage_ratio(item):
 
 
 def main():
-    target = os.environ["TEST_TARGET"]
-    output_name = OUTPUTS[target]
+    output_name = os.environ.get("HARNESS_REPORT_KEY", "")
+    if REPORT_KEY.fullmatch(output_name) is None:
+        print(f"::error::Invalid HARNESS_REPORT_KEY: {output_name!r}", file=sys.stderr)
+        return 2
     bundle = os.environ["HARNESS_RESULT_BUNDLE"]
     report = {"runId": os.environ["GITHUB_RUN_ID"], "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "summary": None, "coverage": None, "tests": None, "errors": []}

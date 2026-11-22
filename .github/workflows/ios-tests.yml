@@ -14,41 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests:
-    name: ${{ matrix.name }}
-    # Distinct keys combine both matrix results regardless of completion order.
-    outputs:
-      unit_report: ${{ steps.collect.outputs.unit_report }}
-      ui_inventory_report: ${{ steps.collect.outputs.ui_inventory_report }}
-      ui_product_report: ${{ steps.collect.outputs.ui_product_report }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Unit tests
-            target: SeasoningManagerTests
-            bundle: SeasoningManagerTests
-            timeout: 30
-          - name: UI tests (在庫)
-            target: SeasoningManagerUITests/SeasoningManagerInventoryUITests
-            bundle: SeasoningManagerUITests-inventory
-            timeout: 45
-          - name: UI tests (商品)
-            target: SeasoningManagerUITests/SeasoningManagerProductUITests
-            bundle: SeasoningManagerUITests-product
-            timeout: 45
+  # 各テストジョブで同じビルドを繰り返さないよう、build-for-testing を1回だけ行い成果物を渡す。
+  build:
+    name: Build for testing
     # iOS 27.0 is the minimum deployment target decided in #13.
     runs-on: xcode-27
-    # UI全件とビルドが30分で繰り返し中断され、シミュレータクローン2台の並列でも
-    # ランナーのCPU分割で遅くなるため、UIテストをクラス別の2ジョブに分けて並行させる。
-    timeout-minutes: ${{ matrix.timeout }}
+    timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       PROJECT: src/SeasoningManager/SeasoningManager.xcodeproj
       SCHEME: SeasoningManager
-      TEST_TARGET: ${{ matrix.target }}
-      # クローン2台がランナーのCPUを分けて遅くなるため、CIでは直列にする。
-      HARNESS_PARALLEL_TESTS: NO
     defaults:
       run:
         shell: bash
@@ -66,7 +41,8 @@ jobs:
           xcrun simctl list devices available
           xcodebuild -showdestinations -project "$PROJECT" -scheme "$SCHEME"
 
-      - name: Select and boot an available iOS 27.0 simulator
+      # ビルドは destination の選択だけに使い、シミュレータは起動しない。
+      - name: Select an available iOS 27.0 simulator
         run: |
           simulator_id=$(xcrun simctl list devices available --json | jq -er '
             [.devices["com.apple.CoreSimulator.SimRuntime.iOS-27-0"][]?
@@ -75,25 +51,150 @@ jobs:
           ')
           echo "SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
           echo "Selected simulator: $simulator_id"
-          xcrun simctl bootstatus "$simulator_id" -b
+
+      - name: Build for testing
+        env:
+          HARNESS_XCODE_ACTION: build-for-testing
+          HARNESS_DERIVED_DATA: ${{ runner.temp }}/DerivedData
+        run: |
+          bash harness/test-ios.sh all "platform=iOS Simulator,id=$SIMULATOR_ID"
+
+      # tar で包み、artifact の zip 化で実行権限やシンボリックリンクが失われないようにする。
+      - name: Package test products
+        run: |
+          products="$RUNNER_TEMP/DerivedData/Build/Products"
+          count=$(find "$products" -maxdepth 1 -name '*.xctestrun' | wc -l | tr -d ' ')
+          if [[ "$count" != 1 ]]; then
+            echo "::error::Expected exactly one .xctestrun in $products, found $count"
+            exit 1
+          fi
+          tar -C "$RUNNER_TEMP/DerivedData/Build" -cf "$RUNNER_TEMP/test-products.tar" Products
+          ls -l "$RUNNER_TEMP/test-products.tar"
+
+      # 名前に attempt を付けず上書きするため、失敗ジョブだけの再実行でも保持期間内なら同じ成果物を使える。
+      - name: Upload test products
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-products
+          path: ${{ runner.temp }}/test-products.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+
+  tests:
+    name: ${{ matrix.name }}
+    needs: build
+    # Distinct keys combine every matrix result regardless of completion order.
+    outputs:
+      unit_report: ${{ steps.collect.outputs.unit_report }}
+      ui_product_1_report: ${{ steps.collect.outputs.ui_product_1_report }}
+      ui_product_2_report: ${{ steps.collect.outputs.ui_product_2_report }}
+      ui_inventory_1_report: ${{ steps.collect.outputs.ui_inventory_1_report }}
+      ui_rest_report: ${{ steps.collect.outputs.ui_rest_report }}
+    strategy:
+      fail-fast: false
+      # macOS ランナーの同時実行上限5に合わせ、Unit 1 + UI 4 に分ける。
+      # 名前つきシャードは実測時間でほぼ均等に配分し、その他は名前つきを除く残り（新規の UI テストを含む）。
+      # 偏りが出たら名前つきシャードとその他の間でテストを入れ替える。
+      matrix:
+        include:
+          - name: Unit tests
+            report: unit_report
+            only: "SeasoningManagerTests"
+            skip: ""
+            timeout: 15
+          - name: UI tests (商品1)
+            report: ui_product_1_report
+            only: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputErrorsKeepValuesAndAllowCorrection,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationCancelAndBackDiscardInput"
+            skip: ""
+            timeout: 25
+          - name: UI tests (商品2)
+            report: ui_product_2_report
+            only: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputsSaveAndReopenAfterRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductEditingSavesToDetailsAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductDeletionRequiresConfirmationAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch"
+            skip: ""
+            timeout: 25
+          - name: UI tests (在庫1)
+            report: ui_inventory_1_report
+            only: "SeasoningManagerUITests/SeasoningManagerInventoryUITests/testProductPickerReselectionAndBackPreserveExpiration,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testEmptyInventoryCancelsProductRegistrationWithoutAddingStock,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testDeletingOneItemRequiresConfirmationAndKeepsSibling"
+            skip: ""
+            timeout: 25
+          - name: UI tests (その他)
+            report: ui_rest_report
+            only: "SeasoningManagerUITests"
+            skip: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputErrorsKeepValuesAndAllowCorrection,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationCancelAndBackDiscardInput,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputsSaveAndReopenAfterRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductEditingSavesToDetailsAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductDeletionRequiresConfirmationAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testProductPickerReselectionAndBackPreserveExpiration,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testEmptyInventoryCancelsProductRegistrationWithoutAddingStock,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testDeletingOneItemRequiresConfirmationAndKeepsSibling"
+            timeout: 25
+    runs-on: xcode-27
+    timeout-minutes: ${{ matrix.timeout }}
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+      # クローン2台がランナーのCPUを分けて遅くなるため、CIでは直列にする。
+      HARNESS_PARALLEL_TESTS: NO
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # 起動を待たずに次へ進み、成果物のダウンロードと展開に重ねる。
+      - name: Select and start booting an iOS 27.0 simulator
+        run: |
+          simulator_id=$(xcrun simctl list devices available --json | jq -er '
+            [.devices["com.apple.CoreSimulator.SimRuntime.iOS-27-0"][]?
+             | select(.isAvailable and (.name | startswith("iPhone")))][0].udid
+            // error("No available iPhone simulator for iOS 27.0")
+          ')
+          echo "SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          echo "Selected simulator: $simulator_id"
+          # 起動済みなどで失敗しても、後の bootstatus -b が起動と完了を確かめる。
+          xcrun simctl boot "$simulator_id" || echo "::notice::simctl boot did not start; bootstatus will retry."
+
+      - name: Download test products
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: test-products
+          path: ${{ runner.temp }}/test-products
+
+      - name: Unpack test products
+        run: |
+          tar -C "$RUNNER_TEMP/test-products" -xf "$RUNNER_TEMP/test-products/test-products.tar"
+          products="$RUNNER_TEMP/test-products/Products"
+          count=$(find "$products" -maxdepth 1 -name '*.xctestrun' | wc -l | tr -d ' ')
+          if [[ "$count" != 1 ]]; then
+            echo "::error::Expected exactly one .xctestrun in $products, found $count"
+            exit 1
+          fi
+          xctestrun=$(find "$products" -maxdepth 1 -name '*.xctestrun')
+          echo "HARNESS_XCTESTRUN=$xctestrun" >> "$GITHUB_ENV"
+          echo "Test run file: $xctestrun"
+
+      - name: Wait for the simulator to boot
+        run: |
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
 
       - name: Run tests
         env:
-          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.bundle }}.xcresult
+          HARNESS_XCODE_ACTION: test-without-building
+          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.report }}.xcresult
+          HARNESS_SKIP_TESTING: ${{ matrix.skip }}
+          TEST_ONLY: ${{ matrix.only }}
         run: |
-          bash harness/test-ios.sh "$TEST_TARGET" "platform=iOS Simulator,id=$SIMULATOR_ID"
+          bash harness/test-ios.sh "$TEST_ONLY" "platform=iOS Simulator,id=$SIMULATOR_ID"
 
       - name: Collect results for PR comment
         id: collect
         if: always()
         env:
-          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.bundle }}.xcresult
+          HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.report }}.xcresult
+          HARNESS_REPORT_KEY: ${{ matrix.report }}
         run: |
           python3 harness/ci-report.py
 
   report:
     name: Report iOS test results
-    needs: tests
+    needs: [build, tests]
     if: ${{ always() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -108,8 +209,10 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           UNIT_REPORT: ${{ needs.tests.outputs.unit_report }}
-          UI_INVENTORY_REPORT: ${{ needs.tests.outputs.ui_inventory_report }}
-          UI_PRODUCT_REPORT: ${{ needs.tests.outputs.ui_product_report }}
+          UI_PRODUCT_1_REPORT: ${{ needs.tests.outputs.ui_product_1_report }}
+          UI_PRODUCT_2_REPORT: ${{ needs.tests.outputs.ui_product_2_report }}
+          UI_INVENTORY_1_REPORT: ${{ needs.tests.outputs.ui_inventory_1_report }}
+          UI_REST_REPORT: ${{ needs.tests.outputs.ui_rest_report }}
         with:
           script: |
             const marker = '<!-- seasoning-ios-test-report -->';
@@ -264,14 +367,22 @@ jobs:
             ];
             const reports = [
               ['Unit tests', 'Unit', 'UNIT_REPORT'],
-              ['UI tests (在庫)', 'UI(在庫)', 'UI_INVENTORY_REPORT'],
-              ['UI tests (商品)', 'UI(商品)', 'UI_PRODUCT_REPORT']
+              ['UI tests (商品1)', 'UI(商品1)', 'UI_PRODUCT_1_REPORT'],
+              ['UI tests (商品2)', 'UI(商品2)', 'UI_PRODUCT_2_REPORT'],
+              ['UI tests (在庫1)', 'UI(在庫1)', 'UI_INVENTORY_1_REPORT'],
+              ['UI tests (その他)', 'UI(その他)', 'UI_REST_REPORT']
             ].map(([jobName, name, variable]) => {
               const job = jobs.find(job => job.name === jobName);
               // Partial reruns can retain older outputs; never display those as this attempt.
               const report = job ? readReport(variable) : null;
               return { name, job, report };
             });
+            // Rows depend only on this attempt's jobs; a rerun without the build job shows it as unavailable.
+            const build = jobs.find(job => job.name === 'Build for testing');
+            lines.push(`| ビルド | ${statuses[build?.conclusion] ?? '⚪ 未完了・未取得'} | - | - | - |`);
+            // Table budgets were sized for three reports; scale them so the comment stays under the limit.
+            const highlightBudget = Math.floor(3_500 * 3 / reports.length);
+            const detailBudget = Math.floor(5_000 * 3 / reports.length);
             for (const { name, job, report } of reports) {
               const summary = report?.summary;
               const status = statuses[job?.conclusion] ?? '⚪ 未完了・未取得';
@@ -312,14 +423,14 @@ jobs:
                 continue;
               }
               lines.push(`**${name}** · ${low.length}件`, '',
-                ...table(fileHeaders, low.slice(0, 10).map(fileRow), 3500), '');
+                ...table(fileHeaders, low.slice(0, 10).map(fileRow), highlightBudget), '');
             }
             for (const { name, report } of reports) {
               lines.push('<details>', `<summary>📂 ${name} · ファイル別</summary>`, '');
               const files = report?.coverage?.files;
               if (Array.isArray(files) && files.length) {
                 const sorted = [...files].sort((a, b) => String(a?.path).localeCompare(String(b?.path)));
-                lines.push(...table(fileHeaders, sorted.map(fileRow), 5_000));
+                lines.push(...table(fileHeaders, sorted.map(fileRow), detailBudget));
               } else {
                 lines.push(Array.isArray(files) ? '0件' : '⚪ 未取得');
               }
@@ -331,7 +442,9 @@ jobs:
             }
 
             lines.push('---', '', '#### ⏱️ 実行時間', '',
-              '| 検証 | ビルド＋テスト | ジョブ全体 |', '| --- | ---: | ---: |');
+              '| 検証 | テスト | ジョブ全体 |', '| --- | ---: | ---: |');
+            const buildStep = build?.steps?.find(step => step.name === 'Build for testing');
+            lines.push(`| ビルド | ${duration(buildStep)} | ${duration(build)} |`);
             for (const { name, job } of reports) {
               const testStep = job?.steps?.find(step => step.name === 'Run tests');
               lines.push(`| ${name} | ${duration(testStep)} | ${duration(job)} |`);
@@ -349,14 +462,14 @@ jobs:
                 lines.push(`**${name}** · ⚪ 計測なし`, '');
                 continue;
               }
-              lines.push(`**${name}**`, '', ...table(testHeaders, slow.map(testRow), 3500), '');
+              lines.push(`**${name}**`, '', ...table(testHeaders, slow.map(testRow), highlightBudget), '');
             }
             for (const { name, report } of reports) {
               lines.push('<details>', `<summary>🔎 ${name} · 全テスト</summary>`, '');
               const tests = report?.tests;
               if (Array.isArray(tests) && tests.length) {
                 const sorted = [...tests].sort((a, b) => String(a?.name).localeCompare(String(b?.name)));
-                lines.push(...table(testHeaders, sorted.map(testRow), 5_000));
+                lines.push(...table(testHeaders, sorted.map(testRow), detailBudget));
               } else {
                 lines.push(Array.isArray(tests) ? '0件' : '⚪ 未取得');
               }
