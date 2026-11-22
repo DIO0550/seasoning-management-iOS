@@ -631,17 +631,33 @@ def wiring_errors(workflow):
                      "TEST_ONLY: ${{ matrix.only }}", 'bash harness/test-ios.sh "$TEST_ONLY" '):
         if required not in run:
             errors.append(f"Run tests step does not pass: {required}")
+    # The collector must read the bundle this shard wrote, not another shard's or a fixed path.
+    collect = step_block(tests, "Collect results for PR comment") or ""
+    bundles = [re.findall(r"^ +HARNESS_RESULT_BUNDLE: (.+)$", block, re.M) for block in (run, collect)]
+    if any(len(found) != 1 for found in bundles) or bundles[0] != bundles[1] or \
+            "${{ matrix.report }}" not in bundles[0][0]:
+        errors.append(f"Result bundle paths of Run tests and Collect differ or are not per shard: {bundles}")
     return errors
+
+
+def matrix_section(workflow):
+    """Return the tests job text from its matrix to runs-on, where shard entries must live."""
+    match = re.search(r"^ {6}matrix:\n(.*?)^ {4}runs-on:", job_blocks(workflow).get("tests", ""), re.M | re.S)
+    return match.group(1) if match else None
 
 
 def shard_configuration(workflow, sources):
     """Read the matrix with regular expressions and return (errors, shards, named tests)."""
     errors = wiring_errors(workflow)
-    shards = [match.groupdict() for match in SHARD.finditer(workflow)]
-    # Count fields anywhere (block or flow style, any indentation) so unparsed entries cannot hide.
-    counts = [len(re.findall(r"^ {10}- name: ", workflow, re.M)),
-              len(re.findall(r"(?<![\w.-])report:[ \t]", workflow)),
-              len(re.findall(r"(?<![\w.-])only:[ \t]", workflow))]
+    matrix = matrix_section(workflow)
+    if matrix is None:
+        errors.append("Test job has no matrix before runs-on")
+        matrix = ""
+    shards = [match.groupdict() for match in SHARD.finditer(matrix)]
+    # Count fields in the matrix only (block or flow style, any indentation) so unparsed entries cannot hide.
+    counts = [len(re.findall(r"(?<![\w.-])name:[ \t]", matrix)),
+              len(re.findall(r"(?<![\w.-])report:[ \t]", matrix)),
+              len(re.findall(r"(?<![\w.-])only:[ \t]", matrix))]
     if any(count != len(shards) for count in counts):
         errors.append(f"Matrix entry without name/report/only/skip/timeout in order: {counts} vs {len(shards)}")
     keys = [shard["report"] for shard in shards]
@@ -770,6 +786,9 @@ class WorkflowShardTests(unittest.TestCase):
                 self.assert_rejected("Matrix entry without", workflow)
 
     def test_reporter_lookups_and_matrix_wiring_must_exist(self):
+        before, _, after = self.workflow.rpartition(
+            "HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/${{ matrix.report }}.xcresult")
+        fixed = "HARNESS_RESULT_BUNDLE: ${{ runner.temp }}/results.xcresult"
         cases = {
             "Run tests step does not pass: HARNESS_SKIP_TESTING": self.workflow.replace(
                 "HARNESS_SKIP_TESTING: ${{ matrix.skip }}", "HARNESS_SKIP_TESTING: \"\""),
@@ -787,10 +806,24 @@ class WorkflowShardTests(unittest.TestCase):
                 "      - name: Run tests\n", "      - name: Test\n"),
             "Reporter must look up": self.workflow.replace(
                 "step.name === 'Run tests'", "step.name === 'Test'"),
+            # Only the Collect step (the last occurrence) reads a fixed path.
+            "Result bundle paths of Run tests and Collect differ": f"{before}{fixed}{after}",
+            "Test job has no matrix before runs-on": self.workflow.replace("      matrix:\n", "      grid:\n"),
         }
         for expected, workflow in cases.items():
             with self.subTest(expected=expected):
                 self.assert_rejected(expected, workflow)
+
+    def test_field_names_outside_the_matrix_are_not_counted(self):
+        workflow = self.workflow.replace(
+            "            const reports = [\n",
+            "            // report: one row per shard; only: this attempt's outputs.\n            const reports = [\n")
+        workflow = workflow.replace(
+            "  report:\n    name: Report iOS test results\n",
+            "  report:\n    # report: only: are words here, not matrix fields.\n    name: Report iOS test results\n")
+        self.assertEqual(workflow.count("report: one row"), 1)
+        self.assertEqual(workflow.count("# report: only:"), 1)
+        self.assertEqual(self.errors(workflow), [])
 
     def test_test_functions_outside_the_class_body_do_not_count(self):
         product = "final class SeasoningManagerProductUITests: XCTestCase {\n"

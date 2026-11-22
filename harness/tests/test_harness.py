@@ -297,11 +297,17 @@ class IOSTestCommandTests(unittest.TestCase):
     def test_runs_without_filters_on_every_available_bash(self):
         # macOS ships bash 3.2, where expanding an empty array under set -u is an error.
         shells = [shutil.which("bash")]
+        bash_3 = None
         if Path("/bin/bash").exists():
             version = subprocess.run(["/bin/bash", "-c", "echo ${BASH_VERSINFO[0]}"],
                                      capture_output=True, text=True).stdout.strip()
-            if version == "3" and "/bin/bash" not in shells:
-                shells.append("/bin/bash")
+            bash_3 = "/bin/bash" if version == "3" else None
+        if bash_3 and bash_3 not in shells:
+            shells.append(bash_3)
+        with self.subTest(shell="/bin/bash 3.x"):
+            if bash_3 is None:
+                # Report the missing bash 3.2 run (e.g. on Linux CI) instead of passing silently.
+                self.skipTest("bash 3.x compatibility not run: /bin/bash is missing or not 3.x")
         xctestrun = str(self.xctestrun())
         cases = {
             "test all": {},
