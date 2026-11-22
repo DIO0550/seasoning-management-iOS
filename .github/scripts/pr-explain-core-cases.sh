@@ -232,6 +232,12 @@ const hunkColorsOf = (patchLines, hunkOpeningLines, word) => {
   const grammar = Tokenizer.grammarOf("a.html");
   return file.body.hunks.map((hunk) => CommitDiff.lineTokensOf(hunk, grammar).flatMap((tokens) => tokens.filter((token) => token.value === word).map((token) => token.cls)));
 };
+// path の差分(地図の開いた行は無し)の hunk ごとに、行ごとの字句の並び。
+const hunkLineTokensOf = (path, patchLines) => {
+  const [file] = diffOf([diffFile(path, { patch: linesOf(patchLines) })], []).files;
+  const grammar = Tokenizer.grammarOf(path);
+  return file.body.hunks.map((hunk) => CommitDiff.lineTokensOf(hunk, grammar));
+};
 // 文脈の行 1 本だけを持つ hunk 2 つ。
 const twoScriptHunks = ["@@ -1,1 +1,1 @@", " const a = 1;", "@@ -10,1 +10,1 @@", " const b = 1;"];
 const scriptOpened = { old: "<script>", new: "<script>" };
@@ -2205,6 +2211,147 @@ const cases = [
     label: "色分け: シェルでは . の後の語をメンバーにしない(if .merged then . else の else はキーワードのまま)",
     actual: () => colorOf("a.sh", ["if .merged then . else"], { word: "else" }),
     expected: "tok-kw",
+  },
+  {
+    label: "色分け: 抜粋のシェルの ${…} は、中の引用符と入れ子の ${…} の } で閉じず、対応する } までを 1 つの変数にする(後ろの do はキーワード)",
+    actual: () => ExcerptRows.create({ path: "a.sh", start: 3, end: 3, text: 'for item in ${only_testing[@]+"${only_testing[@]}"}; do' })[0].tokens.filter((token) => token.cls !== null).map((token) => [token.cls, token.value]),
+    expected: [["tok-kw", "for"], ["tok-kw", "in"], ["tok-var", '${only_testing[@]+"${only_testing[@]}"}'], ["tok-kw", "do"]],
+  },
+  {
+    label: "色分け: コミットの差分の + の行でも、シェルの入れ子の ${…} を 1 つの変数にし、後ろの do はキーワード",
+    actual: () => {
+      const tokens = hunkLineTokensOf("a.sh", ["@@ -1,2 +1,2 @@", "-for item in $list; do", '+for item in ${only_testing[@]+"${only_testing[@]}"}; do', " done"])[0];
+      return [colorIn(tokens, 1, '${only_testing[@]+"${only_testing[@]}"}'), colorIn(tokens, 1, "do")];
+    },
+    expected: ["tok-var", "tok-kw"],
+  },
+  {
+    label: "色分け: シェルの ${…} は ' '・\" \"・入れ子の ${…}(\" \" の中の入れ子も)・\\ の後の } では閉じず、' ' の中は ${ と \\ も字のままで、行の最後の } まで取らない(後ろの ${b} は別の変数)",
+    actual: () => [
+      "echo ${a:-'}'} ${b}",
+      'echo ${a:-"\\"}"} ${b}',
+      "echo ${a:-\"'\"} ${b}",
+      "echo ${a:-${b}} ${c}",
+      "echo ${a:-\\}} ${b}",
+      "echo ${a:-'${'} ${b}",
+      "echo ${a:-'\\'} ${b}",
+      'echo ${a:-"${b:-"}"}"} ${c}',
+    ].map((line) => lineTokensOf("a.sh", [line])[0].filter((token) => token.cls === "tok-var").map((token) => token.value)),
+    expected: [
+      ["${a:-'}'}", "${b}"],
+      ['${a:-"\\"}"}', "${b}"],
+      ["${a:-\"'\"}", "${b}"],
+      ["${a:-${b}}", "${c}"],
+      ["${a:-\\}}", "${b}"],
+      ["${a:-'${'}", "${b}"],
+      ["${a:-'\\'}", "${b}"],
+      ['${a:-"${b:-"}"}"}', "${c}"],
+    ],
+  },
+  {
+    label: "色分け: シェルの $x・${x}・$1・$# は変数のままで、\" \" の中の $x・${x} は文字列の一部",
+    actual: () => ["$x", "${x}", "$1", "$#", '"$x"', '"${x}"'].map((word) => colorOf("a.sh", ['echo $x ${x} $1 $# "$x" "${x}"'], { word })),
+    expected: ["tok-var", "tok-var", "tok-var", "tok-var", "tok-str", "tok-str"],
+  },
+  {
+    label: "色分け: シェルの行内で閉じない ${ の $ は変数にせず、後ろを通常どおり読む(done はキーワード、\"x}; done と 'x}; done は文字列)",
+    actual: () => [
+      colorOf("a.sh", ["echo ${name; done"], { word: "$" }),
+      colorOf("a.sh", ["echo ${name; done"], { word: "done" }),
+      colorOf("a.sh", ['echo ${a:-"x}; done'], { word: "$" }),
+      colorOf("a.sh", ['echo ${a:-"x}; done'], { word: '"x}; done' }),
+      colorOf("a.sh", ["echo ${a:-'x}; done"], { word: "$" }),
+      colorOf("a.sh", ["echo ${a:-'x}; done"], { word: "'x}; done" }),
+    ],
+    expected: [null, "tok-kw", null, "tok-str", null, "tok-str"],
+  },
+  {
+    label: "色分け: シェルの行内で閉じない ${a ・${・\\${ が 4,000 回続く長い行でも、後ろの done はキーワード、どの $ も変数にせず(変数の字句は 0 個)、\"s\" は文字列",
+    actual: () => ["${a ", "${", "\\${"].map((unit) => {
+      const tokens = lineTokensOf("a.sh", ["echo " + unit.repeat(4000) + '"s" done']);
+      return [colorIn(tokens, 0, "done"), tokens[0].filter((token) => token.cls === "tok-var").length, colorIn(tokens, 0, '"s"')];
+    }),
+    expected: [["tok-kw", 0, "tok-str"], ["tok-kw", 0, "tok-str"], ["tok-kw", 0, "tok-str"]],
+  },
+  {
+    // 3 行目は、最初の ${a の読みが \${c を " " の中として読み、後から ${c を読み直すと、前に閉じた ${d} を越えて外の } まで進む。
+    label: "色分け: シェルの閉じない ${ の読みを使い回しても、その中で閉じた ${b}・${c:-x}・${a:-${b}}・${c:-${d}} は変数のままで、間の \"s\" は文字列",
+    actual: () => ['echo ${a ${a ${a ${b} "s" ${c:-x} done', "echo ${x ${a:-${b}} done", 'echo ${a:-"${b:-"\\${c:-${d}} done']
+      .map((line) => lineTokensOf("a.sh", [line])[0].filter((token) => token.cls !== null).map((token) => [token.cls, token.value])),
+    expected: [
+      [["tok-kw", "echo"], ["tok-var", "${b}"], ["tok-str", '"s"'], ["tok-var", "${c:-x}"], ["tok-kw", "done"]],
+      [["tok-kw", "echo"], ["tok-var", "${a:-${b}}"], ["tok-kw", "done"]],
+      [["tok-kw", "echo"], ["tok-str", '"${b:-"'], ["tok-var", "${c:-${d}}"], ["tok-kw", "done"]],
+    ],
+  },
+  {
+    // 1 行目は、最初の ${a の読みが " " の中として読んだ \${c を後から読み直すと、前の読みで閉じなかった ${d に来て、そこで閉じない
+    // と決まる。2 行目は、後から読み直す ${c が、前の読みでは " " の外だった x を " " の中として読み、"x" の後の } で閉じる。
+    label: "色分け: シェルの ${ の読み直しが、前の読みで閉じなかった ${d に来たら閉じず、前の読みと \" \" の内外が逆の位置でも \" \" を読み違えない",
+    actual: () => ['echo ${a:-"${b:-"\\${c ${d done', 'echo ${a:-"${b:-"\\${c:-"x"} done']
+      .map((line) => lineTokensOf("a.sh", [line])[0].filter((token) => token.cls !== null).map((token) => [token.cls, token.value])),
+    expected: [
+      [["tok-kw", "echo"], ["tok-str", '"${b:-"'], ["tok-kw", "done"]],
+      [["tok-kw", "echo"], ["tok-str", '"${b:-"'], ["tok-var", '${c:-"x"}'], ["tok-kw", "done"]],
+    ],
+  },
+  {
+    // 6 つの断片を 7 個並べた 279,936 行のすべてで、行の中の $ から読んだ字句を、その位置から切り出した行の先頭の字句と比べる。
+    // 行の中では前の ${ の読みを使い回し、切り出した行では使い回さないので、使い回しが答えを変えれば食い違う。比べた数も返し、
+    // 何も比べずに食い違いが無いことにならないようにする。
+    label: "色分け: シェルの ${ の読みを行の中で使い回しても、どの $ の字句も、その位置から切り出した行の先頭の字句と同じ(断片を 7 個並べた行のすべて)",
+    actual: () => {
+      const pieces = ["${", "\\${", "}", '"', "'", " "];
+      const sequences = [1, 2, 3, 4, 5, 6, 7].reduce((heads) => heads.flatMap((head) => pieces.map((piece) => head + piece)), [""]);
+      let checked = 0;
+      const mismatches = [];
+      for (const line of sequences) {
+        let at = 0;
+        for (const token of lineTokensOf("a.sh", [line])[0]) {
+          if (token.value.startsWith("$")) {
+            checked += 1;
+            const [fresh] = lineTokensOf("a.sh", [line.slice(at)])[0];
+            if (fresh.cls !== token.cls || fresh.value !== token.value) mismatches.push([line, at]);
+          }
+          at += token.value.length;
+        }
+      }
+      return { mismatches: mismatches.slice(0, 3), checked };
+    },
+    expected: { mismatches: [], checked: 323470 },
+  },
+  {
+    // 行をまたいで使い回すと、同じ位置から始まる 2 つの ${ が同じ答えになり、どちらかが食い違う。
+    label: "色分け: シェルの ${ の読みの使い回しは行ごとで、前の行の閉じない ${a と同じ位置から始まる次の行の ${b} は変数(前の行の $ は変数にしない)",
+    actual: () => {
+      const tokens = lineTokensOf("a.sh", ["echo ${a", "echo ${b}"]);
+      return [colorIn(tokens, 1, "${b}"), colorIn(tokens, 0, "$")];
+    },
+    expected: ["tok-var", null],
+  },
+  {
+    // 4 万字の閉じない行の時間を、同じ長さの閉じた ${a} の行の時間と比べる(どちらも 3 回のうち最も速い時間)。手元では、使い回す
+    // 実装が 1.5〜3.6 倍、位置ごとに行末まで読み直す実装が 460〜7,400 倍で、40 倍はどちらからも 10 倍以上離れている。
+    label: "色分け: シェルの行内で閉じない ${・${a ・\" \" と \\${ を混ぜた形が続く 4 万字の行も、閉じた ${a} の行の 40 倍未満の時間で読み、後ろの done はキーワード",
+    actual: () => {
+      const timed = (unit) => {
+        const line = "echo " + unit.repeat(40000 / unit.length) + '"s" done';
+        let fastest = Infinity;
+        let tokens = null;
+        for (let run = 0; run < 3; run += 1) {
+          const begin = performance.now();
+          tokens = lineTokensOf("a.sh", [line]);
+          fastest = Math.min(fastest, performance.now() - begin);
+        }
+        return { fastest, tokens };
+      };
+      const baseline = timed("${a} ").fastest;
+      return ["${", "${a ", '${a:-"${b:-" \\${ '].map((unit) => {
+        const { fastest, tokens } = timed(unit);
+        return [unit, colorIn(tokens, 0, "done"), fastest / baseline < 40];
+      });
+    },
+    expected: [["${", "tok-kw", true], ["${a ", "tok-kw", true], ['${a:-"${b:-" \\${ ', "tok-kw", true]],
   },
   ...Object.keys(checkerVocabulary).map((name) => ({
     label: `語彙 ${name} のキーの集合は、解説の検査とページの表で同じ`,
