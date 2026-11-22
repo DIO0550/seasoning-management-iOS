@@ -116,13 +116,14 @@ class IOSTestCommandTests(unittest.TestCase):
             encoding="utf-8",
         )
         fake_xcodebuild.chmod(0o755)
-        self.env = dict(os.environ)
+        # Variables from the caller's shell (e.g. HARNESS_SKIP_TESTING) must not change the command.
+        self.env = {key: value for key, value in os.environ.items() if not key.startswith("HARNESS_")}
         self.env["PATH"] = str(self.bin_dir) + os.pathsep + self.env["PATH"]
         self.env["HARNESS_TEST_ARGS"] = str(self.args_file)
 
-    def run_script(self, *args):
+    def run_script(self, *args, bash=None):
         return subprocess.run(
-            [shutil.which("bash"), str(ROOT / "harness/test-ios.sh"), *args],
+            [bash or shutil.which("bash"), str(ROOT / "harness/test-ios.sh"), *args],
             cwd=self.workspace.name,
             env=self.env,
             text=True,
@@ -177,6 +178,156 @@ class IOSTestCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("iOS tests not run", result.stderr)
         self.assertFalse(self.args_file.exists())
+
+    def args(self):
+        return json.loads(self.args_file.read_text())["args"]
+
+    def xctestrun(self):
+        path = self.bin_dir / "Products with spaces" / "SeasoningManager_iphonesimulator.xctestrun"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text("<plist/>", encoding="utf-8")
+        return path
+
+    def test_default_command_is_unchanged_without_new_variables(self):
+        destination = "platform=iOS Simulator,id=test"
+        self.assertEqual(self.run_script("SeasoningManagerUITests", destination).returncode, 0)
+        self.assertEqual(self.args(), [
+            "test", "-project", "src/SeasoningManager/SeasoningManager.xcodeproj",
+            "-scheme", "SeasoningManager", "-configuration", "Debug",
+            "-destination", destination, "-destination-timeout", "120",
+            "-retry-tests-on-failure", "CODE_SIGNING_ALLOWED=NO",
+            "-parallel-testing-enabled", "YES", "-parallel-testing-worker-count", "2",
+            "-only-testing:SeasoningManagerUITests",
+        ])
+
+    def test_comma_separated_targets_and_skips_become_separate_filters(self):
+        self.env["HARNESS_SKIP_TESTING"] = "SeasoningManagerUITests/A/testOne,SeasoningManagerUITests/B"
+        result = self.run_script("SeasoningManagerTests,SeasoningManagerUITests/A",
+                                 "platform=iOS Simulator,id=test")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.args()
+        self.assertEqual([arg for arg in args if arg.startswith("-only-testing:")],
+                         ["-only-testing:SeasoningManagerTests", "-only-testing:SeasoningManagerUITests/A"])
+        self.assertEqual([arg for arg in args if arg.startswith("-skip-testing:")],
+                         ["-skip-testing:SeasoningManagerUITests/A/testOne",
+                          "-skip-testing:SeasoningManagerUITests/B"])
+
+    def test_build_for_testing_builds_once_without_test_options(self):
+        derived = str(self.bin_dir / "Derived Data")
+        self.env.update(HARNESS_XCODE_ACTION="build-for-testing", HARNESS_DERIVED_DATA=derived,
+                        HARNESS_PARALLEL_TESTS="NO")
+        destination = "platform=iOS Simulator,id=test"
+        result = self.run_script("all", destination)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.args(), [
+            "build-for-testing", "-project", "src/SeasoningManager/SeasoningManager.xcodeproj",
+            "-scheme", "SeasoningManager", "-configuration", "Debug",
+            "-destination", destination, "-destination-timeout", "120",
+            "-derivedDataPath", derived, "-enableCodeCoverage", "YES", "CODE_SIGNING_ALLOWED=NO",
+        ])
+        self.assertEqual(json.loads(self.args_file.read_text())["cwd"], str(ROOT))
+
+    def test_test_without_building_uses_only_the_xctestrun(self):
+        xctestrun = self.xctestrun()
+        bundle = str(self.bin_dir / "shard results.xcresult")
+        self.env.update(HARNESS_XCODE_ACTION="test-without-building", HARNESS_XCTESTRUN=str(xctestrun),
+                        HARNESS_PARALLEL_TESTS="NO", HARNESS_RESULT_BUNDLE=bundle,
+                        HARNESS_SKIP_TESTING="SeasoningManagerUITests/A/testOne")
+        destination = "platform=iOS Simulator,id=test"
+        result = self.run_script("SeasoningManagerUITests", destination)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.args(), [
+            "test-without-building", "-xctestrun", str(xctestrun),
+            "-destination", destination, "-destination-timeout", "120", "-retry-tests-on-failure",
+            "-parallel-testing-enabled", "NO",
+            "-only-testing:SeasoningManagerUITests", "-skip-testing:SeasoningManagerUITests/A/testOne",
+            "-resultBundlePath", bundle, "-enableCodeCoverage", "YES",
+        ])
+
+    def test_relative_xctestrun_is_resolved_from_the_caller(self):
+        xctestrun = self.xctestrun()
+        self.env.update(HARNESS_XCODE_ACTION="test-without-building",
+                        HARNESS_XCTESTRUN=str(xctestrun.relative_to(self.bin_dir)))
+        result = self.run_script("all", "platform=iOS Simulator,id=test")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.args()
+        self.assertEqual(Path(args[args.index("-xctestrun") + 1]).resolve(), xctestrun.resolve())
+
+    def test_invalid_mode_requests_do_not_launch_xcode(self):
+        xctestrun = str(self.xctestrun())
+        derived = str(self.bin_dir / "DerivedData")
+        cases = {
+            "unknown action": ({"HARNESS_XCODE_ACTION": "build"}, "all"),
+            "all with another target": ({}, "all,SeasoningManagerTests"),
+            "empty target element": ({}, "SeasoningManagerTests,"),
+            "leading empty element": ({}, ",SeasoningManagerTests"),
+            "unknown target element": ({}, "SeasoningManagerTests,Other"),
+            "skip whole target": ({"HARNESS_SKIP_TESTING": "SeasoningManagerTests"}, "all"),
+            "skip unknown target": ({"HARNESS_SKIP_TESTING": "Other/Test"}, "all"),
+            "skip empty element": ({"HARNESS_SKIP_TESTING": "SeasoningManagerUITests/A,"}, "all"),
+            "derived data in test": ({"HARNESS_DERIVED_DATA": derived}, "all"),
+            "xctestrun in test": ({"HARNESS_XCTESTRUN": xctestrun}, "all"),
+            "build subset": ({"HARNESS_XCODE_ACTION": "build-for-testing",
+                              "HARNESS_DERIVED_DATA": derived}, "SeasoningManagerTests"),
+            "build without derived data": ({"HARNESS_XCODE_ACTION": "build-for-testing"}, "all"),
+            "build with skip": ({"HARNESS_XCODE_ACTION": "build-for-testing", "HARNESS_DERIVED_DATA": derived,
+                                 "HARNESS_SKIP_TESTING": "SeasoningManagerUITests/A"}, "all"),
+            "build with result bundle": ({"HARNESS_XCODE_ACTION": "build-for-testing",
+                                          "HARNESS_DERIVED_DATA": derived,
+                                          "HARNESS_RESULT_BUNDLE": str(self.bin_dir / "r.xcresult")}, "all"),
+            "build with xctestrun": ({"HARNESS_XCODE_ACTION": "build-for-testing", "HARNESS_DERIVED_DATA": derived,
+                                      "HARNESS_XCTESTRUN": xctestrun}, "all"),
+            "run without xctestrun": ({"HARNESS_XCODE_ACTION": "test-without-building"}, "all"),
+            "run with missing xctestrun": ({"HARNESS_XCODE_ACTION": "test-without-building",
+                                            "HARNESS_XCTESTRUN": str(self.bin_dir / "missing.xctestrun")}, "all"),
+            "run with directory": ({"HARNESS_XCODE_ACTION": "test-without-building",
+                                    "HARNESS_XCTESTRUN": str(self.bin_dir)}, "all"),
+            "run with derived data": ({"HARNESS_XCODE_ACTION": "test-without-building",
+                                       "HARNESS_XCTESTRUN": xctestrun, "HARNESS_DERIVED_DATA": derived}, "all"),
+        }
+        base = dict(self.env)
+        for name, (variables, target) in cases.items():
+            with self.subTest(name):
+                self.env = dict(base, **variables)
+                result = self.run_script(target, "platform=iOS Simulator,id=test")
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("Usage:", result.stderr)
+                self.assertFalse(self.args_file.exists())
+
+    def test_runs_without_filters_on_every_available_bash(self):
+        # macOS ships bash 3.2, where expanding an empty array under set -u is an error.
+        shells = [shutil.which("bash")]
+        if Path("/bin/bash").exists():
+            version = subprocess.run(["/bin/bash", "-c", "echo ${BASH_VERSINFO[0]}"],
+                                     capture_output=True, text=True).stdout.strip()
+            if version == "3" and "/bin/bash" not in shells:
+                shells.append("/bin/bash")
+        xctestrun = str(self.xctestrun())
+        cases = {
+            "test all": {},
+            "test-without-building all": {"HARNESS_XCODE_ACTION": "test-without-building",
+                                          "HARNESS_XCTESTRUN": xctestrun},
+            "build-for-testing all": {"HARNESS_XCODE_ACTION": "build-for-testing",
+                                      "HARNESS_DERIVED_DATA": str(self.bin_dir / "DerivedData")},
+        }
+        base = dict(self.env)
+        for shell in shells:
+            for name, variables in cases.items():
+                with self.subTest(shell=shell, case=name):
+                    self.args_file.unlink(missing_ok=True)
+                    self.env = dict(base, **variables)
+                    result = self.run_script("all", "platform=iOS Simulator,id=test", bash=shell)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    args = self.args()
+                    self.assertFalse(any(arg.startswith(("-only-testing:", "-skip-testing:")) for arg in args))
+
+    def test_invalid_mode_is_reported_before_missing_xcode(self):
+        self.env["PATH"] = str(self.bin_dir / "empty")
+        self.env["HARNESS_XCODE_ACTION"] = "test-without-building"
+        result = self.run_script("all", "platform=iOS Simulator,id=test")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("HARNESS_XCTESTRUN", result.stderr)
+        self.assertNotIn("iOS tests not run", result.stderr)
 
 
 if __name__ == "__main__":
