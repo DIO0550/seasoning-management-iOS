@@ -232,6 +232,12 @@ const hunkColorsOf = (patchLines, hunkOpeningLines, word) => {
   const grammar = Tokenizer.grammarOf("a.html");
   return file.body.hunks.map((hunk) => CommitDiff.lineTokensOf(hunk, grammar).flatMap((tokens) => tokens.filter((token) => token.value === word).map((token) => token.cls)));
 };
+// path の差分(地図の開いた行は無し)の hunk ごとに、行ごとの字句の並び。
+const hunkLineTokensOf = (path, patchLines) => {
+  const [file] = diffOf([diffFile(path, { patch: linesOf(patchLines) })], []).files;
+  const grammar = Tokenizer.grammarOf(path);
+  return file.body.hunks.map((hunk) => CommitDiff.lineTokensOf(hunk, grammar));
+};
 // 文脈の行 1 本だけを持つ hunk 2 つ。
 const twoScriptHunks = ["@@ -1,1 +1,1 @@", " const a = 1;", "@@ -10,1 +10,1 @@", " const b = 1;"];
 const scriptOpened = { old: "<script>", new: "<script>" };
@@ -2205,6 +2211,59 @@ const cases = [
     label: "色分け: シェルでは . の後の語をメンバーにしない(if .merged then . else の else はキーワードのまま)",
     actual: () => colorOf("a.sh", ["if .merged then . else"], { word: "else" }),
     expected: "tok-kw",
+  },
+  {
+    label: "色分け: 抜粋のシェルの ${…} は、中の引用符と入れ子の ${…} の } で閉じず、対応する } までを 1 つの変数にする(後ろの do はキーワード)",
+    actual: () => ExcerptRows.create({ path: "a.sh", start: 3, end: 3, text: 'for item in ${only_testing[@]+"${only_testing[@]}"}; do' })[0].tokens.filter((token) => token.cls !== null).map((token) => [token.cls, token.value]),
+    expected: [["tok-kw", "for"], ["tok-kw", "in"], ["tok-var", '${only_testing[@]+"${only_testing[@]}"}'], ["tok-kw", "do"]],
+  },
+  {
+    label: "色分け: コミットの差分の + の行でも、シェルの入れ子の ${…} を 1 つの変数にし、後ろの do はキーワード",
+    actual: () => {
+      const tokens = hunkLineTokensOf("a.sh", ["@@ -1,2 +1,2 @@", "-for item in $list; do", '+for item in ${only_testing[@]+"${only_testing[@]}"}; do', " done"])[0];
+      return [colorIn(tokens, 1, '${only_testing[@]+"${only_testing[@]}"}'), colorIn(tokens, 1, "do")];
+    },
+    expected: ["tok-var", "tok-kw"],
+  },
+  {
+    label: "色分け: シェルの ${…} は ' '・\" \"・入れ子の ${…}(\" \" の中の入れ子も)・\\ の後の } では閉じず、' ' の中は ${ と \\ も字のままで、行の最後の } まで取らない(後ろの ${b} は別の変数)",
+    actual: () => [
+      "echo ${a:-'}'} ${b}",
+      'echo ${a:-"\\"}"} ${b}',
+      "echo ${a:-\"'\"} ${b}",
+      "echo ${a:-${b}} ${c}",
+      "echo ${a:-\\}} ${b}",
+      "echo ${a:-'${'} ${b}",
+      "echo ${a:-'\\'} ${b}",
+      'echo ${a:-"${b:-"}"}"} ${c}',
+    ].map((line) => lineTokensOf("a.sh", [line])[0].filter((token) => token.cls === "tok-var").map((token) => token.value)),
+    expected: [
+      ["${a:-'}'}", "${b}"],
+      ['${a:-"\\"}"}', "${b}"],
+      ["${a:-\"'\"}", "${b}"],
+      ["${a:-${b}}", "${c}"],
+      ["${a:-\\}}", "${b}"],
+      ["${a:-'${'}", "${b}"],
+      ["${a:-'\\'}", "${b}"],
+      ['${a:-"${b:-"}"}"}', "${c}"],
+    ],
+  },
+  {
+    label: "色分け: シェルの $x・${x}・$1・$# は変数のままで、\" \" の中の $x・${x} は文字列の一部",
+    actual: () => ["$x", "${x}", "$1", "$#", '"$x"', '"${x}"'].map((word) => colorOf("a.sh", ['echo $x ${x} $1 $# "$x" "${x}"'], { word })),
+    expected: ["tok-var", "tok-var", "tok-var", "tok-var", "tok-str", "tok-str"],
+  },
+  {
+    label: "色分け: シェルの行内で閉じない ${ の $ は変数にせず、後ろを通常どおり読む(done はキーワード、\"x}; done と 'x}; done は文字列)",
+    actual: () => [
+      colorOf("a.sh", ["echo ${name; done"], { word: "$" }),
+      colorOf("a.sh", ["echo ${name; done"], { word: "done" }),
+      colorOf("a.sh", ['echo ${a:-"x}; done'], { word: "$" }),
+      colorOf("a.sh", ['echo ${a:-"x}; done'], { word: '"x}; done' }),
+      colorOf("a.sh", ["echo ${a:-'x}; done"], { word: "$" }),
+      colorOf("a.sh", ["echo ${a:-'x}; done"], { word: "'x}; done" }),
+    ],
+    expected: [null, "tok-kw", null, "tok-str", null, "tok-str"],
   },
   ...Object.keys(checkerVocabulary).map((name) => ({
     label: `語彙 ${name} のキーの集合は、解説の検査とページの表で同じ`,
