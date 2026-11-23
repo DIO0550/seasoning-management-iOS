@@ -1,0 +1,660 @@
+{
+  "version": 1,
+  "pr": 150,
+  "sha": "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6",
+  "overview": {
+    "title": "UIテストの4シャードを実測時間で均等にする",
+    "lead": "UI テストを4つのジョブに分ける振り分けを、master の CI で測ったテストごとの秒数に合わせて組み直した。商品と在庫のクラスをまたいで、どのジョブもテストの合計が約354〜359秒になる見込み。",
+    "before": [
+      {
+        "text": "名前つき3シャードは `商品1` `商品2` `在庫1` で、それぞれ1つのクラスのテストだけを持っていた。",
+        "message": "m-select"
+      },
+      {
+        "text": "「その他」のジョブだけテストの合計が 516.5 秒あり、ほかの 275〜351 秒より長く、CI 全体の終わりを決めていた。"
+      },
+      {
+        "text": "整合テストは report キーの受理を `ui_rest_report` でしか確かめず、PR コメントの行の短い名前とジョブ名の対応は見ていなかった。",
+        "message": "m-key"
+      }
+    ],
+    "after": [
+      {
+        "text": "名前つき3シャードは `UI tests (1)/(2)/(3)` になり、商品と在庫のテストを混ぜて持つ。合計は 357.6 / 354.0 / 358.7 秒、「その他」は 356.5 秒（1回の計測による見込み）。",
+        "message": "m-select"
+      },
+      {
+        "text": "report キーは `ui_1_report` などになり、Collect は `HARNESS_REPORT_KEY` でそのキーを書き出す。",
+        "message": "m-collect"
+      },
+      {
+        "text": "整合テストは workflow にある全ての report キーを `ci-report.py` が受け付けることと、`UI(1)` のような短い名前がジョブ名と対応し重複しないことを確かめる。",
+        "message": "m-check"
+      },
+      {
+        "text": "「その他」は名前つきに入っていない UI テストをすべて走らせるので、新しく足した UI テストは workflow を書き換えなくても走る。"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "シャードの振り分け",
+        "text": "秒数は master run 45025970274 の1回の計測。再試行やランナーの混み具合で数十秒ずれるので、均等になったかはこの PR の CI で確かめる。",
+        "go": {
+          "kind": "file",
+          "path": ".github/workflows/ios-tests.yml"
+        }
+      },
+      {
+        "title": "短い名前の検査",
+        "text": "名前が数字だけになり取り違えやすくなったので、短い名前とジョブ名の対応を検査に加えた。",
+        "go": {
+          "kind": "message",
+          "id": "m-check"
+        }
+      }
+    ]
+  },
+  "layerRoles": [
+    {
+      "layer": "ハーネス",
+      "role": "CI で UI テストをどのジョブに分けて走らせるかと、その設定が崩れていないかの検査を持つ。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": ".github/workflows/ios-tests.yml",
+      "name": "iOS テストのワークフロー",
+      "role": "ビルドを1回行い、Unit 1つと UI 4つのジョブでテストだけを走らせ、結果を PR コメントにまとめる。",
+      "change": "UI の4シャードの中身と、名前つき3シャードの名前・report キー・PR コメントの行名を変えた。"
+    },
+    {
+      "path": "harness/test-ios.sh",
+      "name": "テスト実行スクリプト",
+      "role": "カンマ区切りで受け取ったテストを1件ずつ `-only-testing` / `-skip-testing` にして `xcodebuild` に渡す。",
+      "change": "変えていない。"
+    },
+    {
+      "path": "harness/ci-report.py",
+      "name": "結果の収集",
+      "role": "ジョブのテスト結果を読み、`HARNESS_REPORT_KEY` の名前で report ジョブへ渡す。キーの形は `REPORT_KEY` で検査する。",
+      "change": "変えていない。"
+    },
+    {
+      "path": "harness/tests/test_ci_report.py",
+      "name": "CI 整合テスト",
+      "role": "workflow を読み、シャードの漏れ・重複・名前とキーの対応と、PR コメントの組み立てを確かめる。",
+      "change": "新しい名前と件数に合わせ、キーの受理・短い名前・見出しの区切りの検査を足した。"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m-select",
+      "from": ".github/workflows/ios-tests.yml",
+      "to": "harness/test-ios.sh",
+      "kind": "cmd",
+      "name": "シャードのテストを走らせる",
+      "code": "bash harness/test-ios.sh \"$TEST_ONLY\" \"platform=iOS Simulator,id=$SIMULATOR_ID\"",
+      "via": "exec",
+      "payload": "matrix の only と skip（カンマ区切りのテスト名）",
+      "status": "changed"
+    },
+    {
+      "id": "m-collect",
+      "from": ".github/workflows/ios-tests.yml",
+      "to": "harness/ci-report.py",
+      "kind": "cmd",
+      "name": "結果をキーで書き出す",
+      "code": "HARNESS_REPORT_KEY: ${{ matrix.report }}",
+      "via": "exec",
+      "payload": "ui_1_report などの report キー",
+      "returns": "GITHUB_OUTPUT のキー1行",
+      "status": "changed"
+    },
+    {
+      "id": "m-check",
+      "from": "harness/tests/test_ci_report.py",
+      "to": ".github/workflows/ios-tests.yml",
+      "kind": "qry",
+      "name": "シャードの設定を照合する",
+      "code": "shard_configuration(self.workflow, self.sources)",
+      "via": "file",
+      "returns": "エラーの一覧・シャード・名前つきテスト",
+      "status": "changed"
+    },
+    {
+      "id": "m-key",
+      "from": "harness/tests/test_ci_report.py",
+      "to": "harness/ci-report.py",
+      "kind": "qry",
+      "name": "キーの形を問い合わせる",
+      "code": "CI_REPORT.REPORT_KEY.fullmatch(key)",
+      "via": "call",
+      "status": "added"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f-run",
+      "label": "UI シャードを走らせて結果を渡す",
+      "steps": [
+        "m-select",
+        "m-collect"
+      ]
+    },
+    {
+      "id": "f-guard",
+      "label": "振り分けの崩れを検査する",
+      "steps": [
+        "m-check",
+        "m-key"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6",
+      "phase": "core",
+      "role": "UI の4シャードを実測時間で振り分け直し、名前つき3シャードを番号の名前にする。",
+      "why": "#147 で待ち時間が縮んだあと、「その他」だけが長く残った。テストは各ジョブの中で直列なので、シャードごとの秒数の合計をそろえるのがいちばん効く。クラスごとに分けたままだと最長が約455秒までしか下がらないので、クラスをまたいだ。workflow と整合テストは片方だけ変えると落ちるので、1つのコミットにした。",
+      "flows": [
+        "f-run",
+        "f-guard"
+      ],
+      "review": [
+        "13件の名前つきテストと「その他」の skip が同じ集合になっているか。",
+        "名前を番号にしたことで、失敗したときにどのテストのジョブか読み取りにくくならないか。",
+        "短い名前の検査が「UI tests (x)」から「UI(x)」を作る規則に依存してよいか。"
+      ],
+      "before": [
+        {
+          "text": "「その他」のジョブのテスト合計が 516.5 秒で、ほかより 165 秒以上長い。"
+        }
+      ],
+      "after": [
+        {
+          "text": "4つの UI シャードのテスト合計が 354.0〜358.7 秒にそろう見込み。"
+        }
+      ],
+      "notes": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "start": 97,
+          "end": 99,
+          "text": "名前つきシャードはクラスをまたいで実測時間で配分し、偏りが出たら「その他」と入れ替える、という運用をコメントに残した。"
+        },
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "start": 122,
+          "end": 126,
+          "text": "「その他」は名前つき13件を skip する。新しい UI テストはここに入る。"
+        },
+        {
+          "path": "harness/tests/test_ci_report.py",
+          "start": 696,
+          "end": 699,
+          "text": "短い名前の重複と、ジョブ名から作った名前との食い違いをここで拒否する。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "s-shard",
+      "label": "シャード設定の整合",
+      "file": "harness/tests/test_ci_report.py"
+    },
+    {
+      "id": "s-collect",
+      "label": "結果の収集",
+      "file": "harness/tests/test_ci_report.py"
+    },
+    {
+      "id": "s-report",
+      "label": "PR コメントの組み立て",
+      "file": "harness/tests/test_ci_report.py"
+    }
+  ],
+  "tests": [
+    {
+      "id": "t-agree",
+      "suite": "s-shard",
+      "name": "test_matrix_outputs_reporter_and_sources_agree",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "実際の workflow が、5シャード・名前つき13件・REPORTS と同じ順の名前とキーになっていることを守る。",
+      "given": "リポジトリの `ios-tests.yml` と UI テストのソース。",
+      "when": "`shard_configuration` で matrix・outputs・env・report の行を読む。",
+      "then": "エラーが無く、シャードは5つ、名前つきは13件で、名前とキーの並びが `REPORTS` と一致する。",
+      "commit": "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6",
+      "excerpt": {
+        "path": "harness/tests/test_ci_report.py",
+        "start": 754,
+        "end": 760,
+        "emphasis": [
+          {
+            "start": 758,
+            "end": 758
+          }
+        ],
+        "text": "    def test_matrix_outputs_reporter_and_sources_agree(self):\n        errors, shards, named = shard_configuration(self.workflow, self.sources)\n        self.assertEqual(errors, [])\n        self.assertEqual(len(shards), 5)\n        self.assertEqual(len(named), 13)\n        self.assertEqual([shard[\"name\"] for shard in shards], [name for name, _, _ in REPORTS])\n        self.assertEqual([shard[\"report\"].upper() for shard in shards], [variable for _, _, variable in REPORTS])"
+      },
+      "targets": [
+        ".github/workflows/ios-tests.yml"
+      ],
+      "covers": [
+        "m-check"
+      ]
+    },
+    {
+      "id": "t-reject",
+      "suite": "s-shard",
+      "name": "test_inconsistent_shards_are_rejected",
+      "techniques": [
+        "error",
+        "regression"
+      ],
+      "why": "振り分けを手で直したときの典型的な崩れ（重複・テスト名の誤り・補集合の取りこぼし・短い名前の入れ替え）が、その崩れの理由で拒否されることを守る。",
+      "given": "正しい workflow から、1か所だけを壊した版を作る。",
+      "when": "壊した workflow を `shard_configuration` に渡す。",
+      "then": "壊した内容に対応するエラーの接頭辞が出る。短い名前の入れ替えは「Reporter short names must be unique and match job names」で拒否される。",
+      "commit": "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6",
+      "excerpt": {
+        "path": "harness/tests/test_ci_report.py",
+        "start": 762,
+        "end": 800,
+        "emphasis": [
+          {
+            "start": 764,
+            "end": 766
+          },
+          {
+            "start": 785,
+            "end": 787
+          }
+        ],
+        "text": "    def test_inconsistent_shards_are_rejected(self):\n        moved = \"SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch\"\n        shards = {shard[\"name\"]: shard for shard in shard_configuration(self.workflow, self.sources)[1]}\n        shard_1 = shards[\"UI tests (1)\"][\"only\"]\n        from_shard_2 = shards[\"UI tests (2)\"][\"only\"].split(\",\")[0]\n        rest_skip = re.search(r'^ {12}skip: \"(.+)\"$', self.workflow, re.M).group(1)\n        cases = {\n            \"Test not found in class\": self.workflow.replace(\n                \"testProductRegistrationSavesAndSurvivesRelaunch\", \"testMissingFromSource\"),\n            \"Test not found in class: SeasoningManagerUITests/SeasoningManagerInventoryUITests\": self.workflow.replace(\n                moved, moved.replace(\"SeasoningManagerProductUITests\", \"SeasoningManagerInventoryUITests\")),\n            \"Duplicate named tests\": self.edit_shard(\"UI tests (1)\", \"only\", f'\"{from_shard_2},{shard_1}\"'),\n            \"Complement shard must skip exactly\": self.edit_shard(\n                \"UI tests (その他)\", \"skip\", '\"' + rest_skip.rsplit(\",\", 1)[0] + '\"'),\n            \"Unit tests must run in exactly one shard\": self.edit_shard(\n                \"Unit tests\", \"skip\", '\"SeasoningManagerTests/SeasoningSuite\"'),\n            \"Matrix entry without\": self.edit_shard(\"Unit tests\", \"skip\", \"\"),\n            \"tests.outputs do not match\": self.workflow.replace(\n                \"outputs.ui_rest_report }}\\n    strategy\", \"outputs.ui_other_report }}\\n    strategy\"),\n            \"Report env does not match\": self.workflow.replace(\n                \"          UI_REST_REPORT: ${{ needs.tests.outputs.ui_rest_report }}\\n\", \"\"),\n            \"Reporter rows do not match\": self.workflow.replace(\n                \"              ['UI tests (その他)', 'UI(その他)', 'UI_REST_REPORT']\\n\", \"\"),\n            \"Reporter short names must be unique and match job names\": self.workflow.replace(\n                \"'UI(1)', 'UI_1_REPORT'\", \"'UI(2)', 'UI_1_REPORT'\").replace(\n                \"'UI(2)', 'UI_2_REPORT'\", \"'UI(1)', 'UI_2_REPORT'\"),\n            \"Invalid or duplicate report keys\": self.edit_shard(\"UI tests (その他)\", \"report\", \"unit_report\"),\n            \"Named shard must not skip tests\": self.edit_shard(\n                \"UI tests (1)\", \"skip\", '\"SeasoningManagerUITests/SeasoningManagerProductUITests/testLater\"'),\n            \"Not a UI test identifier\": self.edit_shard(\n                \"UI tests (1)\", \"only\", '\"SeasoningManagerUITests/SeasoningManagerProductUITests\"'),\n            \"Expected exactly one complement UI shard\": self.edit_shard(\n                \"UI tests (3)\", \"only\", '\"SeasoningManagerUITests\"'),\n            \"Collect step does not pass the matrix report key\": self.workflow.replace(\n                \"HARNESS_REPORT_KEY: ${{ matrix.report }}\", \"HARNESS_REPORT_KEY: unit_report\"),\n        }\n        for expected, workflow in cases.items():\n            with self.subTest(expected=expected):\n                self.assert_rejected(expected, workflow)"
+      },
+      "values": {
+        "columns": [
+          "壊し方",
+          "期待するエラー"
+        ],
+        "rows": [
+          {
+            "cells": [
+              "(2) の先頭を (1) に足す",
+              "Duplicate named tests"
+            ]
+          },
+          {
+            "cells": [
+              "「その他」の skip から末尾1件を消す",
+              "Complement shard must skip exactly"
+            ],
+            "boundary": true
+          },
+          {
+            "cells": [
+              "UI(1) と UI(2) の短い名前を入れ替える",
+              "Reporter short names must be unique and match job names"
+            ]
+          },
+          {
+            "cells": [
+              "(3) を補集合と同じ only にする",
+              "Expected exactly one complement UI shard"
+            ]
+          }
+        ]
+      },
+      "targets": [
+        ".github/workflows/ios-tests.yml"
+      ],
+      "covers": [
+        "m-check"
+      ]
+    },
+    {
+      "id": "t-keys",
+      "suite": "s-collect",
+      "name": "test_each_matrix_job_emits_only_its_own_output_key",
+      "techniques": [
+        "equivalence",
+        "regression"
+      ],
+      "why": "workflow にある report キーを `ci-report.py` が1つ残らず受け付けることを守る。キーの形を狭めると、そのシャードの結果が「未取得」になるため。",
+      "given": "workflow の matrix から読んだ5つの report キー（`ui_1_report` を含む）。",
+      "when": "キーごとに `HARNESS_REPORT_KEY` を設定して収集を走らせる。",
+      "then": "終了コード 0 で、出力はそのキーの1行だけ、summary は辞書になる。",
+      "commit": "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6",
+      "excerpt": {
+        "path": "harness/tests/test_ci_report.py",
+        "start": 176,
+        "end": 187,
+        "text": "    def test_each_matrix_job_emits_only_its_own_output_key(self):\n        matrix = matrix_section(WORKFLOW.read_text(encoding=\"utf-8\")) or \"\"\n        keys = [shard.group(\"report\") for shard in SHARD.finditer(matrix)]\n        self.assertEqual(len(keys), len(REPORTS))\n        self.assertIn(\"ui_1_report\", keys)\n        for key in keys:\n            with self.subTest(key=key):\n                self.env[\"HARNESS_REPORT_KEY\"] = key\n                result = self.run_collection()\n                self.assertEqual(result.returncode, 0, result.stderr)\n                self.assertEqual(len(self.output.read_text().splitlines()), 1)\n                self.assertIsInstance(self.report()[\"summary\"], dict)"
+      },
+      "targets": [
+        "harness/ci-report.py"
+      ],
+      "covers": [
+        "m-collect",
+        "m-key"
+      ]
+    },
+    {
+      "id": "t-slow",
+      "suite": "s-report",
+      "name": "test_only_ten_slowest_tests_are_highlighted_but_all_remain_in_details",
+      "techniques": [
+        "boundary",
+        "regression"
+      ],
+      "why": "PR コメントの遅いテストの見出しが、Unit の区間を2番目の行名で正しく切り出せていることを守る。行名を書き換え忘れても偶然通らないように、区切りが本文にあることも確かめる。",
+      "given": "Unit に12件のテスト結果（0〜11秒）。",
+      "when": "report ジョブのスクリプトを走らせ、見出しを `**UI(1)**` で区切る。",
+      "then": "区切りが見出しにあり、Unit の区間には遅い10件だけが遅い順に並ぶ。",
+      "commit": "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6",
+      "excerpt": {
+        "path": "harness/tests/test_ci_report.py",
+        "start": 388,
+        "end": 400,
+        "emphasis": [
+          {
+            "start": 396,
+            "end": 397
+          }
+        ],
+        "text": "    def test_only_ten_slowest_tests_are_highlighted_but_all_remain_in_details(self):\n        self.write_report(\"UNIT_REPORT\", \"tests\", [\n            {\"name\": f\"Suite/test{index:02}()\", \"result\": \"Passed\", \"seconds\": index}\n            for index in range(12)\n        ])\n        body = self.run_report()[\"summary\"]\n        times = body.split(\"#### ⏱️ 実行時間\", 1)[1]\n        highlights, details = times.split(\"<details>\", 1)\n        marker = f\"**{REPORTS[1][1]}**\"\n        self.assertIn(marker, highlights)\n        slow = highlights.split(\"##### 🐢 遅いテスト\", 1)[1].split(marker, 1)[0]\n        self.assertEqual(slow.count(\"Suite/test\"), 10)\n        self.assertLess(slow.index(\"test11\"), slow.index(\"test10\"))"
+      },
+      "targets": [
+        ".github/workflows/ios-tests.yml"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "UI テストのジョブがそろって終わる",
+    "lead": "PR を出したときの CI で、UI テストの4つのジョブがほぼ同じ頃に終わるようになる見込み。PR コメントの行の名前も中身に合わせて番号になる。",
+    "changed": {
+      "before": [
+        {
+          "text": "UI テストのうち「その他」のジョブだけが長く、ほかのジョブより2分半以上あとに終わっていた。"
+        },
+        {
+          "text": "PR コメントの UI テストの行は「UI(商品1)」「UI(商品2)」「UI(在庫1)」「UI(その他)」だった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "4つの UI テストのジョブは、テストの時間がどれも約6分になり、ほぼ同じ頃に終わる見込み。"
+        },
+        {
+          "text": "PR コメントの UI テストの行は「UI(1)」「UI(2)」「UI(3)」「UI(その他)」になる。どのテストがどの行かは、行を開いたテストの一覧で分かる。"
+        }
+      ]
+    },
+    "kept": [
+      {
+        "text": "UI テストは今までと同じ18件がそれぞれ1回ずつ走り、抜けも重複もない。",
+        "tests": [
+          "t-agree",
+          "t-reject"
+        ]
+      },
+      {
+        "text": "新しく足した UI テストは、振り分けを書き換えなくても「その他」で走る。",
+        "tests": [
+          "t-reject"
+        ]
+      },
+      {
+        "text": "どのジョブの結果も PR コメントに載り、「未取得」にならない。",
+        "tests": [
+          "t-keys",
+          "t-slow"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "p-matrix",
+      "kind": "language",
+      "category": "GitHub Actions",
+      "label": "matrix の `include` で同じジョブを値違いで並べる",
+      "gist": "1つのジョブ定義を、`include` に並べた値の組ごとに別々のジョブとして同時に走らせる仕組み。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "GitHub Actions のジョブは `strategy.matrix` を持つと、行列の組み合わせの数だけ同じ手順を別のランナーで並行に走らせる。`include` は組み合わせを掛け算で作らず、書いた項目をそのまま1つずつのジョブにする書き方。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".github/workflows/ios-tests.yml",
+            "start": 100,
+            "end": 116,
+            "emphasis": [
+              {
+                "start": 107,
+                "end": 111
+              }
+            ],
+            "text": "      matrix:\n        include:\n          - name: Unit tests\n            report: unit_report\n            only: \"SeasoningManagerTests\"\n            skip: \"\"\n            timeout: 15\n          - name: UI tests (1)\n            report: ui_1_report\n            only: \"SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputsSaveAndReopenAfterRelaunch,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductEditingSavesToDetailsAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductListOpensDetailsAndReturnsToList\"\n            skip: \"\"\n            timeout: 25\n          - name: UI tests (2)\n            report: ui_2_report\n            only: \"SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testProductPickerReselectionAndBackPreserveExpiration,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputErrorsKeepValuesAndAllowCorrection,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationCancelAndBackDiscardInput\"\n            skip: \"\"\n            timeout: 25"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "各項目の `name` はジョブの表示名、`report` は結果を渡すキー、`only` と `skip` は走らせるテストと除くテスト、`timeout` は打ち切りの分数。手順の中では `${{ matrix.only }}` のように参照する。この PR は項目の値だけを変え、手順は変えていない。"
+        },
+        {
+          "kind": "caution",
+          "text": "macOS ランナーの同時実行の上限に合わせて項目は5つに保っている。項目を増やしても、上限を超えた分は待たされて速くならない。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "lineRange": {
+            "start": 100,
+            "end": 126
+          },
+          "text": "Unit 1つと UI 4つの項目。",
+          "shas": [
+            "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6"
+          ]
+        }
+      ],
+      "seeAlso": [
+        "p-complement"
+      ]
+    },
+    {
+      "id": "p-only-testing",
+      "kind": "language",
+      "category": "xcodebuild",
+      "label": "`-only-testing` と `-skip-testing` でテストを選ぶ",
+      "gist": "テストの識別子（ターゲット/クラス/メソッド）を渡して、走らせるテストを絞る・除くオプション。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`xcodebuild test-without-building` は `-only-testing:ターゲット/クラス/メソッド` を何個でも受け取り、そのテストだけを走らせる。`-skip-testing` は逆に除く。ターゲット名だけを渡せば、そのターゲットのテスト全部が対象になる。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "harness/test-ios.sh",
+            "start": 161,
+            "end": 167,
+            "text": "for item in ${only_testing[@]+\"${only_testing[@]}\"}; do\n  test_command+=(\"-only-testing:$item\")\ndone\n\nfor item in ${skip_testing[@]+\"${skip_testing[@]}\"}; do\n  test_command+=(\"-skip-testing:$item\")\ndone"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`test-ios.sh` は matrix から受け取ったカンマ区切りの値を分けて、1件ずつオプションにする。クラスをまたいだテストを並べても、識別子にクラス名が入っているので問題なく選べる。"
+        },
+        {
+          "kind": "caution",
+          "text": "識別子は前の方が一致すれば選ばれることがあるので、あるテスト名が別のテスト名の頭の部分になっていると巻き込む。この PR の18件にはそのような組が無いことを確かめた。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "harness/test-ios.sh",
+          "lineRange": {
+            "start": 161,
+            "end": 167
+          },
+          "text": "テスト名を1件ずつオプションにする。"
+        },
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "lineRange": {
+            "start": 182,
+            "end": 185
+          },
+          "text": "matrix の only と skip をスクリプトへ渡す。"
+        }
+      ]
+    },
+    {
+      "id": "p-complement",
+      "kind": "codebase",
+      "category": "CI のシャード",
+      "label": "名前つきシャードと「その他」",
+      "gist": "3つのシャードはテストを名前で持ち、「その他」はそれ以外の UI テスト全部を走らせる。だから新しいテストが抜け落ちない。",
+      "status": "changed",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "「その他」は only に UI テストのターゲット全体を指定し、skip に名前つき3シャードの13件を並べる。名前つきに書かれていないテストは、すべて「その他」で走る。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": ".github/workflows/ios-tests.yml",
+            "start": 117,
+            "end": 126,
+            "emphasis": [
+              {
+                "start": 124,
+                "end": 125
+              }
+            ],
+            "text": "          - name: UI tests (3)\n            report: ui_3_report\n            only: \"SeasoningManagerUITests/SeasoningManagerInventoryUITests/testBackDiscardsItemInputAndNextFormCanSaveExpiration,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testDeletingOneItemRequiresConfirmationAndKeepsSibling,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testNewProductIsSelectedButItemWaitsForSaveAndPersistsWithoutExpiration,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationShowsRequiredErrorAndPreservesInput,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch\"\n            skip: \"\"\n            timeout: 25\n          - name: UI tests (その他)\n            report: ui_rest_report\n            only: \"SeasoningManagerUITests\"\n            skip: \"SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputsSaveAndReopenAfterRelaunch,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductEditingSavesToDetailsAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductListOpensDetailsAndReturnsToList,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testProductPickerReselectionAndBackPreserveExpiration,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputErrorsKeepValuesAndAllowCorrection,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationCancelAndBackDiscardInput,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testBackDiscardsItemInputAndNextFormCanSaveExpiration,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testDeletingOneItemRequiresConfirmationAndKeepsSibling,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testNewProductIsSelectedButItemWaitsForSaveAndPersistsWithoutExpiration,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationShowsRequiredErrorAndPreservesInput,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch\"\n            timeout: 25"
+          }
+        },
+        {
+          "kind": "rule",
+          "text": "振り分けを変えるときは、名前つきの only と「その他」の skip を同時に直す。片方だけ直すと整合テストが「Complement shard must skip exactly」で止める。"
+        },
+        {
+          "kind": "history",
+          "text": "#148 では名前つきシャードをクラスごとに分け、商品1・商品2・在庫1 と呼んでいた。この PR でクラスをまたいだので、名前を番号にした。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": ".github/workflows/ios-tests.yml",
+          "lineRange": {
+            "start": 122,
+            "end": 126
+          },
+          "text": "補集合のシャード。",
+          "shas": [
+            "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6"
+          ]
+        }
+      ],
+      "tests": [
+        "t-agree",
+        "t-reject"
+      ],
+      "flows": [
+        "f-run"
+      ],
+      "seeAlso": [
+        "p-matrix",
+        "p-check"
+      ]
+    },
+    {
+      "id": "p-check",
+      "kind": "codebase",
+      "category": "CI のシャード",
+      "label": "シャード設定の整合検査",
+      "gist": "workflow の文字列を正規表現で読み、名前・キー・テスト名の対応をまとめて確かめる。PyYAML を使わない。",
+      "status": "changed",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`shard_configuration` は matrix・outputs・report ジョブの env・JS の行を読み、どこか1つでも食い違えばエラーの文を返す。この PR で、短い名前がジョブ名から作った名前と同じで重複しないことと、キーの形を `ci-report.py` の `REPORT_KEY` そのもので確かめることを足した。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "harness/tests/test_ci_report.py",
+            "start": 690,
+            "end": 699,
+            "emphasis": [
+              {
+                "start": 697,
+                "end": 699
+              }
+            ],
+            "text": "    env = re.findall(r\"^ {10}(\\w+_REPORT): \\$\\{\\{ needs\\.tests\\.outputs\\.(\\w+) \\}\\}$\", workflow, re.M)\n    if any(variable != key.upper() for variable, key in env) or sorted(key for _, key in env) != sorted(keys):\n        errors.append(f\"Report env does not match matrix reports: {env}\")\n    rows = re.findall(r\"^ {14}\\['([^']+)', '([^']+)', '(\\w+_REPORT)'\\],?$\", workflow, re.M)\n    if sorted((name, variable) for name, _, variable in rows) != \\\n            sorted((shard[\"name\"], shard[\"report\"].upper()) for shard in shards):\n        errors.append(f\"Reporter rows do not match matrix jobs: {rows}\")\n    labels = [label for _, label, _ in rows]\n    if len(set(labels)) != len(labels) or any(label != short_name(name) for name, label, _ in rows):\n        errors.append(f\"Reporter short names must be unique and match job names: {rows}\")"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "短い名前の規則は `short_name` にあり、`Unit tests` は `Unit`、`UI tests (x)` は `UI(x)` になる。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "harness/tests/test_ci_report.py",
+            "start": 602,
+            "end": 607,
+            "text": "def short_name(job):\n    \"\"\"The reporter's row label: Unit for the unit job and UI(x) for UI tests (x).\"\"\"\n    if job == \"Unit tests\":\n        return \"Unit\"\n    match = re.fullmatch(r\"UI tests \\((.+)\\)\", job)\n    return f\"UI({match.group(1)})\" if match else None"
+          }
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "harness/tests/test_ci_report.py",
+          "lineRange": {
+            "start": 690,
+            "end": 699
+          },
+          "text": "report の行と短い名前の検査。",
+          "shas": [
+            "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6"
+          ]
+        },
+        {
+          "path": "harness/tests/test_ci_report.py",
+          "lineRange": {
+            "start": 21,
+            "end": 23
+          },
+          "text": "`ci-report.py` をモジュールとして読み込む。",
+          "shas": [
+            "4ab1cfd8ec73372181d885fedb4cb78dc072e3d6"
+          ]
+        }
+      ],
+      "tests": [
+        "t-agree",
+        "t-reject",
+        "t-keys"
+      ],
+      "flows": [
+        "f-guard"
+      ],
+      "seeAlso": [
+        "p-complement"
+      ]
+    }
+  ]
+}
