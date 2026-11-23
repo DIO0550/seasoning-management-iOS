@@ -87,14 +87,15 @@ jobs:
     # Distinct keys combine every matrix result regardless of completion order.
     outputs:
       unit_report: ${{ steps.collect.outputs.unit_report }}
-      ui_product_1_report: ${{ steps.collect.outputs.ui_product_1_report }}
-      ui_product_2_report: ${{ steps.collect.outputs.ui_product_2_report }}
-      ui_inventory_1_report: ${{ steps.collect.outputs.ui_inventory_1_report }}
+      ui_1_report: ${{ steps.collect.outputs.ui_1_report }}
+      ui_2_report: ${{ steps.collect.outputs.ui_2_report }}
+      ui_3_report: ${{ steps.collect.outputs.ui_3_report }}
       ui_rest_report: ${{ steps.collect.outputs.ui_rest_report }}
     strategy:
       fail-fast: false
       # macOS ランナーの同時実行上限5に合わせ、Unit 1 + UI 4 に分ける。
-      # 名前つきシャードは実測時間でほぼ均等に配分し、その他は名前つきを除く残り（新規の UI テストを含む）。
+      # 名前つきシャードは商品・在庫のクラスをまたいで実測時間でほぼ均等に配分する。
+      # その他は名前つきを除く残り（新規の UI テストを含む）。
       # 偏りが出たら名前つきシャードとその他の間でテストを入れ替える。
       matrix:
         include:
@@ -103,25 +104,25 @@ jobs:
             only: "SeasoningManagerTests"
             skip: ""
             timeout: 15
-          - name: UI tests (商品1)
-            report: ui_product_1_report
-            only: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputErrorsKeepValuesAndAllowCorrection,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationCancelAndBackDiscardInput"
+          - name: UI tests (1)
+            report: ui_1_report
+            only: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputsSaveAndReopenAfterRelaunch,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductEditingSavesToDetailsAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductListOpensDetailsAndReturnsToList"
             skip: ""
             timeout: 25
-          - name: UI tests (商品2)
-            report: ui_product_2_report
-            only: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputsSaveAndReopenAfterRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductEditingSavesToDetailsAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductDeletionRequiresConfirmationAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch"
+          - name: UI tests (2)
+            report: ui_2_report
+            only: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testProductPickerReselectionAndBackPreserveExpiration,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputErrorsKeepValuesAndAllowCorrection,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationCancelAndBackDiscardInput"
             skip: ""
             timeout: 25
-          - name: UI tests (在庫1)
-            report: ui_inventory_1_report
-            only: "SeasoningManagerUITests/SeasoningManagerInventoryUITests/testProductPickerReselectionAndBackPreserveExpiration,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testEmptyInventoryCancelsProductRegistrationWithoutAddingStock,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testDeletingOneItemRequiresConfirmationAndKeepsSibling"
+          - name: UI tests (3)
+            report: ui_3_report
+            only: "SeasoningManagerUITests/SeasoningManagerInventoryUITests/testBackDiscardsItemInputAndNextFormCanSaveExpiration,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testDeletingOneItemRequiresConfirmationAndKeepsSibling,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testNewProductIsSelectedButItemWaitsForSaveAndPersistsWithoutExpiration,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationShowsRequiredErrorAndPreservesInput,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch"
             skip: ""
             timeout: 25
           - name: UI tests (その他)
             report: ui_rest_report
             only: "SeasoningManagerUITests"
-            skip: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputErrorsKeepValuesAndAllowCorrection,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationCancelAndBackDiscardInput,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputsSaveAndReopenAfterRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductEditingSavesToDetailsAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductDeletionRequiresConfirmationAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testProductPickerReselectionAndBackPreserveExpiration,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testEmptyInventoryCancelsProductRegistrationWithoutAddingStock,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testDeletingOneItemRequiresConfirmationAndKeepsSibling"
+            skip: "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputsSaveAndReopenAfterRelaunch,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testRegisteringSameProductTwiceAddsOneUnopenedItemPerSave,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductEditingSavesToDetailsAndSurvivesRelaunch,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductListOpensDetailsAndReturnsToList,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testProductPickerReselectionAndBackPreserveExpiration,SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputErrorsKeepValuesAndAllowCorrection,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationCancelAndBackDiscardInput,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testBackDiscardsItemInputAndNextFormCanSaveExpiration,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testDeletingOneItemRequiresConfirmationAndKeepsSibling,SeasoningManagerUITests/SeasoningManagerInventoryUITests/testNewProductIsSelectedButItemWaitsForSaveAndPersistsWithoutExpiration,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationShowsRequiredErrorAndPreservesInput,SeasoningManagerUITests/SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch"
             timeout: 25
     runs-on: xcode-27
     timeout-minutes: ${{ matrix.timeout }}
@@ -209,9 +210,9 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           UNIT_REPORT: ${{ needs.tests.outputs.unit_report }}
-          UI_PRODUCT_1_REPORT: ${{ needs.tests.outputs.ui_product_1_report }}
-          UI_PRODUCT_2_REPORT: ${{ needs.tests.outputs.ui_product_2_report }}
-          UI_INVENTORY_1_REPORT: ${{ needs.tests.outputs.ui_inventory_1_report }}
+          UI_1_REPORT: ${{ needs.tests.outputs.ui_1_report }}
+          UI_2_REPORT: ${{ needs.tests.outputs.ui_2_report }}
+          UI_3_REPORT: ${{ needs.tests.outputs.ui_3_report }}
           UI_REST_REPORT: ${{ needs.tests.outputs.ui_rest_report }}
         with:
           script: |
@@ -367,9 +368,9 @@ jobs:
             ];
             const reports = [
               ['Unit tests', 'Unit', 'UNIT_REPORT'],
-              ['UI tests (商品1)', 'UI(商品1)', 'UI_PRODUCT_1_REPORT'],
-              ['UI tests (商品2)', 'UI(商品2)', 'UI_PRODUCT_2_REPORT'],
-              ['UI tests (在庫1)', 'UI(在庫1)', 'UI_INVENTORY_1_REPORT'],
+              ['UI tests (1)', 'UI(1)', 'UI_1_REPORT'],
+              ['UI tests (2)', 'UI(2)', 'UI_2_REPORT'],
+              ['UI tests (3)', 'UI(3)', 'UI_3_REPORT'],
               ['UI tests (その他)', 'UI(その他)', 'UI_REST_REPORT']
             ].map(([jobName, name, variable]) => {
               const job = jobs.find(job => job.name === jobName);
