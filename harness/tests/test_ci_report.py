@@ -1,5 +1,6 @@
 """Run the actual workflow reporter offline with JSON results and a fake GitHub API."""
 
+import importlib.util
 import json
 import os
 import re
@@ -17,12 +18,15 @@ NODE = shutil.which("node")
 WORKFLOW = ROOT / ".github/workflows/ios-tests.yml"
 SCRIPT = textwrap.dedent(WORKFLOW.read_text().split("          script: |\n", 1)[1])
 COLLECT = ROOT / "harness/ci-report.py"
+SPEC = importlib.util.spec_from_file_location("ci_report", COLLECT)
+CI_REPORT = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(CI_REPORT)
 UI_SOURCES = ROOT / "src/SeasoningManager/SeasoningManagerUITests"
 REPORTS = (
     ("Unit tests", "Unit", "UNIT_REPORT"),
-    ("UI tests (商品1)", "UI(商品1)", "UI_PRODUCT_1_REPORT"),
-    ("UI tests (商品2)", "UI(商品2)", "UI_PRODUCT_2_REPORT"),
-    ("UI tests (在庫1)", "UI(在庫1)", "UI_INVENTORY_1_REPORT"),
+    ("UI tests (1)", "UI(1)", "UI_1_REPORT"),
+    ("UI tests (2)", "UI(2)", "UI_2_REPORT"),
+    ("UI tests (3)", "UI(3)", "UI_3_REPORT"),
     ("UI tests (その他)", "UI(その他)", "UI_REST_REPORT"),
 )
 MARKER = "<!-- seasoning-ios-test-report -->"
@@ -169,11 +173,18 @@ class CICollectionTests(unittest.TestCase):
         self.assertIsNone(self.report()["tests"])
         self.assertFalse(self.calls.exists())
 
-    def test_ui_job_emits_only_its_own_output_key(self):
-        self.env["HARNESS_REPORT_KEY"] = "ui_rest_report"
-        self.assertEqual(self.run_collection().returncode, 0)
-        self.assertIsInstance(self.report()["summary"], dict)
-        self.assertNotIn("unit_report=", self.output.read_text())
+    def test_each_matrix_job_emits_only_its_own_output_key(self):
+        matrix = matrix_section(WORKFLOW.read_text(encoding="utf-8")) or ""
+        keys = [shard.group("report") for shard in SHARD.finditer(matrix)]
+        self.assertEqual(len(keys), len(REPORTS))
+        self.assertIn("ui_1_report", keys)
+        for key in keys:
+            with self.subTest(key=key):
+                self.env["HARNESS_REPORT_KEY"] = key
+                result = self.run_collection()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(len(self.output.read_text().splitlines()), 1)
+                self.assertIsInstance(self.report()["summary"], dict)
 
     def test_invalid_report_key_writes_nothing_and_does_not_read_results(self):
         for key in (None, "", "unit", "Unit_report", "_report", "1_report", "ui-rest_report",
@@ -382,7 +393,9 @@ class CIReportTests(unittest.TestCase):
         body = self.run_report()["summary"]
         times = body.split("#### ⏱️ 実行時間", 1)[1]
         highlights, details = times.split("<details>", 1)
-        slow = highlights.split("##### 🐢 遅いテスト", 1)[1].split("**UI(商品1)**", 1)[0]
+        marker = f"**{REPORTS[1][1]}**"
+        self.assertIn(marker, highlights)
+        slow = highlights.split("##### 🐢 遅いテスト", 1)[1].split(marker, 1)[0]
         self.assertEqual(slow.count("Suite/test"), 10)
         self.assertLess(slow.index("test11"), slow.index("test10"))
         self.assertNotIn("test01", slow)
@@ -586,6 +599,14 @@ def class_ranges(sources):
     return ranges
 
 
+def short_name(job):
+    """The reporter's row label: Unit for the unit job and UI(x) for UI tests (x)."""
+    if job == "Unit tests":
+        return "Unit"
+    match = re.fullmatch(r"UI tests \((.+)\)", job)
+    return f"UI({match.group(1)})" if match else None
+
+
 def job_blocks(workflow):
     """Split the jobs section into {job id: text} by the two-space job keys."""
     jobs = workflow.split("\njobs:\n", 1)[1]
@@ -661,7 +682,7 @@ def shard_configuration(workflow, sources):
     if any(count != len(shards) for count in counts):
         errors.append(f"Matrix entry without name/report/only/skip/timeout in order: {counts} vs {len(shards)}")
     keys = [shard["report"] for shard in shards]
-    if len(set(keys)) != len(keys) or not all(re.fullmatch(r"[a-z][a-z0-9_]*_report", key) for key in keys):
+    if len(set(keys)) != len(keys) or not all(CI_REPORT.REPORT_KEY.fullmatch(key) for key in keys):
         errors.append(f"Invalid or duplicate report keys: {keys}")
     outputs = re.findall(r"^ {6}(\w+): \$\{\{ steps\.collect\.outputs\.(\w+) \}\}$", workflow, re.M)
     if any(key != value for key, value in outputs) or sorted(key for key, _ in outputs) != sorted(keys):
@@ -669,9 +690,13 @@ def shard_configuration(workflow, sources):
     env = re.findall(r"^ {10}(\w+_REPORT): \$\{\{ needs\.tests\.outputs\.(\w+) \}\}$", workflow, re.M)
     if any(variable != key.upper() for variable, key in env) or sorted(key for _, key in env) != sorted(keys):
         errors.append(f"Report env does not match matrix reports: {env}")
-    rows = re.findall(r"^ {14}\['([^']+)', '[^']+', '(\w+_REPORT)'\],?$", workflow, re.M)
-    if sorted(rows) != sorted((shard["name"], shard["report"].upper()) for shard in shards):
+    rows = re.findall(r"^ {14}\['([^']+)', '([^']+)', '(\w+_REPORT)'\],?$", workflow, re.M)
+    if sorted((name, variable) for name, _, variable in rows) != \
+            sorted((shard["name"], shard["report"].upper()) for shard in shards):
         errors.append(f"Reporter rows do not match matrix jobs: {rows}")
+    labels = [label for _, label, _ in rows]
+    if len(set(labels)) != len(labels) or any(label != short_name(name) for name, label, _ in rows):
+        errors.append(f"Reporter short names must be unique and match job names: {rows}")
     if "HARNESS_REPORT_KEY: ${{ matrix.report }}" not in workflow:
         errors.append("Collect step does not pass the matrix report key")
 
@@ -730,22 +755,22 @@ class WorkflowShardTests(unittest.TestCase):
         errors, shards, named = shard_configuration(self.workflow, self.sources)
         self.assertEqual(errors, [])
         self.assertEqual(len(shards), 5)
-        self.assertEqual(len(named), 11)
+        self.assertEqual(len(named), 13)
         self.assertEqual([shard["name"] for shard in shards], [name for name, _, _ in REPORTS])
         self.assertEqual([shard["report"].upper() for shard in shards], [variable for _, _, variable in REPORTS])
 
     def test_inconsistent_shards_are_rejected(self):
         moved = "SeasoningManagerProductUITests/testProductRegistrationSavesAndSurvivesRelaunch"
-        first = "SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalEditingCancelAndClearLastNutrient"
-        product_2 = re.search(r'^ {12}only: "(SeasoningManagerUITests/SeasoningManagerProductUITests/testOptionalInputs[^"]*)"$',
-                              self.workflow, re.M).group(1)
+        shards = {shard["name"]: shard for shard in shard_configuration(self.workflow, self.sources)[1]}
+        shard_1 = shards["UI tests (1)"]["only"]
+        from_shard_2 = shards["UI tests (2)"]["only"].split(",")[0]
         rest_skip = re.search(r'^ {12}skip: "(.+)"$', self.workflow, re.M).group(1)
         cases = {
             "Test not found in class": self.workflow.replace(
                 "testProductRegistrationSavesAndSurvivesRelaunch", "testMissingFromSource"),
             "Test not found in class: SeasoningManagerUITests/SeasoningManagerInventoryUITests": self.workflow.replace(
                 moved, moved.replace("SeasoningManagerProductUITests", "SeasoningManagerInventoryUITests")),
-            "Duplicate named tests": self.edit_shard("UI tests (商品2)", "only", f'"{first},{product_2}"'),
+            "Duplicate named tests": self.edit_shard("UI tests (1)", "only", f'"{from_shard_2},{shard_1}"'),
             "Complement shard must skip exactly": self.edit_shard(
                 "UI tests (その他)", "skip", '"' + rest_skip.rsplit(",", 1)[0] + '"'),
             "Unit tests must run in exactly one shard": self.edit_shard(
@@ -757,13 +782,16 @@ class WorkflowShardTests(unittest.TestCase):
                 "          UI_REST_REPORT: ${{ needs.tests.outputs.ui_rest_report }}\n", ""),
             "Reporter rows do not match": self.workflow.replace(
                 "              ['UI tests (その他)', 'UI(その他)', 'UI_REST_REPORT']\n", ""),
+            "Reporter short names must be unique and match job names": self.workflow.replace(
+                "'UI(1)', 'UI_1_REPORT'", "'UI(2)', 'UI_1_REPORT'").replace(
+                "'UI(2)', 'UI_2_REPORT'", "'UI(1)', 'UI_2_REPORT'"),
             "Invalid or duplicate report keys": self.edit_shard("UI tests (その他)", "report", "unit_report"),
             "Named shard must not skip tests": self.edit_shard(
-                "UI tests (商品1)", "skip", '"SeasoningManagerUITests/SeasoningManagerProductUITests/testLater"'),
+                "UI tests (1)", "skip", '"SeasoningManagerUITests/SeasoningManagerProductUITests/testLater"'),
             "Not a UI test identifier": self.edit_shard(
-                "UI tests (商品1)", "only", '"SeasoningManagerUITests/SeasoningManagerProductUITests"'),
+                "UI tests (1)", "only", '"SeasoningManagerUITests/SeasoningManagerProductUITests"'),
             "Expected exactly one complement UI shard": self.edit_shard(
-                "UI tests (在庫1)", "only", '"SeasoningManagerUITests"'),
+                "UI tests (3)", "only", '"SeasoningManagerUITests"'),
             "Collect step does not pass the matrix report key": self.workflow.replace(
                 "HARNESS_REPORT_KEY: ${{ matrix.report }}", "HARNESS_REPORT_KEY: unit_report"),
         }
