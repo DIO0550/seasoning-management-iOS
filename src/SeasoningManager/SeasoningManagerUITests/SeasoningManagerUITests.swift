@@ -194,6 +194,83 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
     }
 
     @MainActor
+    func testOpeningOneItemRequiresConfirmationAndSavesSelectedPastDate() throws {
+        let app = makeApplication()
+        app.launchArguments += [
+            "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--ui-test-fail-first-opening-save",
+        ]
+        let name = "Olive Oil"
+        let type = "Oil"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["商品一覧"].appears(within: 5))
+        app.tabBars.buttons["在庫"].tap()
+        app.buttons["inventory-empty-add"].tap()
+        app.buttons["item-form-register-product"].tap()
+        try enterProduct(name: name, type: type, in: app)
+        app.buttons["product-form-save"].tap()
+        app.buttons["item-form-save"].tap()
+
+        let inventory = app.navigationBars["在庫一覧"]
+        XCTAssertTrue(inventory.appears(within: 5))
+        inventory.buttons["inventory-list-add"].tap()
+        try selectItemProduct(name: name, type: type, in: app)
+        tapItemExpirationToggle(in: app)
+        app.buttons["item-form-save"].tap()
+        XCTAssertTrue(inventory.appears(within: 5))
+
+        let row = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", name, "期限未設定")
+        ).firstMatch
+        XCTAssertTrue(row.appears(within: 5))
+        row.tap()
+
+        let status = app.descendants(matching: .any).matching(identifier: "item-detail-status").firstMatch
+        let openingDate = app.descendants(matching: .any).matching(identifier: "item-detail-opening-date").firstMatch
+        let open = app.buttons["item-detail-open"]
+        let confirm = app.buttons["item-open-confirm"]
+        XCTAssertTrue(open.appears(within: 5))
+        XCTAssertEqual(status.label, "状態、未開封")
+        XCTAssertEqual(openingDate.label, "開封日、未設定")
+
+        _ = try selectPastOpeningDate(openingWith: open, in: app)
+        app.buttons["item-open-cancel"].tap()
+        XCTAssertTrue(confirm.disappears(within: 5))
+        XCTAssertTrue(open.exists)
+        XCTAssertEqual(status.label, "状態、未開封")
+        XCTAssertEqual(openingDate.label, "開封日、未設定")
+
+        let selectedDate = try selectPastOpeningDate(openingWith: open, in: app)
+        let preview = app.staticTexts["item-open-preview"]
+        let previewBeforeFailure = preview.label
+        confirm.tap()
+        let error = app.staticTexts["item-open-error"]
+        XCTAssertTrue(error.appears(within: 5))
+        XCTAssertTrue(error.label.hasPrefix("開封を保存できませんでした。"))
+        XCTAssertTrue(confirm.isEnabled)
+        XCTAssertEqual(preview.label, previewBeforeFailure)
+
+        confirm.tap()
+        XCTAssertTrue(confirm.disappears(within: 5))
+        let detail = app.navigationBars["個体詳細"]
+        XCTAssertTrue(detail.appears(within: 5))
+        XCTAssertTrue(status.satisfies(NSPredicate(format: "label == %@", "状態、使用中"), within: 5))
+        XCTAssertEqual(openingDate.label, "開封日、\(selectedDate)")
+        XCTAssertFalse(open.exists)
+
+        detail.buttons["在庫一覧"].tap()
+        XCTAssertTrue(inventory.appears(within: 5))
+        let sibling = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", name, "賞味期限:")
+        ).firstMatch
+        XCTAssertTrue(sibling.appears(within: 5))
+        sibling.tap()
+        XCTAssertTrue(detail.appears(within: 5))
+        XCTAssertTrue(open.appears(within: 5))
+        XCTAssertEqual(status.label, "状態、未開封")
+        XCTAssertEqual(openingDate.label, "開封日、未設定")
+    }
+
+    @MainActor
     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {
         let app = makeApplication()
         app.launch()
@@ -299,6 +376,29 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["item-form-save"].isEnabled)
         app.buttons["item-form-cancel"].tap()
         XCTAssertTrue(app.staticTexts["在庫はまだありません"].appears(within: 5))
+    }
+
+    @MainActor
+    private func selectPastOpeningDate(openingWith button: XCUIElement, in app: XCUIApplication) throws -> String {
+        let beforePresentation = Date.now
+        button.tap()
+        let preview = app.staticTexts["item-open-preview"]
+        XCTAssertTrue(preview.appears(within: 5), app.debugDescription)
+        let afterPresentation = Date.now
+        let format = Date.FormatStyle(date: .abbreviated, time: .omitted, locale: Locale(identifier: "en_US"))
+        let initialPreview = preview.label
+        let initialDate = try XCTUnwrap(
+            [beforePresentation, afterPresentation].first { initialPreview.hasPrefix("「\($0.formatted(format))」") },
+            initialPreview
+        )
+        let calendar = Calendar(identifier: .gregorian)
+        let year = calendar.component(.year, from: initialDate)
+        let yearWheel = app.pickerWheels.matching(NSPredicate(format: "value == %@", String(year))).firstMatch
+        XCTAssertTrue(yearWheel.appears(within: 5), app.debugDescription)
+        yearWheel.adjust(toPickerWheelValue: String(year - 1))
+        XCTAssertTrue(preview.satisfies(NSPredicate(format: "label CONTAINS %@", "\(year - 1)」"), within: 5))
+        let date = try XCTUnwrap(preview.label.split(separator: "」", maxSplits: 1).first)
+        return String(date.dropFirst())
     }
 
     @MainActor
