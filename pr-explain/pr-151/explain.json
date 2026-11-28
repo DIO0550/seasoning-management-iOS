@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 151,
-  "sha": "3df955beebf568f4070a9c7dab661f57981a686e",
+  "sha": "310ee6d7dcae487dda9290a5fb678ce0f0c05aef",
   "issue": 60,
   "overview": {
     "title": "未開封の1本を、開封日を選んで使用中へ",
@@ -129,14 +129,20 @@
       "review": [
         "表示対象が照会の一意な個体であることを、確定時にも確認する。",
         "成功時以外は保存を済ませた表示にせず、日付の選択値が消えない。"
+      ]
+    },
+    {
+      "sha": "310ee6d7dcae487dda9290a5fb678ce0f0c05aef",
+      "phase": "revise",
+      "role": "日付変更に追随し、開封失敗と同商品の別個体を回帰テストに含める。",
+      "why": "シートを開いたまま日付が進むことと、同じ商品に複数の個体があることは、実際の使い方で起こり得るため。",
+      "review": [
+        "日付が変わっても日付選択の上限だけを更新し、編集中の値を残す。",
+        "保存処理が一度失敗したとき、入力値を失わず、確定のやり直しだけで成功できる。",
+        "開封を選ばなかった個体の状態と日付は変わらない。"
       ],
-      "notes": [
-        {
-          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
-          "start": 121,
-          "end": 127,
-          "text": "開封の入口は未開封の個体だけに表示する。"
-        }
+      "flows": [
+        "confirm"
       ]
     }
   ],
@@ -159,19 +165,20 @@
       "name": "testOpeningOneItemRequiresConfirmationAndSavesSelectedPastDate",
       "techniques": [
         "state",
-        "regression"
+        "regression",
+        "error"
       ],
       "why": "開封の入口から保存後の詳細まで、処理のつなぎ忘れを検出する。",
       "given": "保存済みの未開封個体を詳細で表示する。",
-      "when": "開封シートを開き、キャンセルと確定を行う。",
-      "then": "キャンセルでは未開封のままで、確定後は開封日が表示されて再開封の入口がなくなる。",
+      "when": "過去日を選んでキャンセルし、再度選択して保存失敗を経験した後、同じ日付で再試行する。",
+      "then": "再試行までは日付選択が残り、成功後は同じ個体だけが使用中になる。在庫に戻ると別の1本は開封されていない。",
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
         "start": 197,
-        "end": 239,
-        "text": "    func testOpeningOneItemRequiresConfirmationAndSavesSelectedPastDate() throws {\n        let app = makeApplication()\n        app.launchArguments += [\"-AppleLanguages\", \"(en)\", \"-AppleLocale\", \"en_US\"]\n        let name = \"Olive Oil\"\n        app.launch()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].appears(within: 5))\n        app.tabBars.buttons[\"在庫\"].tap()\n        app.buttons[\"inventory-empty-add\"].tap()\n        app.buttons[\"item-form-register-product\"].tap()\n        try enterProduct(name: name, type: \"Oil\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        app.buttons[\"item-form-save\"].tap()\n\n        let row = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n        ).firstMatch\n        XCTAssertTrue(row.appears(within: 5))\n        row.tap()\n\n        let status = app.descendants(matching: .any).matching(identifier: \"item-detail-status\").firstMatch\n        let openingDate = app.descendants(matching: .any).matching(identifier: \"item-detail-opening-date\").firstMatch\n        let open = app.buttons[\"item-detail-open\"]\n        let confirm = app.buttons[\"item-open-confirm\"]\n        XCTAssertTrue(open.appears(within: 5))\n        XCTAssertEqual(status.label, \"状態、未開封\")\n        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n\n        _ = try selectPastOpeningDate(openingWith: open, in: app)\n        app.buttons[\"item-open-cancel\"].tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(open.exists)\n        XCTAssertEqual(status.label, \"状態、未開封\")\n        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n\n        let selectedDate = try selectPastOpeningDate(openingWith: open, in: app)\n        confirm.tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(app.navigationBars[\"個体詳細\"].exists)\n        XCTAssertTrue(status.satisfies(NSPredicate(format: \"label == %@\", \"状態、使用中\"), within: 5))\n        XCTAssertEqual(openingDate.label, \"開封日、\\(selectedDate)\")\n        XCTAssertFalse(open.exists)\n    }\n"
+        "end": 271,
+        "text": "    func testOpeningOneItemRequiresConfirmationAndSavesSelectedPastDate() throws {\n        let app = makeApplication()\n        app.launchArguments += [\n            \"-AppleLanguages\", \"(en)\", \"-AppleLocale\", \"en_US\", \"--ui-test-fail-first-opening-save\",\n        ]\n        let name = \"Olive Oil\"\n        let type = \"Oil\"\n        app.launch()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].appears(within: 5))\n        app.tabBars.buttons[\"在庫\"].tap()\n        app.buttons[\"inventory-empty-add\"].tap()\n        app.buttons[\"item-form-register-product\"].tap()\n        try enterProduct(name: name, type: type, in: app)\n        app.buttons[\"product-form-save\"].tap()\n        app.buttons[\"item-form-save\"].tap()\n\n        let inventory = app.navigationBars[\"在庫一覧\"]\n        XCTAssertTrue(inventory.appears(within: 5))\n        inventory.buttons[\"inventory-list-add\"].tap()\n        try selectItemProduct(name: name, type: type, in: app)\n        tapItemExpirationToggle(in: app)\n        app.buttons[\"item-form-save\"].tap()\n        XCTAssertTrue(inventory.appears(within: 5))\n\n        let row = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n        ).firstMatch\n        XCTAssertTrue(row.appears(within: 5))\n        row.tap()\n\n        let status = app.descendants(matching: .any).matching(identifier: \"item-detail-status\").firstMatch\n        let openingDate = app.descendants(matching: .any).matching(identifier: \"item-detail-opening-date\").firstMatch\n        let open = app.buttons[\"item-detail-open\"]\n        let confirm = app.buttons[\"item-open-confirm\"]\n        XCTAssertTrue(open.appears(within: 5))\n        XCTAssertEqual(status.label, \"状態、未開封\")\n        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n\n        _ = try selectPastOpeningDate(openingWith: open, in: app)\n        app.buttons[\"item-open-cancel\"].tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(open.exists)\n        XCTAssertEqual(status.label, \"状態、未開封\")\n        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n\n        let selectedDate = try selectPastOpeningDate(openingWith: open, in: app)\n        let preview = app.staticTexts[\"item-open-preview\"]\n        let previewBeforeFailure = preview.label\n        confirm.tap()\n        let error = app.staticTexts[\"item-open-error\"]\n        XCTAssertTrue(error.appears(within: 5))\n        XCTAssertTrue(error.label.hasPrefix(\"開封を保存できませんでした。\"))\n        XCTAssertTrue(confirm.isEnabled)\n        XCTAssertEqual(preview.label, previewBeforeFailure)\n\n        confirm.tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        let detail = app.navigationBars[\"個体詳細\"]\n        XCTAssertTrue(detail.appears(within: 5))\n        XCTAssertTrue(status.satisfies(NSPredicate(format: \"label == %@\", \"状態、使用中\"), within: 5))\n        XCTAssertEqual(openingDate.label, \"開封日、\\(selectedDate)\")\n        XCTAssertFalse(open.exists)\n\n        detail.buttons[\"在庫一覧\"].tap()\n        XCTAssertTrue(inventory.appears(within: 5))\n        let sibling = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"賞味期限:\")\n        ).firstMatch\n        XCTAssertTrue(sibling.appears(within: 5))\n        sibling.tap()\n        XCTAssertTrue(detail.appears(within: 5))\n        XCTAssertTrue(open.appears(within: 5))\n        XCTAssertEqual(status.label, \"状態、未開封\")\n        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n    }"
       },
-      "commit": "3df955beebf568f4070a9c7dab661f57981a686e",
+      "commit": "310ee6d7dcae487dda9290a5fb678ce0f0c05aef",
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift"
       ],
@@ -237,6 +244,29 @@
         "tests": [
           "calendar-unit"
         ]
+      },
+      {
+        "text": "同じ商品の別の1本は未開封のままで、開封日は記録されない。",
+        "tests": [
+          "open-ui"
+        ]
+      }
+    ],
+    "added": [
+      {
+        "label": "保存に失敗したとき",
+        "before": [],
+        "after": [
+          {
+            "text": "開封の日付選択を閉じず、エラーと選んだ日付を表示する。"
+          },
+          {
+            "text": "日付を入力し直さず再試行できる。"
+          }
+        ],
+        "tests": [
+          "open-ui"
+        ]
       }
     ]
   },
@@ -256,9 +286,9 @@
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
-            "start": 223,
-            "end": 235,
-            "text": "    @State private var openingDate = Date.now\n    @State private var saveError: ItemActions.ActionError?\n\n    private let confirm: @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>\n\n    init(confirm: @escaping @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>) {\n        self.confirm = confirm\n    }\n\n    var body: some View {\n        let recordedDate = openingDate.formatted(date: .abbreviated, time: .omitted)\n\n        NavigationStack {"
+            "start": 261,
+            "end": 273,
+            "text": "    @State private var openingDate: Date\n    @State private var latestOpeningDate: Date\n    @State private var saveError: ItemActions.ActionError?\n\n    private let confirm: @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>\n\n    init(confirm: @escaping @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>) {\n        let now = Date.now\n        _openingDate = State(initialValue: now)\n        _latestOpeningDate = State(initialValue: now)\n        self.confirm = confirm\n    }\n"
           }
         },
         {
@@ -270,8 +300,8 @@
         {
           "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
           "lineRange": {
-            "start": 223,
-            "end": 235
+            "start": 261,
+            "end": 273
           },
           "text": "ここを読むと、画面の値と保存処理の境界をたどれます。"
         }
@@ -292,9 +322,9 @@
           "kind": "excerpt",
           "excerpt": {
             "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
-            "start": 246,
-            "end": 250,
-            "text": "                    DatePicker(\"開封日\", selection: $openingDate, in: ...Date.now, displayedComponents: .date)\n                        .datePickerStyle(.wheel)\n                        .accessibilityIdentifier(\"item-open-date\")\n                } header: {\n                    Text(\"開封日\")"
+            "start": 288,
+            "end": 292,
+            "text": "                    DatePicker(\"開封日\", selection: $openingDate, in: ...latestOpeningDate, displayedComponents: .date)\n                        .datePickerStyle(.wheel)\n                        .accessibilityIdentifier(\"item-open-date\")\n                } header: {\n                    Text(\"開封日\")"
           }
         },
         {
@@ -306,8 +336,8 @@
         {
           "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
           "lineRange": {
-            "start": 246,
-            "end": 250
+            "start": 288,
+            "end": 292
           },
           "text": "ここを読むと、画面の値と保存処理の境界をたどれます。"
         }
