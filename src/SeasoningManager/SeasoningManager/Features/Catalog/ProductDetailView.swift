@@ -10,6 +10,10 @@ struct ProductDetailView: View {
     @Query private var items: [Item]
     @State private var showsDeletionConfirmation = false
     @State private var deletionError: String?
+    #if DEBUG
+        @Environment(\.calendar) private var calendar
+        @Environment(\.locale) private var locale
+    #endif
 
     init(productID: UUID) {
         _products = Query(Self.descriptor(for: productID))
@@ -109,8 +113,42 @@ struct ProductDetailView: View {
                 deletionError: deletionError,
                 onRequestDelete: { requestDeletion() }
             )
+
+            #if DEBUG
+                if let storedConsumptionDateForUITests {
+                    Section("保存済みの使い切り日") {
+                        Text(storedConsumptionDateForUITests)
+                            .accessibilityIdentifier("ui-test-stored-consumption-date")
+                    }
+                }
+            #endif
         }
     }
+
+    #if DEBUG
+        private var storedConsumptionDateForUITests: String? {
+            let arguments = ProcessInfo.processInfo.arguments
+            guard arguments.contains("--ui-test-show-stored-consumption-date"),
+                let storeIndex = arguments.firstIndex(of: "--ui-test-store-id"),
+                arguments.indices.contains(storeIndex + 1),
+                UUID(uuidString: arguments[storeIndex + 1]) != nil,
+                _items.fetchError == nil
+            else {
+                return nil
+            }
+
+            // 隔離ストアを読み直した商品別の個体から実値だけを表示する。
+            let consumedItems = items.filter { !$0.isDeleted && $0.modelContext != nil && $0.status == .consumed }
+            guard consumedItems.count == 1, let date = consumedItems.first?.consumedDate else {
+                return nil
+            }
+
+            let dateStyle = Date.FormatStyle(
+                date: .abbreviated, time: .omitted, locale: locale, calendar: calendar, timeZone: calendar.timeZone
+            )
+            return date.formatted(dateStyle)
+        }
+    #endif
 
     private func requestDeletion() {
         deletionError = nil

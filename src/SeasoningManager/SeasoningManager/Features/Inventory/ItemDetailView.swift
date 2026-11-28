@@ -8,6 +8,7 @@ struct ItemDetailView: View {
     private nonisolated enum Sheet: Identifiable {
         case editDates(Item)
         case open(Item)
+        case consume(Item)
 
         var id: String {
             switch self {
@@ -15,6 +16,8 @@ struct ItemDetailView: View {
                 return "editDates"
             case .open:
                 return "open"
+            case .consume:
+                return "consume"
             }
         }
     }
@@ -24,6 +27,7 @@ struct ItemDetailView: View {
     @Query private var items: [Item]
     @State private var expirationReferenceDate = Date.now
     @State private var sheet: Sheet?
+    @State private var shouldReturnToInventory = false
     @State private var showsDeletionConfirmation = false
     @State private var deletionError: String?
     #if DEBUG
@@ -78,13 +82,17 @@ struct ItemDetailView: View {
         }
         .navigationTitle("個体詳細")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $sheet) { sheet in
+        .sheet(item: $sheet, onDismiss: returnToInventoryAfterConsumption) { sheet in
             switch sheet {
             case .editDates(let item):
                 ItemDateEditor(item: item)
             case .open(let item):
                 ItemOpeningForm { date, calendar in
                     open(item, on: date, calendar: calendar)
+                }
+            case .consume(let item):
+                ItemConsumptionForm { date, calendar in
+                    consume(item, on: date, calendar: calendar)
                 }
             }
         }
@@ -128,6 +136,11 @@ struct ItemDetailView: View {
                         sheet = .open(detail.item)
                     }
                     .accessibilityIdentifier("item-detail-open")
+                } else if detail.item.status == .inUse {
+                    Button("この1本を使い切る") {
+                        sheet = .consume(detail.item)
+                    }
+                    .accessibilityIdentifier("item-detail-consume")
                 }
                 if let deletionError {
                     Text(deletionError)
@@ -160,6 +173,27 @@ struct ItemDetailView: View {
         }
 
         return openingActions.open(item, openingDate: date, calendar: calendar)
+    }
+
+    private func consume(_ item: Item, on date: Date, calendar: Calendar) -> Result<Void, ItemActions.ActionError> {
+        guard isCurrent(item) else {
+            return .failure(.itemNotInContext)
+        }
+
+        let result = ItemActions(context: modelContext).consume(item, consumedDate: date, calendar: calendar)
+        if case .success = result {
+            shouldReturnToInventory = true
+        }
+        return result
+    }
+
+    private func returnToInventoryAfterConsumption() {
+        guard shouldReturnToInventory else {
+            return
+        }
+
+        shouldReturnToInventory = false
+        dismiss()
     }
 
     private var openingActions: ItemActions {
@@ -336,6 +370,88 @@ private struct ItemOpeningForm: View {
             return "開封を保存できませんでした。日付を変えずにもう一度「開封する」を押せます。"
         case .productNotInContext, .deletionNotConfirmed, .validation:
             return "開封できませんでした。入力内容と個体の状態を確認してください。"
+        }
+    }
+}
+
+private struct ItemConsumptionForm: View {
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
+    @Environment(\.dismiss) private var dismiss
+    @State private var consumedDate = Date.now
+    @State private var saveError: ItemActions.ActionError?
+
+    private let confirm: @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>
+
+    init(confirm: @escaping @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>) {
+        self.confirm = confirm
+    }
+
+    var body: some View {
+        let dateStyle = Date.FormatStyle(
+            date: .abbreviated, time: .omitted, locale: locale, calendar: calendar, timeZone: calendar.timeZone
+        )
+        let recordedDate = consumedDate.formatted(dateStyle)
+
+        NavigationStack {
+            Form {
+                if let message = saveErrorMessage {
+                    Section {
+                        Text(message)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("item-consume-error")
+                    }
+                }
+
+                Section {
+                    DatePicker("使い切り日", selection: $consumedDate, displayedComponents: .date)
+                        .datePickerStyle(.wheel)
+                        .accessibilityIdentifier("item-consume-date")
+                } header: {
+                    Text("使い切り日")
+                } footer: {
+                    Text("「\(recordedDate)」を使い切り日として記録し、在庫一覧から履歴に移します。")
+                        .accessibilityIdentifier("item-consume-preview")
+                }
+            }
+            .navigationTitle("この1本を使い切る")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { dismiss() }
+                        .accessibilityIdentifier("item-consume-cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("使い切る", action: save)
+                        .accessibilityIdentifier("item-consume-confirm")
+                }
+            }
+        }
+    }
+
+    private func save() {
+        switch confirm(consumedDate, calendar) {
+        case .success:
+            dismiss()
+        case .failure(let error):
+            saveError = error
+        }
+    }
+
+    private var saveErrorMessage: String? {
+        switch saveError {
+        case nil:
+            return nil
+        case .validation(.consumedDateBeforeOpeningDate):
+            return "使い切り日は開封日以降の日付を選んでください。"
+        case .itemNotInContext, .validation(.invalidTransition), .validation(.unknownCurrentStatus):
+            return "使い切りにできる個体が見つかりません。在庫一覧から選び直してください。"
+        case .pendingChanges:
+            return "ほかの変更の保存が終わってから、もう一度「使い切る」を押してください。"
+        case .persistence:
+            return "使い切りを保存できませんでした。日付を変えずにもう一度「使い切る」を押せます。"
+        case .productNotInContext, .deletionNotConfirmed, .validation:
+            return "使い切りにできませんでした。入力内容と個体の状態を確認してください。"
         }
     }
 }

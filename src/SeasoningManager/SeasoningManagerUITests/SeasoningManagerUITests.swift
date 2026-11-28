@@ -271,6 +271,96 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
     }
 
     @MainActor
+    func testConsumingOneItemRejectsDatesBeforeOpeningAndMovesOnlyTargetToHistory() throws {
+        let app = makeApplication()
+        app.launchArguments += [
+            "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--ui-test-show-stored-consumption-date",
+        ]
+        let name = "Sesame Oil"
+        let type = "Oil"
+        app.launch()
+        XCTAssertTrue(app.navigationBars["商品一覧"].appears(within: 5))
+        app.tabBars.buttons["在庫"].tap()
+        app.buttons["inventory-empty-add"].tap()
+        app.buttons["item-form-register-product"].tap()
+        try enterProduct(name: name, type: type, in: app)
+        app.buttons["product-form-save"].tap()
+        app.buttons["item-form-save"].tap()
+
+        let inventory = app.navigationBars["在庫一覧"]
+        XCTAssertTrue(inventory.appears(within: 5))
+        inventory.buttons["inventory-list-add"].tap()
+        try selectItemProduct(name: name, type: type, in: app)
+        tapItemExpirationToggle(in: app)
+        app.buttons["item-form-save"].tap()
+        XCTAssertTrue(inventory.appears(within: 5))
+
+        let target = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", name, "期限未設定")
+        ).firstMatch
+        XCTAssertTrue(target.appears(within: 5))
+        target.tap()
+
+        let open = app.buttons["item-detail-open"]
+        let consume = app.buttons["item-detail-consume"]
+        XCTAssertTrue(open.appears(within: 5))
+        XCTAssertFalse(consume.exists)
+
+        let openingPreview = app.staticTexts["item-open-preview"]
+        let initialOpeningYear = try presentDateSheet(with: open, preview: openingPreview, in: app)
+        let openingYear = initialOpeningYear - 2
+        selectYear(openingYear, from: initialOpeningYear, preview: openingPreview, in: app)
+        let openConfirm = app.buttons["item-open-confirm"]
+        openConfirm.tap()
+        XCTAssertTrue(openConfirm.disappears(within: 5))
+        XCTAssertTrue(consume.appears(within: 5))
+
+        let preview = app.staticTexts["item-consume-preview"]
+        let confirm = app.buttons["item-consume-confirm"]
+        let validYear = openingYear + 1
+        let initialYear = try presentDateSheet(with: consume, preview: preview, in: app)
+        selectYear(validYear, from: initialYear, preview: preview, in: app)
+        app.buttons["item-consume-cancel"].tap()
+        XCTAssertTrue(confirm.disappears(within: 5))
+        XCTAssertTrue(app.navigationBars["個体詳細"].appears(within: 5))
+        let status = app.descendants(matching: .any).matching(identifier: "item-detail-status").firstMatch
+        XCTAssertEqual(status.label, "状態、使用中")
+
+        let reopenedYear = try presentDateSheet(with: consume, preview: preview, in: app)
+        let rejectedYear = openingYear - 1
+        selectYear(rejectedYear, from: reopenedYear, preview: preview, in: app)
+        let rejectedPreview = preview.label
+        confirm.tap()
+        let error = app.staticTexts["item-consume-error"]
+        XCTAssertTrue(error.appears(within: 5))
+        XCTAssertEqual(error.label, "使い切り日は開封日以降の日付を選んでください。")
+        XCTAssertEqual(preview.label, rejectedPreview)
+        XCTAssertTrue(confirm.isEnabled)
+
+        selectYear(validYear, from: rejectedYear, preview: preview, in: app)
+        let datePrefix = try XCTUnwrap(preview.label.split(separator: "」", maxSplits: 1).first)
+        let selectedDate = String(datePrefix.dropFirst())
+        confirm.tap()
+        XCTAssertTrue(confirm.disappears(within: 5))
+        XCTAssertTrue(inventory.appears(within: 5))
+        XCTAssertTrue(target.disappears(within: 5))
+        let sibling = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", name, "賞味期限:")
+        ).firstMatch
+        XCTAssertTrue(sibling.appears(within: 5))
+
+        app.terminate()
+        app.launch()
+        let product = productRow(name: name, type: type, unopened: 1, in: app)
+        XCTAssertTrue(product.appears(within: 5))
+        product.tap()
+        let history = try detailElement("product-detail-history", in: app)
+        XCTAssertEqual(history.label, "使い切り履歴、1件")
+        let storedDate = try detailElement("ui-test-stored-consumption-date", in: app)
+        XCTAssertEqual(storedDate.label, selectedDate)
+    }
+
+    @MainActor
     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {
         let app = makeApplication()
         app.launch()
@@ -380,9 +470,19 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
 
     @MainActor
     private func selectPastOpeningDate(openingWith button: XCUIElement, in app: XCUIApplication) throws -> String {
+        let preview = app.staticTexts["item-open-preview"]
+        let year = try presentDateSheet(with: button, preview: preview, in: app)
+        selectYear(year - 1, from: year, preview: preview, in: app)
+        let date = try XCTUnwrap(preview.label.split(separator: "」", maxSplits: 1).first)
+        return String(date.dropFirst())
+    }
+
+    @MainActor
+    private func presentDateSheet(
+        with button: XCUIElement, preview: XCUIElement, in app: XCUIApplication
+    ) throws -> Int {
         let beforePresentation = Date.now
         button.tap()
-        let preview = app.staticTexts["item-open-preview"]
         XCTAssertTrue(preview.appears(within: 5), app.debugDescription)
         let afterPresentation = Date.now
         let format = Date.FormatStyle(date: .abbreviated, time: .omitted, locale: Locale(identifier: "en_US"))
@@ -391,14 +491,15 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
             [beforePresentation, afterPresentation].first { initialPreview.hasPrefix("「\($0.formatted(format))」") },
             initialPreview
         )
-        let calendar = Calendar(identifier: .gregorian)
-        let year = calendar.component(.year, from: initialDate)
-        let yearWheel = app.pickerWheels.matching(NSPredicate(format: "value == %@", String(year))).firstMatch
+        return Calendar(identifier: .gregorian).component(.year, from: initialDate)
+    }
+
+    @MainActor
+    private func selectYear(_ year: Int, from currentYear: Int, preview: XCUIElement, in app: XCUIApplication) {
+        let yearWheel = app.pickerWheels.matching(NSPredicate(format: "value == %@", String(currentYear))).firstMatch
         XCTAssertTrue(yearWheel.appears(within: 5), app.debugDescription)
-        yearWheel.adjust(toPickerWheelValue: String(year - 1))
-        XCTAssertTrue(preview.satisfies(NSPredicate(format: "label CONTAINS %@", "\(year - 1)」"), within: 5))
-        let date = try XCTUnwrap(preview.label.split(separator: "」", maxSplits: 1).first)
-        return String(date.dropFirst())
+        yearWheel.adjust(toPickerWheelValue: String(year))
+        XCTAssertTrue(preview.satisfies(NSPredicate(format: "label CONTAINS %@", "\(year)」"), within: 5))
     }
 
     @MainActor
