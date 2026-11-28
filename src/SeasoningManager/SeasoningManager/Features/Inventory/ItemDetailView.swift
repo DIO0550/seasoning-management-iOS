@@ -26,9 +26,15 @@ struct ItemDetailView: View {
     @State private var sheet: Sheet?
     @State private var showsDeletionConfirmation = false
     @State private var deletionError: String?
+    #if DEBUG
+        @State private var failsNextOpeningSave: Bool
+    #endif
 
     init(itemID: UUID) {
         _items = Query(Self.descriptor(for: itemID))
+        #if DEBUG
+            _failsNextOpeningSave = State(initialValue: Self.requestsOpeningSaveFailure)
+        #endif
     }
 
     static func descriptor(for itemID: UUID) -> FetchDescriptor<Item> {
@@ -153,8 +159,40 @@ struct ItemDetailView: View {
             return .failure(.itemNotInContext)
         }
 
-        return ItemActions(context: modelContext).open(item, openingDate: date, calendar: calendar)
+        return openingActions.open(item, openingDate: date, calendar: calendar)
     }
+
+    private var openingActions: ItemActions {
+        #if DEBUG
+            if failsNextOpeningSave {
+                return ItemActions(context: modelContext) { _ in
+                    // 個体の変更後、実際の保存前に失敗させてロールバックと再試行を確認する。
+                    failsNextOpeningSave = false
+                    return .failure(OpeningUITestError.saveFailed)
+                }
+            }
+        #endif
+
+        return ItemActions(context: modelContext)
+    }
+
+    #if DEBUG
+        private nonisolated enum OpeningUITestError: Error {
+            case saveFailed
+        }
+
+        private static var requestsOpeningSaveFailure: Bool {
+            let arguments = ProcessInfo.processInfo.arguments
+            guard arguments.contains("--ui-test-fail-first-opening-save"),
+                let storeIndex = arguments.firstIndex(of: "--ui-test-store-id"),
+                arguments.indices.contains(storeIndex + 1)
+            else {
+                return false
+            }
+
+            return UUID(uuidString: arguments[storeIndex + 1]) != nil
+        }
+    #endif
 
     private func delete(_ target: ItemDetailContent) {
         guard isCurrent(target.item), target.item.modelContext === modelContext, target.canDeleteFromInventory
@@ -220,12 +258,16 @@ struct ItemDetailContent {
 private struct ItemOpeningForm: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.dismiss) private var dismiss
-    @State private var openingDate = Date.now
+    @State private var openingDate: Date
+    @State private var latestOpeningDate: Date
     @State private var saveError: ItemActions.ActionError?
 
     private let confirm: @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>
 
     init(confirm: @escaping @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>) {
+        let now = Date.now
+        _openingDate = State(initialValue: now)
+        _latestOpeningDate = State(initialValue: now)
         self.confirm = confirm
     }
 
@@ -243,7 +285,7 @@ private struct ItemOpeningForm: View {
                 }
 
                 Section {
-                    DatePicker("開封日", selection: $openingDate, in: ...Date.now, displayedComponents: .date)
+                    DatePicker("開封日", selection: $openingDate, in: ...latestOpeningDate, displayedComponents: .date)
                         .datePickerStyle(.wheel)
                         .accessibilityIdentifier("item-open-date")
                 } header: {
@@ -265,6 +307,9 @@ private struct ItemOpeningForm: View {
                         .accessibilityIdentifier("item-open-confirm")
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            latestOpeningDate = .now
         }
     }
 
