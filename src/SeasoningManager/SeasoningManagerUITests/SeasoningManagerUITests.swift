@@ -273,7 +273,9 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
     @MainActor
     func testConsumingOneItemRejectsDatesBeforeOpeningAndMovesOnlyTargetToHistory() throws {
         let app = makeApplication()
-        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments += [
+            "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--ui-test-show-stored-consumption-date",
+        ]
         let name = "Sesame Oil"
         let type = "Oil"
         app.launch()
@@ -336,6 +338,8 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
         XCTAssertTrue(confirm.isEnabled)
 
         selectYear(validYear, from: rejectedYear, preview: preview, in: app)
+        let datePrefix = try XCTUnwrap(preview.label.split(separator: "」", maxSplits: 1).first)
+        let selectedDate = String(datePrefix.dropFirst())
         confirm.tap()
         XCTAssertTrue(confirm.disappears(within: 5))
         XCTAssertTrue(inventory.appears(within: 5))
@@ -352,6 +356,8 @@ final class SeasoningManagerInventoryUITests: XCTestCase {
         product.tap()
         let history = try detailElement("product-detail-history", in: app)
         XCTAssertEqual(history.label, "使い切り履歴、1件")
+        let storedDate = try detailElement("ui-test-stored-consumption-date", in: app)
+        XCTAssertEqual(storedDate.label, selectedDate)
     }
 
     @MainActor
