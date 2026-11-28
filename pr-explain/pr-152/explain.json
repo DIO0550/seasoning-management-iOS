@@ -1,7 +1,7 @@
 {
   "version": 1,
   "pr": 152,
-  "sha": "87a5f630993bc35a5538c53d7744436671e19d6a",
+  "sha": "be0a3fe11a00f17031a772199b36a4bf6ac59852",
   "issue": 64,
   "overview": {
     "title": "使用中の1本を使い切りにする",
@@ -81,6 +81,14 @@
       "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
       "name": "在庫の操作テスト",
       "role": "日付の編集から保存後の一覧までを操作する",
+      "feature": "consume",
+      "graph": false
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+      "name": "保存済みの日付の観測",
+      "role": "商品を開き直して読み込んだ履歴から保存済みの日付を取り出す",
+      "change": "隔離したテストストアでだけ使う読み取り口を追加",
       "feature": "consume",
       "graph": false
     }
@@ -220,6 +228,24 @@
           "text": "成功のときだけ入力画面を閉じる。失敗は日付と別の状態として持つ。"
         }
       ]
+    },
+    {
+      "sha": "be0a3fe11a00f17031a772199b36a4bf6ac59852",
+      "phase": "revise",
+      "role": "再起動後に、確定直前に選んだ日付が残ることまで確かめる",
+      "why": "件数だけでは、確定中に選んだ日付を当日に差し替えて保存しても失敗しなかったため。",
+      "review": [
+        "日付の期待値をアプリへ渡さず、再起動した商品別の履歴から実際に読み出すか。",
+        "観測表示が隔離されたテストストア以外で現れないか。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "start": 121,
+          "end": 121,
+          "text": "テストが読み取る識別子。通常の公開画面には出さない。"
+        }
+      ]
     }
   ],
   "suites": [
@@ -247,13 +273,13 @@
       "why": "日付の入力違いで意図せず在庫が減ったり、同じ商品の別の個体を失ったりしないこと。",
       "given": "同じ商品に在庫を2本登録する。",
       "when": "1本を開封し、使い切り日を変更して確認する。",
-      "then": "開封日より前では選択が残り、キャンセルできる。正しい日付で確定した1本だけが一覧から外れる。",
+      "then": "キャンセルでは使用中のまま。開封日前なら選択を残して訂正でき、正しい日付で確定した1本だけが一覧から外れる。再起動後に、履歴に残った使い切り日の暦日が確定直前の表示と一致する。",
       "commit": "87a5f630993bc35a5538c53d7744436671e19d6a",
       "excerpt": {
         "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
-        "start": 279,
-        "end": 355,
-        "text": "        app.launch()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].appears(within: 5))\n        app.tabBars.buttons[\"在庫\"].tap()\n        app.buttons[\"inventory-empty-add\"].tap()\n        app.buttons[\"item-form-register-product\"].tap()\n        try enterProduct(name: name, type: type, in: app)\n        app.buttons[\"product-form-save\"].tap()\n        app.buttons[\"item-form-save\"].tap()\n\n        let inventory = app.navigationBars[\"在庫一覧\"]\n        XCTAssertTrue(inventory.appears(within: 5))\n        inventory.buttons[\"inventory-list-add\"].tap()\n        try selectItemProduct(name: name, type: type, in: app)\n        tapItemExpirationToggle(in: app)\n        app.buttons[\"item-form-save\"].tap()\n        XCTAssertTrue(inventory.appears(within: 5))\n\n        let target = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n        ).firstMatch\n        XCTAssertTrue(target.appears(within: 5))\n        target.tap()\n\n        let open = app.buttons[\"item-detail-open\"]\n        let consume = app.buttons[\"item-detail-consume\"]\n        XCTAssertTrue(open.appears(within: 5))\n        XCTAssertFalse(consume.exists)\n\n        let openingPreview = app.staticTexts[\"item-open-preview\"]\n        let initialOpeningYear = try presentDateSheet(with: open, preview: openingPreview, in: app)\n        let openingYear = initialOpeningYear - 2\n        selectYear(openingYear, from: initialOpeningYear, preview: openingPreview, in: app)\n        let openConfirm = app.buttons[\"item-open-confirm\"]\n        openConfirm.tap()\n        XCTAssertTrue(openConfirm.disappears(within: 5))\n        XCTAssertTrue(consume.appears(within: 5))\n\n        let preview = app.staticTexts[\"item-consume-preview\"]\n        let confirm = app.buttons[\"item-consume-confirm\"]\n        let validYear = openingYear + 1\n        let initialYear = try presentDateSheet(with: consume, preview: preview, in: app)\n        selectYear(validYear, from: initialYear, preview: preview, in: app)\n        app.buttons[\"item-consume-cancel\"].tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(app.navigationBars[\"個体詳細\"].appears(within: 5))\n        let status = app.descendants(matching: .any).matching(identifier: \"item-detail-status\").firstMatch\n        XCTAssertEqual(status.label, \"状態、使用中\")\n\n        let reopenedYear = try presentDateSheet(with: consume, preview: preview, in: app)\n        let rejectedYear = openingYear - 1\n        selectYear(rejectedYear, from: reopenedYear, preview: preview, in: app)\n        let rejectedPreview = preview.label\n        confirm.tap()\n        let error = app.staticTexts[\"item-consume-error\"]\n        XCTAssertTrue(error.appears(within: 5))\n        XCTAssertEqual(error.label, \"使い切り日は開封日以降の日付を選んでください。\")\n        XCTAssertEqual(preview.label, rejectedPreview)\n        XCTAssertTrue(confirm.isEnabled)\n\n        selectYear(validYear, from: rejectedYear, preview: preview, in: app)\n        confirm.tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(inventory.appears(within: 5))\n        XCTAssertTrue(target.disappears(within: 5))\n        let sibling = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"賞味期限:\")\n        ).firstMatch\n        XCTAssertTrue(sibling.appears(within: 5))\n\n        app.terminate()\n        app.launch()\n        let product = productRow(name: name, type: type, unopened: 1, in: app)\n        XCTAssertTrue(product.appears(within: 5))\n        product.tap()\n        let history = try detailElement(\"product-detail-history\", in: app)\n        XCTAssertEqual(history.label, \"使い切り履歴、1件\")\n    }"
+        "start": 285,
+        "end": 361,
+        "text": "        app.buttons[\"item-form-register-product\"].tap()\n        try enterProduct(name: name, type: type, in: app)\n        app.buttons[\"product-form-save\"].tap()\n        app.buttons[\"item-form-save\"].tap()\n\n        let inventory = app.navigationBars[\"在庫一覧\"]\n        XCTAssertTrue(inventory.appears(within: 5))\n        inventory.buttons[\"inventory-list-add\"].tap()\n        try selectItemProduct(name: name, type: type, in: app)\n        tapItemExpirationToggle(in: app)\n        app.buttons[\"item-form-save\"].tap()\n        XCTAssertTrue(inventory.appears(within: 5))\n\n        let target = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n        ).firstMatch\n        XCTAssertTrue(target.appears(within: 5))\n        target.tap()\n\n        let open = app.buttons[\"item-detail-open\"]\n        let consume = app.buttons[\"item-detail-consume\"]\n        XCTAssertTrue(open.appears(within: 5))\n        XCTAssertFalse(consume.exists)\n\n        let openingPreview = app.staticTexts[\"item-open-preview\"]\n        let initialOpeningYear = try presentDateSheet(with: open, preview: openingPreview, in: app)\n        let openingYear = initialOpeningYear - 2\n        selectYear(openingYear, from: initialOpeningYear, preview: openingPreview, in: app)\n        let openConfirm = app.buttons[\"item-open-confirm\"]\n        openConfirm.tap()\n        XCTAssertTrue(openConfirm.disappears(within: 5))\n        XCTAssertTrue(consume.appears(within: 5))\n\n        let preview = app.staticTexts[\"item-consume-preview\"]\n        let confirm = app.buttons[\"item-consume-confirm\"]\n        let validYear = openingYear + 1\n        let initialYear = try presentDateSheet(with: consume, preview: preview, in: app)\n        selectYear(validYear, from: initialYear, preview: preview, in: app)\n        app.buttons[\"item-consume-cancel\"].tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(app.navigationBars[\"個体詳細\"].appears(within: 5))\n        let status = app.descendants(matching: .any).matching(identifier: \"item-detail-status\").firstMatch\n        XCTAssertEqual(status.label, \"状態、使用中\")\n\n        let reopenedYear = try presentDateSheet(with: consume, preview: preview, in: app)\n        let rejectedYear = openingYear - 1\n        selectYear(rejectedYear, from: reopenedYear, preview: preview, in: app)\n        let rejectedPreview = preview.label\n        confirm.tap()\n        let error = app.staticTexts[\"item-consume-error\"]\n        XCTAssertTrue(error.appears(within: 5))\n        XCTAssertEqual(error.label, \"使い切り日は開封日以降の日付を選んでください。\")\n        XCTAssertEqual(preview.label, rejectedPreview)\n        XCTAssertTrue(confirm.isEnabled)\n\n        selectYear(validYear, from: rejectedYear, preview: preview, in: app)\n        let datePrefix = try XCTUnwrap(preview.label.split(separator: \"」\", maxSplits: 1).first)\n        let selectedDate = String(datePrefix.dropFirst())\n        confirm.tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(inventory.appears(within: 5))\n        XCTAssertTrue(target.disappears(within: 5))\n        let sibling = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"賞味期限:\")\n        ).firstMatch\n        XCTAssertTrue(sibling.appears(within: 5))\n\n        app.terminate()\n        app.launch()\n        let product = productRow(name: name, type: type, unopened: 1, in: app)\n        XCTAssertTrue(product.appears(within: 5))\n        product.tap()\n        let history = try detailElement(\"product-detail-history\", in: app)\n        XCTAssertEqual(history.label, \"使い切り履歴、1件\")\n        let storedDate = try detailElement(\"ui-test-stored-consumption-date\", in: app)\n        XCTAssertEqual(storedDate.label, selectedDate)\n    }"
       },
       "values": {
         "columns": [
@@ -285,12 +311,19 @@
               "妥当な日付で確定",
               "その1本だけが一覧から外れる"
             ]
+          },
+          {
+            "cells": [
+              "アプリを再起動",
+              "選んだ過去日が履歴に残る"
+            ]
           }
         ]
       },
       "targets": [
         "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
-        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift"
       ],
       "covers": [
         "present",
@@ -555,6 +588,72 @@
         "invalid"
       ],
       "status": "added"
+    },
+    {
+      "kind": "codebase",
+      "id": "stored-day",
+      "category": "回帰テスト",
+      "label": "再起動後の日付を照合する",
+      "gist": "件数に加え、確定直前の表示と再読み込み後の保存値を独立に比べます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "テストランナーとアプリは別プロセスで動きます。テストは画面に表示された選択日を期待値として保持し、アプリを終了してから同じ隔離ストアで起動し直します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+            "start": 129,
+            "end": 150,
+            "text": "        private var storedConsumptionDateForUITests: String? {\n            let arguments = ProcessInfo.processInfo.arguments\n            guard arguments.contains(\"--ui-test-show-stored-consumption-date\"),\n                let storeIndex = arguments.firstIndex(of: \"--ui-test-store-id\"),\n                arguments.indices.contains(storeIndex + 1),\n                UUID(uuidString: arguments[storeIndex + 1]) != nil,\n                _items.fetchError == nil\n            else {\n                return nil\n            }\n\n            // 隔離ストアを読み直した商品別の個体から実値だけを表示する。\n            let consumedItems = items.filter { !$0.isDeleted && $0.modelContext != nil && $0.status == .consumed }\n            guard consumedItems.count == 1, let date = consumedItems.first?.consumedDate else {\n                return nil\n            }\n\n            let dateStyle = Date.FormatStyle(\n                date: .abbreviated, time: .omitted, locale: locale, calendar: calendar, timeZone: calendar.timeZone\n            )\n            return date.formatted(dateStyle)\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "テスト用の表示は、通常の商品別のクエリが読み込んだ個体から日付を取り出します。期待値はアプリ側へ渡していないため、日付を今日に差し替えると件数が正しくてもテストが失敗します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+            "start": 354,
+            "end": 361,
+            "text": "        let product = productRow(name: name, type: type, unopened: 1, in: app)\n        XCTAssertTrue(product.appears(within: 5))\n        product.tap()\n        let history = try detailElement(\"product-detail-history\", in: app)\n        XCTAssertEqual(history.label, \"使い切り履歴、1件\")\n        let storedDate = try detailElement(\"ui-test-stored-consumption-date\", in: app)\n        XCTAssertEqual(storedDate.label, selectedDate)\n    }"
+          }
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "lineRange": {
+            "start": 129,
+            "end": 150
+          },
+          "text": "保存された使い切り日を読み取る",
+          "shas": [
+            "be0a3fe11a00f17031a772199b36a4bf6ac59852"
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "lineRange": {
+            "start": 359,
+            "end": 361
+          },
+          "text": "表示と保存値をテストで比較する",
+          "shas": [
+            "be0a3fe11a00f17031a772199b36a4bf6ac59852"
+          ]
+        }
+      ],
+      "status": "added",
+      "tests": [
+        "consume-ui"
+      ],
+      "flows": [
+        "success"
+      ]
     }
   ]
 }
