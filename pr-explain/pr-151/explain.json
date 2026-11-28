@@ -1,0 +1,372 @@
+{
+  "version": 1,
+  "pr": 151,
+  "sha": "3df955beebf568f4070a9c7dab661f57981a686e",
+  "issue": 60,
+  "overview": {
+    "title": "未開封の1本を、開封日を選んで使用中へ",
+    "lead": "個体詳細に開封専用の入力を追加しました。入力と確定を分け、既存の状態遷移・保存処理につなぎます。",
+    "before": [
+      {
+        "text": "個体詳細は日付編集と削除の入口を持つが、未開封から開封を確定できなかった。"
+      }
+    ],
+    "after": [
+      {
+        "text": "未開封の詳細から今日以前の開封日を確定できる。",
+        "message": "open"
+      },
+      {
+        "text": "保存できないときは日付選択を閉じず、個体を元の状態に保つ。",
+        "message": "validate"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "入力と保存の境界",
+        "text": "確定するまで、選択した日は保存モデルに書き込まれません。",
+        "go": {
+          "kind": "flow",
+          "id": "confirm"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "opening",
+      "label": "未開封の開封",
+      "role": "一個体の開封日を確認し、使用中へ進める。"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "name": "個体詳細と開封確認",
+      "role": "開封の入口、入力、保存結果の表示を持つ。",
+      "feature": "opening",
+      "change": "確認シートに日付とエラーを保持し、成功したときだけ詳細へ戻る。"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "name": "在庫の保存窓口",
+      "role": "保存を一回だけ実行し、失敗時は変更を戻す。",
+      "feature": "opening"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "name": "個体の状態",
+      "role": "検証済みの開封日と状態を保存モデルに反映する。",
+      "feature": "opening"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+      "name": "状態と日付のルール",
+      "role": "未開封から使用中への遷移と開封日の整合を検証する。",
+      "feature": "opening"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "在庫の操作テスト",
+      "role": "ユーザーの操作から詳細の表示までを確かめる。",
+      "graph": false
+    }
+  ],
+  "messages": [
+    {
+      "id": "open",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "kind": "cmd",
+      "name": "選択した日付で開封する",
+      "code": "ItemActions.open(_:openingDate:now:calendar:)",
+      "via": "call",
+      "status": "added",
+      "payload": "詳細に表示中の一個体と、確認した開封日",
+      "returns": "保存成功または型付きエラー"
+    },
+    {
+      "id": "transition",
+      "from": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "kind": "cmd",
+      "name": "個体を使用中にする",
+      "code": "Item.open(on:now:calendar:)",
+      "via": "call",
+      "returns": "使用中への移行に成功したか、ルールに反したか"
+    },
+    {
+      "id": "validate",
+      "from": "src/SeasoningManager/SeasoningManager/Item.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+      "kind": "qry",
+      "name": "状態と日付を検証する",
+      "code": "ItemRules.validate(from:requiring:now:calendar:)",
+      "via": "call",
+      "returns": "検証済みの状態、または遷移・日付のエラー"
+    }
+  ],
+  "flows": [
+    {
+      "id": "confirm",
+      "label": "日付を選んで確定する",
+      "steps": [
+        "open",
+        "transition",
+        "validate"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "3df955beebf568f4070a9c7dab661f57981a686e",
+      "phase": "core",
+      "role": "個体詳細から確認付きの開封操作を呼べるようにする。",
+      "why": "保存窓口は既存の実装を共有し、画面だけが編集途中の日付と失敗の見せ方を所有するため。",
+      "flows": [
+        "confirm"
+      ],
+      "review": [
+        "表示対象が照会の一意な個体であることを、確定時にも確認する。",
+        "成功時以外は保存を済ませた表示にせず、日付の選択値が消えない。"
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "start": 121,
+          "end": 127,
+          "text": "開封の入口は未開封の個体だけに表示する。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "ui",
+      "label": "在庫の画面操作",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    },
+    {
+      "id": "unit",
+      "label": "個体の保存と読み出し",
+      "file": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "open-ui",
+      "suite": "ui",
+      "name": "testOpeningOneItemRequiresConfirmationAndSavesSelectedPastDate",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "開封の入口から保存後の詳細まで、処理のつなぎ忘れを検出する。",
+      "given": "保存済みの未開封個体を詳細で表示する。",
+      "when": "開封シートを開き、キャンセルと確定を行う。",
+      "then": "キャンセルでは未開封のままで、確定後は開封日が表示されて再開封の入口がなくなる。",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 197,
+        "end": 239,
+        "text": "    func testOpeningOneItemRequiresConfirmationAndSavesSelectedPastDate() throws {\n        let app = makeApplication()\n        app.launchArguments += [\"-AppleLanguages\", \"(en)\", \"-AppleLocale\", \"en_US\"]\n        let name = \"Olive Oil\"\n        app.launch()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].appears(within: 5))\n        app.tabBars.buttons[\"在庫\"].tap()\n        app.buttons[\"inventory-empty-add\"].tap()\n        app.buttons[\"item-form-register-product\"].tap()\n        try enterProduct(name: name, type: \"Oil\", in: app)\n        app.buttons[\"product-form-save\"].tap()\n        app.buttons[\"item-form-save\"].tap()\n\n        let row = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n        ).firstMatch\n        XCTAssertTrue(row.appears(within: 5))\n        row.tap()\n\n        let status = app.descendants(matching: .any).matching(identifier: \"item-detail-status\").firstMatch\n        let openingDate = app.descendants(matching: .any).matching(identifier: \"item-detail-opening-date\").firstMatch\n        let open = app.buttons[\"item-detail-open\"]\n        let confirm = app.buttons[\"item-open-confirm\"]\n        XCTAssertTrue(open.appears(within: 5))\n        XCTAssertEqual(status.label, \"状態、未開封\")\n        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n\n        _ = try selectPastOpeningDate(openingWith: open, in: app)\n        app.buttons[\"item-open-cancel\"].tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(open.exists)\n        XCTAssertEqual(status.label, \"状態、未開封\")\n        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n\n        let selectedDate = try selectPastOpeningDate(openingWith: open, in: app)\n        confirm.tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(app.navigationBars[\"個体詳細\"].exists)\n        XCTAssertTrue(status.satisfies(NSPredicate(format: \"label == %@\", \"状態、使用中\"), within: 5))\n        XCTAssertEqual(openingDate.label, \"開封日、\\(selectedDate)\")\n        XCTAssertFalse(open.exists)\n    }\n"
+      },
+      "commit": "3df955beebf568f4070a9c7dab661f57981a686e",
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift"
+      ],
+      "covers": [
+        "open"
+      ]
+    },
+    {
+      "id": "calendar-unit",
+      "suite": "unit",
+      "name": "openingUsesTheInjectedLocalDayAndPreservesTheConfirmedTime",
+      "techniques": [
+        "boundary",
+        "state"
+      ],
+      "why": "端末の暦日を基準に未来日を判定し、確認値を変えずに保存する。",
+      "given": "同じ時刻が UTC では翌日、日本では当日となる入力を用意する。",
+      "when": "暦を入れ替えて開封を確定する。",
+      "then": "未来日は保存されず、同じ暦日の値は使用中として読み直せる。",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/ItemActionsTests.swift",
+        "start": 1003,
+        "end": 1043,
+        "text": "    @Test func openingUsesTheInjectedLocalDayAndPreservesTheConfirmedTime() throws {\n        let container = try makeContainer()\n        let context = ModelContext(container)\n        let product = try makeSavedProduct(in: context)\n        let item = try makeSavedItem(in: context, product: product, status: .unopened)\n        let original = ItemSnapshot(item)\n        let now = Date(timeIntervalSince1970: 1_736_006_400)\n        let opening = now.addingTimeInterval(9 * 3600)\n        var saveCalls = 0\n        let actions = ItemActions(context: context) { context in\n            saveCalls += 1\n            return Result { try context.save() }\n        }\n\n        guard\n            case .failure(.validation(.futureOpeningDate)) = actions.open(\n                item, openingDate: opening, now: now, calendar: try calendar(secondsFromGMT: 0)\n            )\n        else {\n            Issue.record(\"UTCの翌日の開封が拒否されなかった\")\n            return\n        }\n        #expect(saveCalls == 0)\n        #expect(ItemSnapshot(item) == original)\n        #expect(!context.hasChanges)\n\n        // 日本では同じ暦日なので、現在時刻より後の確認済み時刻もそのまま保存する。\n        try actions.open(\n            item, openingDate: opening, now: now, calendar: try calendar(secondsFromGMT: 9 * 3600)\n        ).get()\n\n        #expect(saveCalls == 1)\n        #expect(item.status == .inUse)\n        #expect(item.openingDate == opening)\n        #expect(item.consumedDate == nil)\n        #expect(item.updatedAt == now)\n        #expect(!context.hasChanges)\n        let reader = ModelContext(container)\n        #expect(ItemSnapshot(try #require(reader.fetch(FetchDescriptor<Item>()).first)) == ItemSnapshot(item))\n    }\n"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+        "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift"
+      ],
+      "covers": [
+        "validate"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "在庫の詳細から、開封日を記録できる",
+    "lead": "在庫一覧から未開封の1本を開き、「この1本を開封」で日付を確認します。",
+    "changed": {
+      "before": [
+        {
+          "text": "個体詳細から未開封の1本を使用中にできなかった。"
+        }
+      ],
+      "after": [
+        {
+          "text": "最初に今日が表示され、開けた日が以前なら選び直して確定できる。"
+        },
+        {
+          "text": "保存が終わると、同じ個体の詳細に使用中と開封日が表示される。",
+          "message": "open"
+        }
+      ]
+    },
+    "kept": [
+      {
+        "text": "キャンセルしても元の状態と日付はそのまま。",
+        "tests": [
+          "open-ui"
+        ]
+      },
+      {
+        "text": "未来の日付では開封できない。",
+        "tests": [
+          "calendar-unit"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "id": "draft",
+      "kind": "language",
+      "category": "SwiftUI",
+      "label": "画面が所有する値と `@State`",
+      "gist": "確定されていない日付を保持する場所を、保存モデルから分けます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "`@State` は SwiftUI が画面の同一性に紐づけて保持する値です。入力フォームの見た目を作り直しても、表示中の選択は失われません。日付の型は `Date` ですが、ここに保存先への書き込みはありません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 223,
+            "end": 235,
+            "text": "    @State private var openingDate = Date.now\n    @State private var saveError: ItemActions.ActionError?\n\n    private let confirm: @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>\n\n    init(confirm: @escaping @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>) {\n        self.confirm = confirm\n    }\n\n    var body: some View {\n        let recordedDate = openingDate.formatted(date: .abbreviated, time: .omitted)\n\n        NavigationStack {"
+          }
+        },
+        {
+          "kind": "memo",
+          "text": "新しいシートを出すと値が初期化されます。閉じただけでは、個体の保存日は変わりません。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 223,
+            "end": 235
+          },
+          "text": "ここを読むと、画面の値と保存処理の境界をたどれます。"
+        }
+      ]
+    },
+    {
+      "id": "picker",
+      "kind": "language",
+      "category": "SwiftUI",
+      "label": "日付入力とバインディング",
+      "gist": "日付入力は選択値の読み取りと書き戻しをフォームに委ねます。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "プロパティ名の前にある `$` は、その値そのものではなく値を読み書きできるバインディングを渡す記法です。`DatePicker` は選択をそこに書き戻します。日付だけを表示し、部分範囲で未来側に上限を付けます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 246,
+            "end": 250,
+            "text": "                    DatePicker(\"開封日\", selection: $openingDate, in: ...Date.now, displayedComponents: .date)\n                        .datePickerStyle(.wheel)\n                        .accessibilityIdentifier(\"item-open-date\")\n                } header: {\n                    Text(\"開封日\")"
+          }
+        },
+        {
+          "kind": "memo",
+          "text": "画面の選択制限だけでは保存の不変条件になりません。確定時には保存処理が同じ暦日のルールで再検証します。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 246,
+            "end": 250
+          },
+          "text": "ここを読むと、画面の値と保存処理の境界をたどれます。"
+        }
+      ],
+      "seeAlso": [
+        "transaction"
+      ]
+    },
+    {
+      "id": "transaction",
+      "kind": "codebase",
+      "category": "在庫",
+      "label": "開封と失敗時の戻し方",
+      "gist": "確定時にだけ個体を保存し、失敗したときは変更全体を戻します。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "開封と使い切りは違う状態遷移ですが、保存の成功・失敗を扱う部分は同じです。既存の開封関数は一個体の遷移を、共通の更新処理に渡します。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 63,
+            "end": 68,
+            "text": "    func open(\n        _ item: Item, openingDate: Date, now: Date = Date(), calendar: Calendar = .current\n    ) -> Result<Void, ActionError> {\n        update(item) { item.open(on: openingDate, now: now, calendar: calendar) }\n    }\n"
+          }
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+            "start": 100,
+            "end": 125,
+            "text": "    private func update(\n        _ item: Item, change: () -> Result<Void, ItemRules.ValidationError>\n    ) -> Result<Void, ActionError> {\n        guard !context.hasChanges else {\n            return .failure(.pendingChanges)\n        }\n\n        guard item.modelContext === context else {\n            return .failure(.itemNotInContext)\n        }\n\n        switch change() {\n        case .success:\n            break\n        case .failure(let error):\n            return .failure(.validation(error))\n        }\n\n        switch save(context) {\n        case .success:\n            return .success(())\n        case .failure(let error):\n            context.rollback()\n            return .failure(.persistence(error))\n        }\n    }"
+          }
+        },
+        {
+          "kind": "memo",
+          "text": "保存前に別の未保存変更があれば処理を始めません。失敗時の `rollback()` は保存用コンテキスト全体に効くため、開封以外の未保存変更を巻き戻さないための条件です。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+          "lineRange": {
+            "start": 100,
+            "end": 125
+          },
+          "text": "ここを読むと、画面の値と保存処理の境界をたどれます。"
+        }
+      ],
+      "tests": [
+        "calendar-unit"
+      ],
+      "flows": [
+        "confirm"
+      ],
+      "status": "changed"
+    }
+  ]
+}
