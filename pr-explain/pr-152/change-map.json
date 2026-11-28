@@ -4,7 +4,7 @@
   "headBranch": "codex/issue-64-consume-inventory-item",
   "baseBranch": "master",
   "mergeBase": "291c20b00a91b91ba105af9cb6dd5d5638e92238",
-  "head": "87a5f630993bc35a5538c53d7744436671e19d6a",
+  "head": "be0a3fe11a00f17031a772199b36a4bf6ac59852",
   "groups": [
     {
       "label": "UI テスト",
@@ -13,7 +13,7 @@
           "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
           "status": "M",
           "oldPath": null,
-          "additions": 103,
+          "additions": 109,
           "deletions": 8,
           "changed": true,
           "target": null
@@ -23,6 +23,15 @@
     {
       "label": "アプリ(その他)",
       "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 38,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        },
         {
           "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
           "status": "M",
@@ -74,6 +83,36 @@
           "deletions": 8,
           "patch": "@@ -270,6 +270,90 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n         XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n     }\n \n+    @MainActor\n+    func testConsumingOneItemRejectsDatesBeforeOpeningAndMovesOnlyTargetToHistory() throws {\n+        let app = makeApplication()\n+        app.launchArguments += [\"-AppleLanguages\", \"(en)\", \"-AppleLocale\", \"en_US\"]\n+        let name = \"Sesame Oil\"\n+        let type = \"Oil\"\n+        app.launch()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].appears(within: 5))\n+        app.tabBars.buttons[\"在庫\"].tap()\n+        app.buttons[\"inventory-empty-add\"].tap()\n+        app.buttons[\"item-form-register-product\"].tap()\n+        try enterProduct(name: name, type: type, in: app)\n+        app.buttons[\"product-form-save\"].tap()\n+        app.buttons[\"item-form-save\"].tap()\n+\n+        let inventory = app.navigationBars[\"在庫一覧\"]\n+        XCTAssertTrue(inventory.appears(within: 5))\n+        inventory.buttons[\"inventory-list-add\"].tap()\n+        try selectItemProduct(name: name, type: type, in: app)\n+        tapItemExpirationToggle(in: app)\n+        app.buttons[\"item-form-save\"].tap()\n+        XCTAssertTrue(inventory.appears(within: 5))\n+\n+        let target = app.buttons.matching(\n+            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n+        ).firstMatch\n+        XCTAssertTrue(target.appears(within: 5))\n+        target.tap()\n+\n+        let open = app.buttons[\"item-detail-open\"]\n+        let consume = app.buttons[\"item-detail-consume\"]\n+        XCTAssertTrue(open.appears(within: 5))\n+        XCTAssertFalse(consume.exists)\n+\n+        let openingPreview = app.staticTexts[\"item-open-preview\"]\n+        let initialOpeningYear = try presentDateSheet(with: open, preview: openingPreview, in: app)\n+        let openingYear = initialOpeningYear - 2\n+        selectYear(openingYear, from: initialOpeningYear, preview: openingPreview, in: app)\n+        let openConfirm = app.buttons[\"item-open-confirm\"]\n+        openConfirm.tap()\n+        XCTAssertTrue(openConfirm.disappears(within: 5))\n+        XCTAssertTrue(consume.appears(within: 5))\n+\n+        let preview = app.staticTexts[\"item-consume-preview\"]\n+        let confirm = app.buttons[\"item-consume-confirm\"]\n+        let validYear = openingYear + 1\n+        let initialYear = try presentDateSheet(with: consume, preview: preview, in: app)\n+        selectYear(validYear, from: initialYear, preview: preview, in: app)\n+        app.buttons[\"item-consume-cancel\"].tap()\n+        XCTAssertTrue(confirm.disappears(within: 5))\n+        XCTAssertTrue(app.navigationBars[\"個体詳細\"].appears(within: 5))\n+        let status = app.descendants(matching: .any).matching(identifier: \"item-detail-status\").firstMatch\n+        XCTAssertEqual(status.label, \"状態、使用中\")\n+\n+        let reopenedYear = try presentDateSheet(with: consume, preview: preview, in: app)\n+        let rejectedYear = openingYear - 1\n+        selectYear(rejectedYear, from: reopenedYear, preview: preview, in: app)\n+        let rejectedPreview = preview.label\n+        confirm.tap()\n+        let error = app.staticTexts[\"item-consume-error\"]\n+        XCTAssertTrue(error.appears(within: 5))\n+        XCTAssertEqual(error.label, \"使い切り日は開封日以降の日付を選んでください。\")\n+        XCTAssertEqual(preview.label, rejectedPreview)\n+        XCTAssertTrue(confirm.isEnabled)\n+\n+        selectYear(validYear, from: rejectedYear, preview: preview, in: app)\n+        confirm.tap()\n+        XCTAssertTrue(confirm.disappears(within: 5))\n+        XCTAssertTrue(inventory.appears(within: 5))\n+        XCTAssertTrue(target.disappears(within: 5))\n+        let sibling = app.buttons.matching(\n+            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"賞味期限:\")\n+        ).firstMatch\n+        XCTAssertTrue(sibling.appears(within: 5))\n+\n+        app.terminate()\n+        app.launch()\n+        let product = productRow(name: name, type: type, unopened: 1, in: app)\n+        XCTAssertTrue(product.appears(within: 5))\n+        product.tap()\n+        let history = try detailElement(\"product-detail-history\", in: app)\n+        XCTAssertEqual(history.label, \"使い切り履歴、1件\")\n+    }\n+\n     @MainActor\n     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {\n         let app = makeApplication()\n@@ -380,9 +464,19 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n \n     @MainActor\n     private func selectPastOpeningDate(openingWith button: XCUIElement, in app: XCUIApplication) throws -> String {\n+        let preview = app.staticTexts[\"item-open-preview\"]\n+        let year = try presentDateSheet(with: button, preview: preview, in: app)\n+        selectYear(year - 1, from: year, preview: preview, in: app)\n+        let date = try XCTUnwrap(preview.label.split(separator: \"」\", maxSplits: 1).first)\n+        return String(date.dropFirst())\n+    }\n+\n+    @MainActor\n+    private func presentDateSheet(\n+        with button: XCUIElement, preview: XCUIElement, in app: XCUIApplication\n+    ) throws -> Int {\n         let beforePresentation = Date.now\n         button.tap()\n-        let preview = app.staticTexts[\"item-open-preview\"]\n         XCTAssertTrue(preview.appears(within: 5), app.debugDescription)\n         let afterPresentation = Date.now\n         let format = Date.FormatStyle(date: .abbreviated, time: .omitted, locale: Locale(identifier: \"en_US\"))\n@@ -391,14 +485,15 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n             [beforePresentation, afterPresentation].first { initialPreview.hasPrefix(\"「\\($0.formatted(format))」\") },\n             initialPreview\n         )\n-        let calendar = Calendar(identifier: .gregorian)\n-        let year = calendar.component(.year, from: initialDate)\n-        let yearWheel = app.pickerWheels.matching(NSPredicate(format: \"value == %@\", String(year))).firstMatch\n+        return Calendar(identifier: .gregorian).component(.year, from: initialDate)\n+    }\n+\n+    @MainActor\n+    private func selectYear(_ year: Int, from currentYear: Int, preview: XCUIElement, in app: XCUIApplication) {\n+        let yearWheel = app.pickerWheels.matching(NSPredicate(format: \"value == %@\", String(currentYear))).firstMatch\n         XCTAssertTrue(yearWheel.appears(within: 5), app.debugDescription)\n-        yearWheel.adjust(toPickerWheelValue: String(year - 1))\n-        XCTAssertTrue(preview.satisfies(NSPredicate(format: \"label CONTAINS %@\", \"\\(year - 1)」\"), within: 5))\n-        let date = try XCTUnwrap(preview.label.split(separator: \"」\", maxSplits: 1).first)\n-        return String(date.dropFirst())\n+        yearWheel.adjust(toPickerWheelValue: String(year))\n+        XCTAssertTrue(preview.satisfies(NSPredicate(format: \"label CONTAINS %@\", \"\\(year)」\"), within: 5))\n     }\n \n     @MainActor",
           "patchLines": 135,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "sha": "be0a3fe11a00f17031a772199b36a4bf6ac59852",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-28T14:33:08+09:00",
+      "subject": "test: 再起動後に保存した使い切り日を照合する",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Catalog/ProductDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 38,
+          "deletions": 0,
+          "patch": "@@ -10,6 +10,10 @@ struct ProductDetailView: View {\n     @Query private var items: [Item]\n     @State private var showsDeletionConfirmation = false\n     @State private var deletionError: String?\n+    #if DEBUG\n+        @Environment(\\.calendar) private var calendar\n+        @Environment(\\.locale) private var locale\n+    #endif\n \n     init(productID: UUID) {\n         _products = Query(Self.descriptor(for: productID))\n@@ -109,9 +113,43 @@ struct ProductDetailView: View {\n                 deletionError: deletionError,\n                 onRequestDelete: { requestDeletion() }\n             )\n+\n+            #if DEBUG\n+                if let storedConsumptionDateForUITests {\n+                    Section(\"保存済みの使い切り日\") {\n+                        Text(storedConsumptionDateForUITests)\n+                            .accessibilityIdentifier(\"ui-test-stored-consumption-date\")\n+                    }\n+                }\n+            #endif\n         }\n     }\n \n+    #if DEBUG\n+        private var storedConsumptionDateForUITests: String? {\n+            let arguments = ProcessInfo.processInfo.arguments\n+            guard arguments.contains(\"--ui-test-show-stored-consumption-date\"),\n+                let storeIndex = arguments.firstIndex(of: \"--ui-test-store-id\"),\n+                arguments.indices.contains(storeIndex + 1),\n+                UUID(uuidString: arguments[storeIndex + 1]) != nil,\n+                _items.fetchError == nil\n+            else {\n+                return nil\n+            }\n+\n+            // 隔離ストアを読み直した商品別の個体から実値だけを表示する。\n+            let consumedItems = items.filter { !$0.isDeleted && $0.modelContext != nil && $0.status == .consumed }\n+            guard consumedItems.count == 1, let date = consumedItems.first?.consumedDate else {\n+                return nil\n+            }\n+\n+            let dateStyle = Date.FormatStyle(\n+                date: .abbreviated, time: .omitted, locale: locale, calendar: calendar, timeZone: calendar.timeZone\n+            )\n+            return date.formatted(dateStyle)\n+        }\n+    #endif\n+\n     private func requestDeletion() {\n         deletionError = nil\n         showsDeletionConfirmation = true",
+          "patchLines": 55,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 7,
+          "deletions": 1,
+          "patch": "@@ -273,7 +273,9 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n     @MainActor\n     func testConsumingOneItemRejectsDatesBeforeOpeningAndMovesOnlyTargetToHistory() throws {\n         let app = makeApplication()\n-        app.launchArguments += [\"-AppleLanguages\", \"(en)\", \"-AppleLocale\", \"en_US\"]\n+        app.launchArguments += [\n+            \"-AppleLanguages\", \"(en)\", \"-AppleLocale\", \"en_US\", \"--ui-test-show-stored-consumption-date\",\n+        ]\n         let name = \"Sesame Oil\"\n         let type = \"Oil\"\n         app.launch()\n@@ -336,6 +338,8 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n         XCTAssertTrue(confirm.isEnabled)\n \n         selectYear(validYear, from: rejectedYear, preview: preview, in: app)\n+        let datePrefix = try XCTUnwrap(preview.label.split(separator: \"」\", maxSplits: 1).first)\n+        let selectedDate = String(datePrefix.dropFirst())\n         confirm.tap()\n         XCTAssertTrue(confirm.disappears(within: 5))\n         XCTAssertTrue(inventory.appears(within: 5))\n@@ -352,6 +356,8 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n         product.tap()\n         let history = try detailElement(\"product-detail-history\", in: app)\n         XCTAssertEqual(history.label, \"使い切り履歴、1件\")\n+        let storedDate = try detailElement(\"ui-test-stored-consumption-date\", in: app)\n+        XCTAssertEqual(storedDate.label, selectedDate)\n     }\n \n     @MainActor",
+          "patchLines": 29,
           "truncated": false
         }
       ]
