@@ -1,0 +1,560 @@
+{
+  "version": 1,
+  "pr": 152,
+  "sha": "87a5f630993bc35a5538c53d7744436671e19d6a",
+  "issue": 64,
+  "overview": {
+    "title": "使用中の1本を使い切りにする",
+    "lead": "新しい画面は、選んだ日付を保存処理へ渡し、その結果に応じて表示を切り替えます。検証も一覧の条件も既存のものを使います。",
+    "before": [
+      {
+        "text": "使用中の個体を使い切ったと記録する操作が、個体詳細にありませんでした。"
+      }
+    ],
+    "after": [
+      {
+        "text": "使用中の個体で、今日を初期値とした日付を確認・変更できます。",
+        "message": "present"
+      },
+      {
+        "text": "開封日より前なら、日付を残して訂正を案内します。",
+        "message": "validate"
+      },
+      {
+        "text": "保存できた1本だけが通常の在庫一覧から外れます。",
+        "message": "refresh"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "表示と保存の分離",
+        "text": "選んだ日付は確定までは画面内にだけ置きます。",
+        "go": {
+          "kind": "flow",
+          "id": "success"
+        }
+      },
+      {
+        "title": "日付の境界",
+        "text": "時刻ではなく、端末の暦日で開封日と比較します。",
+        "go": {
+          "kind": "flow",
+          "id": "invalid"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "consume",
+      "label": "在庫の使い切り",
+      "role": "使用中の個体を日付つきで履歴扱いにする"
+    }
+  ],
+  "concepts": [
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "name": "個体詳細と確認画面",
+      "role": "対象と日付の下書きを持ち、確定結果を表示する",
+      "feature": "consume",
+      "change": "使用中の個体に使い切りの入口を追加"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "name": "個体の保存処理",
+      "role": "対象と保存前の状態をチェックし、状態と日付を一度に保存する",
+      "feature": "consume"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+      "name": "状態と日付の規則",
+      "role": "使用中からの遷移と、開封日より前でないことを検証する",
+      "feature": "consume"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "name": "在庫一覧",
+      "role": "未開封と使用中の個体だけを表示する",
+      "feature": "consume"
+    },
+    {
+      "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+      "name": "在庫の操作テスト",
+      "role": "日付の編集から保存後の一覧までを操作する",
+      "feature": "consume",
+      "graph": false
+    }
+  ],
+  "messages": [
+    {
+      "id": "present",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "name": "個体の詳細を開く",
+      "kind": "cmd",
+      "via": "state",
+      "code": "ItemDetailView(itemID:)",
+      "payload": "一覧で選んだ1本",
+      "returns": "日付確認への入口"
+    },
+    {
+      "id": "save",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "name": "使い切り日を確定する",
+      "kind": "cmd",
+      "via": "call",
+      "code": "ItemActions.consume(_:consumedDate:now:calendar:)",
+      "payload": "対象・編集した日付・日付の暦",
+      "returns": "保存成功または理由つきの失敗",
+      "status": "added"
+    },
+    {
+      "id": "validate",
+      "from": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+      "name": "状態と暦日を検証する",
+      "kind": "cmd",
+      "via": "call",
+      "code": "ItemRules.validate",
+      "payload": "現在の状態・開封日・選んだ使い切り日",
+      "returns": "状態変更に使える日付、または違反"
+    },
+    {
+      "id": "refresh",
+      "from": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift",
+      "name": "保存できたら在庫へ戻る",
+      "kind": "evt",
+      "via": "state",
+      "code": "sheet(item:onDismiss:content:)",
+      "payload": "使い切りの確定に成功",
+      "returns": "使用中の欄から対象の1本が外れる",
+      "status": "added"
+    },
+    {
+      "id": "reject",
+      "from": "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+      "to": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+      "name": "入力の修正を案内する",
+      "kind": "evt",
+      "via": "call",
+      "code": "ActionError.validation(.consumedDateBeforeOpeningDate)",
+      "payload": "選んだ日付が開封日の前",
+      "returns": "入力を残し、修正する条件を表示",
+      "status": "added"
+    }
+  ],
+  "flows": [
+    {
+      "id": "success",
+      "label": "確定に成功したとき",
+      "steps": [
+        "present",
+        "save",
+        "validate",
+        "refresh"
+      ]
+    },
+    {
+      "id": "invalid",
+      "label": "開封日より前を選んだとき",
+      "steps": [
+        "present",
+        "save",
+        "validate",
+        "reject"
+      ]
+    }
+  ],
+  "commitStories": [
+    {
+      "sha": "87a5f630993bc35a5538c53d7744436671e19d6a",
+      "phase": "core",
+      "role": "個体詳細に使い切り確認をつなぎ、実際の画面操作で確かめる",
+      "why": "状態と日付を一度に保存する仕組みが先にあり、画面で保存をやり直せる入口が必要だったため。",
+      "review": [
+        "開封日前の拒否が、日付の条件を画面側に重複実装せずに伝わるか。",
+        "確定に成功した場合だけ、シートを閉じてから在庫一覧に戻るか。"
+      ],
+      "flows": [
+        "success",
+        "invalid"
+      ],
+      "before": [
+        {
+          "text": "使用中の個体を使い切ったと記録する操作が、個体詳細にありませんでした。"
+        }
+      ],
+      "after": [
+        {
+          "text": "使用中の個体で、今日を初期値とした日付を確認・変更できます。",
+          "message": "present"
+        },
+        {
+          "text": "開封日より前なら、日付を残して訂正を案内します。",
+          "message": "validate"
+        },
+        {
+          "text": "保存できた1本だけが通常の在庫一覧から外れます。",
+          "message": "refresh"
+        }
+      ],
+      "notes": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "start": 140,
+          "end": 142,
+          "text": "画面の入口は使用中の個体だけに出す。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "start": 178,
+          "end": 182,
+          "text": "確認中に表示対象が変わった場合は、別の個体に同じ入力を保存しない。"
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "start": 432,
+          "end": 437,
+          "text": "成功のときだけ入力画面を閉じる。失敗は日付と別の状態として持つ。"
+        }
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "id": "ui",
+      "label": "在庫の画面操作",
+      "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    },
+    {
+      "id": "list",
+      "label": "在庫一覧の保存結果",
+      "file": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift"
+    }
+  ],
+  "tests": [
+    {
+      "id": "consume-ui",
+      "suite": "ui",
+      "name": "testConsumingOneItemRejectsDatesBeforeOpeningAndMovesOnlyTargetToHistory",
+      "techniques": [
+        "state",
+        "boundary",
+        "regression"
+      ],
+      "why": "日付の入力違いで意図せず在庫が減ったり、同じ商品の別の個体を失ったりしないこと。",
+      "given": "同じ商品に在庫を2本登録する。",
+      "when": "1本を開封し、使い切り日を変更して確認する。",
+      "then": "開封日より前では選択が残り、キャンセルできる。正しい日付で確定した1本だけが一覧から外れる。",
+      "commit": "87a5f630993bc35a5538c53d7744436671e19d6a",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "start": 279,
+        "end": 355,
+        "text": "        app.launch()\n        XCTAssertTrue(app.navigationBars[\"商品一覧\"].appears(within: 5))\n        app.tabBars.buttons[\"在庫\"].tap()\n        app.buttons[\"inventory-empty-add\"].tap()\n        app.buttons[\"item-form-register-product\"].tap()\n        try enterProduct(name: name, type: type, in: app)\n        app.buttons[\"product-form-save\"].tap()\n        app.buttons[\"item-form-save\"].tap()\n\n        let inventory = app.navigationBars[\"在庫一覧\"]\n        XCTAssertTrue(inventory.appears(within: 5))\n        inventory.buttons[\"inventory-list-add\"].tap()\n        try selectItemProduct(name: name, type: type, in: app)\n        tapItemExpirationToggle(in: app)\n        app.buttons[\"item-form-save\"].tap()\n        XCTAssertTrue(inventory.appears(within: 5))\n\n        let target = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n        ).firstMatch\n        XCTAssertTrue(target.appears(within: 5))\n        target.tap()\n\n        let open = app.buttons[\"item-detail-open\"]\n        let consume = app.buttons[\"item-detail-consume\"]\n        XCTAssertTrue(open.appears(within: 5))\n        XCTAssertFalse(consume.exists)\n\n        let openingPreview = app.staticTexts[\"item-open-preview\"]\n        let initialOpeningYear = try presentDateSheet(with: open, preview: openingPreview, in: app)\n        let openingYear = initialOpeningYear - 2\n        selectYear(openingYear, from: initialOpeningYear, preview: openingPreview, in: app)\n        let openConfirm = app.buttons[\"item-open-confirm\"]\n        openConfirm.tap()\n        XCTAssertTrue(openConfirm.disappears(within: 5))\n        XCTAssertTrue(consume.appears(within: 5))\n\n        let preview = app.staticTexts[\"item-consume-preview\"]\n        let confirm = app.buttons[\"item-consume-confirm\"]\n        let validYear = openingYear + 1\n        let initialYear = try presentDateSheet(with: consume, preview: preview, in: app)\n        selectYear(validYear, from: initialYear, preview: preview, in: app)\n        app.buttons[\"item-consume-cancel\"].tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(app.navigationBars[\"個体詳細\"].appears(within: 5))\n        let status = app.descendants(matching: .any).matching(identifier: \"item-detail-status\").firstMatch\n        XCTAssertEqual(status.label, \"状態、使用中\")\n\n        let reopenedYear = try presentDateSheet(with: consume, preview: preview, in: app)\n        let rejectedYear = openingYear - 1\n        selectYear(rejectedYear, from: reopenedYear, preview: preview, in: app)\n        let rejectedPreview = preview.label\n        confirm.tap()\n        let error = app.staticTexts[\"item-consume-error\"]\n        XCTAssertTrue(error.appears(within: 5))\n        XCTAssertEqual(error.label, \"使い切り日は開封日以降の日付を選んでください。\")\n        XCTAssertEqual(preview.label, rejectedPreview)\n        XCTAssertTrue(confirm.isEnabled)\n\n        selectYear(validYear, from: rejectedYear, preview: preview, in: app)\n        confirm.tap()\n        XCTAssertTrue(confirm.disappears(within: 5))\n        XCTAssertTrue(inventory.appears(within: 5))\n        XCTAssertTrue(target.disappears(within: 5))\n        let sibling = app.buttons.matching(\n            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"賞味期限:\")\n        ).firstMatch\n        XCTAssertTrue(sibling.appears(within: 5))\n\n        app.terminate()\n        app.launch()\n        let product = productRow(name: name, type: type, unopened: 1, in: app)\n        XCTAssertTrue(product.appears(within: 5))\n        product.tap()\n        let history = try detailElement(\"product-detail-history\", in: app)\n        XCTAssertEqual(history.label, \"使い切り履歴、1件\")\n    }"
+      },
+      "values": {
+        "columns": [
+          "状態または入力",
+          "画面で確かめること"
+        ],
+        "rows": [
+          {
+            "cells": [
+              "未開封",
+              "使い切りのボタンがない"
+            ]
+          },
+          {
+            "cells": [
+              "日付を変更する前",
+              "当日が選ばれている"
+            ]
+          },
+          {
+            "cells": [
+              "開封日より前",
+              "エラーが出て、日付は残る"
+            ],
+            "boundary": true
+          },
+          {
+            "cells": [
+              "妥当な日付で確定",
+              "その1本だけが一覧から外れる"
+            ]
+          }
+        ]
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+      ],
+      "covers": [
+        "present",
+        "save",
+        "reject",
+        "refresh"
+      ]
+    },
+    {
+      "id": "inventory-fetch",
+      "suite": "list",
+      "name": "inventoryReflectsSavedOpeningConsumptionAndDeletion",
+      "techniques": [
+        "state",
+        "regression"
+      ],
+      "why": "一覧から外すことと、記録自体を削除することを区別する。",
+      "given": "同じ商品に個体が2本ある。",
+      "when": "片方だけを使い切り、別のコンテキストで在庫を読む。",
+      "then": "通常の在庫には別の1本だけが現れ、使い切った1本は保存データとして残る。",
+      "excerpt": {
+        "path": "src/SeasoningManager/SeasoningManagerTests/InventoryListTests.swift",
+        "start": 74,
+        "end": 84,
+        "text": "        try actions.consume(first, consumedDate: now, now: now).get()\n        let consumptionReader = ModelContext(container)\n        let afterConsumption = try consumptionReader.fetch(InventoryListView.descriptor())\n        #expect(afterConsumption.map(\\.id) == [second.id])\n\n        try actions.delete(second, confirmed: true).get()\n        let reader = ModelContext(container)\n        #expect(try reader.fetch(InventoryListView.descriptor()).isEmpty)\n        let history = try #require(try reader.fetch(FetchDescriptor<Item>()).first)\n        #expect(history.id == first.id)\n        #expect(history.status == .consumed)"
+      },
+      "targets": [
+        "src/SeasoningManager/SeasoningManager/Data/ItemActions.swift",
+        "src/SeasoningManager/SeasoningManager/Features/Inventory/InventoryListView.swift"
+      ]
+    }
+  ],
+  "impact": {
+    "title": "使い切った1本だけを在庫から外せる",
+    "lead": "使い切り日を直してから確定できます。入力を確定するまでは、在庫の状態は変わりません。",
+    "changed": {
+      "before": [
+        {
+          "text": "使用中の個体を使い切ったと記録する操作が、個体詳細にありませんでした。"
+        }
+      ],
+      "after": [
+        {
+          "text": "使用中の個体で、今日を初期値とした日付を確認・変更できます。",
+          "message": "present"
+        },
+        {
+          "text": "開封日より前なら、日付を残して訂正を案内します。",
+          "message": "validate"
+        },
+        {
+          "text": "保存できた1本だけが通常の在庫一覧から外れます。",
+          "message": "refresh"
+        }
+      ]
+    },
+    "tables": [
+      {
+        "label": "選んだ日と確定後の状態",
+        "gist": "開封した日と同じ日も選べます。開封日より前だけが日付条件に反します。",
+        "rowHeads": [
+          {
+            "id": "before-open",
+            "label": "開封日より前"
+          },
+          {
+            "id": "valid",
+            "label": "開封日と同じ日、またはその後"
+          }
+        ],
+        "columnHeads": [
+          {
+            "id": "confirm",
+            "label": "確定"
+          },
+          {
+            "id": "cancel",
+            "label": "キャンセル"
+          }
+        ],
+        "outcomes": [
+          {
+            "rowHead": "before-open",
+            "columnHead": "confirm",
+            "result": "使用中のまま。入力を残して訂正を案内します。",
+            "tests": [
+              "consume-ui"
+            ]
+          },
+          {
+            "rowHead": "before-open",
+            "columnHead": "cancel",
+            "result": "使用中のまま。変更は保存されません。",
+            "tests": [
+              "consume-ui"
+            ]
+          },
+          {
+            "rowHead": "valid",
+            "columnHead": "confirm",
+            "result": "保存できた1本だけが一覧から外れ、記録が残ります。",
+            "tests": [
+              "consume-ui",
+              "inventory-fetch"
+            ]
+          },
+          {
+            "rowHead": "valid",
+            "columnHead": "cancel",
+            "result": "使用中のまま。変更は保存されません。"
+          }
+        ]
+      }
+    ],
+    "kept": [
+      {
+        "text": "同じ商品の別の1本は変わりません。",
+        "tests": [
+          "consume-ui",
+          "inventory-fetch"
+        ]
+      }
+    ]
+  },
+  "primers": [
+    {
+      "kind": "language",
+      "id": "state-binding",
+      "category": "SwiftUI · 入力",
+      "label": "`@State` と `Binding`",
+      "gist": "選択した日付を画面内に置き、日付ピッカーから読み書きできるようにします。",
+      "passages": [
+        {
+          "kind": "text",
+          "text": "SwiftUI のビューは値型で、表示更新ではビューの値が作り直されます。`@State` が付いた値はビューの識別にひもづいて別に管理されるため、同じ確認画面で再描画されても下書きは消えません。新しい提示では初期値から始まります。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 381,
+            "end": 392,
+            "text": "    @State private var consumedDate = Date.now\n    @State private var saveError: ItemActions.ActionError?\n\n    private let confirm: @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>\n\n    init(confirm: @escaping @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>) {\n        self.confirm = confirm\n    }\n\n    var body: some View {\n        let dateStyle = Date.FormatStyle(\n            date: .abbreviated, time: .omitted, locale: locale, calendar: calendar, timeZone: calendar.timeZone"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`$変数名` はその値の `Binding` です。値そのものではなく、値を読み書きできる接続なので、日付ピッカーの選択が下書きに戻ります。この接続先は保存モデルではありません。キャンセルしても、保存済みの日付は変わりません。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 407,
+            "end": 409,
+            "text": "                    DatePicker(\"使い切り日\", selection: $consumedDate, displayedComponents: .date)\n                        .datePickerStyle(.wheel)\n                        .accessibilityIdentifier(\"item-consume-date\")"
+          }
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 381,
+            "end": 383
+          },
+          "text": "日付の下書きと保存エラーを状態として管理する",
+          "shas": [
+            "87a5f630993bc35a5538c53d7744436671e19d6a"
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 407,
+            "end": 409
+          },
+          "text": "日付ピッカーを下書きに接続する",
+          "shas": [
+            "87a5f630993bc35a5538c53d7744436671e19d6a"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "codebase",
+      "id": "result",
+      "category": "使い切りの日付",
+      "label": "日付を確定してから画面を閉じる",
+      "gist": "選択した暦日を保存へ渡し、成功と失敗を分けて次の表示を決めます。",
+      "passages": [
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 178,
+            "end": 190,
+            "text": "    private func consume(_ item: Item, on date: Date, calendar: Calendar) -> Result<Void, ItemActions.ActionError> {\n        guard isCurrent(item) else {\n            return .failure(.itemNotInContext)\n        }\n\n        let result = ItemActions(context: modelContext).consume(item, consumedDate: date, calendar: calendar)\n        if case .success = result {\n            shouldReturnToInventory = true\n        }\n        return result\n    }\n\n    private func returnToInventoryAfterConsumption() {"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "対象は確認画面を開いた時点の個体です。保存する直前にも、詳細が同じ個体を指していることを調べます。状態や開封日との前後関係は画面のスナップショットを使って判断せず、保存時のドメインへ任せます。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Domain/ItemRules.swift",
+            "start": 103,
+            "end": 105,
+            "text": "        guard calendar.startOfDay(for: consumedDate) >= openingDay else {\n            return .failure(.consumedDateBeforeOpeningDate)\n        }"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "この比較は時刻順の比較ではありません。`startOfDay(for:)` で日付を同じ暦の一日の始まりへ揃えるため、開封と使い切りが同じ暦日なら、時刻が前後していても有効です。"
+        },
+        {
+          "kind": "excerpt",
+          "excerpt": {
+            "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+            "start": 432,
+            "end": 440,
+            "text": "    private func save() {\n        switch confirm(consumedDate, calendar) {\n        case .success:\n            dismiss()\n        case .failure(let error):\n            saveError = error\n        }\n    }\n"
+          }
+        },
+        {
+          "kind": "text",
+          "text": "`Result` は成功値か失敗理由のどちらかを表します。失敗で日付を上書きせず、エラーだけを更新するので、そのまま訂正できます。成功時はシートが閉じた後に詳細を閉じ、在庫一覧に戻ります。"
+        }
+      ],
+      "occurrences": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 178,
+            "end": 182
+          },
+          "text": "既存の保存処理へつなぐ",
+          "shas": [
+            "87a5f630993bc35a5538c53d7744436671e19d6a"
+          ]
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "lineRange": {
+            "start": 432,
+            "end": 440
+          },
+          "text": "保存結果で表示を分岐する",
+          "shas": [
+            "87a5f630993bc35a5538c53d7744436671e19d6a"
+          ]
+        }
+      ],
+      "tests": [
+        "consume-ui",
+        "inventory-fetch"
+      ],
+      "flows": [
+        "success",
+        "invalid"
+      ],
+      "status": "added"
+    }
+  ]
+}
