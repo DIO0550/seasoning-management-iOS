@@ -1,0 +1,83 @@
+{
+  "version": 2,
+  "pr": 151,
+  "headBranch": "codex/issue-60-open-inventory-item",
+  "baseBranch": "master",
+  "mergeBase": "194d9042735432c05c85183afe32053ea8832a36",
+  "head": "3df955beebf568f4070a9c7dab661f57981a686e",
+  "groups": [
+    {
+      "label": "UI テスト",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 67,
+          "deletions": 0,
+          "changed": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "label": "アプリ(その他)",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 128,
+          "deletions": 6,
+          "changed": true,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "added": [
+      {
+        "file": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+        "name": "testOpeningOneItemRequiresConfirmationAndSavesSelectedPastDate"
+      }
+    ],
+    "removed": [],
+    "files": [
+      "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift"
+    ]
+  },
+  "commits": [
+    {
+      "sha": "3df955beebf568f4070a9c7dab661f57981a686e",
+      "merge": false,
+      "author": "DIO0550",
+      "date": "2026-11-28T10:25:13+09:00",
+      "subject": "feat: 個体詳細から開封日を確定する",
+      "body": "",
+      "files": [
+        {
+          "path": "src/SeasoningManager/SeasoningManager/Features/Inventory/ItemDetailView.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 128,
+          "deletions": 6,
+          "patch": "@@ -5,11 +5,25 @@ import SwiftUI\n import UIKit\n \n struct ItemDetailView: View {\n+    private nonisolated enum Sheet: Identifiable {\n+        case editDates(Item)\n+        case open(Item)\n+\n+        var id: String {\n+            switch self {\n+            case .editDates:\n+                return \"editDates\"\n+            case .open:\n+                return \"open\"\n+            }\n+        }\n+    }\n+\n     @Environment(\\.modelContext) private var modelContext\n     @Environment(\\.dismiss) private var dismiss\n     @Query private var items: [Item]\n     @State private var expirationReferenceDate = Date.now\n-    @State private var dateEditTarget: Item?\n+    @State private var sheet: Sheet?\n     @State private var showsDeletionConfirmation = false\n     @State private var deletionError: String?\n \n@@ -58,8 +72,15 @@ struct ItemDetailView: View {\n         }\n         .navigationTitle(\"個体詳細\")\n         .navigationBarTitleDisplayMode(.inline)\n-        .sheet(item: $dateEditTarget) { item in\n-            ItemDateEditor(item: item)\n+        .sheet(item: $sheet) { sheet in\n+            switch sheet {\n+            case .editDates(let item):\n+                ItemDateEditor(item: item)\n+            case .open(let item):\n+                ItemOpeningForm { date, calendar in\n+                    open(item, on: date, calendar: calendar)\n+                }\n+            }\n         }\n     }\n \n@@ -69,6 +90,9 @@ struct ItemDetailView: View {\n         return Form {\n             Section(\"個体情報\") {\n                 LabeledContent(\"状態\", value: detail.status)\n+                    .accessibilityElement(children: .ignore)\n+                    .accessibilityLabel(\"状態、\\(detail.status)\")\n+                    .accessibilityIdentifier(\"item-detail-status\")\n                 LabeledContent(\"賞味期限\") {\n                     InventoryExpirationLabel(text: expiration.detailText, warningColor: expiration.warningColor)\n                 }\n@@ -76,9 +100,12 @@ struct ItemDetailView: View {\n                 .accessibilityLabel(\"賞味期限、\\(expiration.detailText)\")\n                 .accessibilityIdentifier(\"item-detail-expiration\")\n                 LabeledContent(\"開封日\", value: detail.opening)\n+                    .accessibilityElement(children: .ignore)\n+                    .accessibilityLabel(\"開封日、\\(detail.opening)\")\n+                    .accessibilityIdentifier(\"item-detail-opening-date\")\n                 if detail.item.status != nil {\n                     Button(\"日付を編集\") {\n-                        dateEditTarget = detail.item\n+                        sheet = .editDates(detail.item)\n                     }\n                     .accessibilityIdentifier(\"item-detail-edit-dates\")\n                 }\n@@ -90,6 +117,12 @@ struct ItemDetailView: View {\n             }\n \n             Section {\n+                if detail.item.status == .unopened {\n+                    Button(\"この1本を開封\") {\n+                        sheet = .open(detail.item)\n+                    }\n+                    .accessibilityIdentifier(\"item-detail-open\")\n+                }\n                 if let deletionError {\n                     Text(deletionError)\n                         .foregroundStyle(.red)\n@@ -111,9 +144,20 @@ struct ItemDetailView: View {\n         }\n     }\n \n+    private func isCurrent(_ item: Item) -> Bool {\n+        _items.fetchError == nil && items.count == 1 && items.first === item && !item.isDeleted\n+    }\n+\n+    private func open(_ item: Item, on date: Date, calendar: Calendar) -> Result<Void, ItemActions.ActionError> {\n+        guard isCurrent(item) else {\n+            return .failure(.itemNotInContext)\n+        }\n+\n+        return ItemActions(context: modelContext).open(item, openingDate: date, calendar: calendar)\n+    }\n+\n     private func delete(_ target: ItemDetailContent) {\n-        guard _items.fetchError == nil, items.count == 1, items.first === target.item,\n-            !target.item.isDeleted, target.item.modelContext === modelContext, target.canDeleteFromInventory\n+        guard isCurrent(target.item), target.item.modelContext === modelContext, target.canDeleteFromInventory\n         else {\n             deletionError = \"削除できる在庫が見つかりません。在庫一覧から選び直してください。\"\n             return\n@@ -173,6 +217,84 @@ struct ItemDetailContent {\n     }\n }\n \n+private struct ItemOpeningForm: View {\n+    @Environment(\\.calendar) private var calendar\n+    @Environment(\\.dismiss) private var dismiss\n+    @State private var openingDate = Date.now\n+    @State private var saveError: ItemActions.ActionError?\n+\n+    private let confirm: @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>\n+\n+    init(confirm: @escaping @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>) {\n+        self.confirm = confirm\n+    }\n+\n+    var body: some View {\n+        let recordedDate = openingDate.formatted(date: .abbreviated, time: .omitted)\n+\n+        NavigationStack {\n+            Form {\n+                if let message = saveErrorMessage {\n+                    Section {\n+                        Text(message)\n+                            .foregroundStyle(.red)\n+                            .accessibilityIdentifier(\"item-open-error\")\n+                    }\n+                }\n+\n+                Section {\n+                    DatePicker(\"開封日\", selection: $openingDate, in: ...Date.now, displayedComponents: .date)\n+                        .datePickerStyle(.wheel)\n+                        .accessibilityIdentifier(\"item-open-date\")\n+                } header: {\n+                    Text(\"開封日\")\n+                } footer: {\n+                    Text(\"「\\(recordedDate)」を開封日として記録し、状態を使用中に変更します。\")\n+                        .accessibilityIdentifier(\"item-open-preview\")\n+                }\n+            }\n+            .navigationTitle(\"この1本を開封\")\n+            .navigationBarTitleDisplayMode(.inline)\n+            .toolbar {\n+                ToolbarItem(placement: .cancellationAction) {\n+                    Button(\"キャンセル\") { dismiss() }\n+                        .accessibilityIdentifier(\"item-open-cancel\")\n+                }\n+                ToolbarItem(placement: .confirmationAction) {\n+                    Button(\"開封する\", action: save)\n+                        .accessibilityIdentifier(\"item-open-confirm\")\n+                }\n+            }\n+        }\n+    }\n+\n+    private func save() {\n+        switch confirm(openingDate, calendar) {\n+        case .success:\n+            dismiss()\n+        case .failure(let error):\n+            saveError = error\n+        }\n+    }\n+\n+    private var saveErrorMessage: String? {\n+        switch saveError {\n+        case nil:\n+            return nil\n+        case .itemNotInContext, .validation(.invalidTransition), .validation(.unknownCurrentStatus):\n+            return \"開封できる個体が見つかりません。在庫一覧から選び直してください。\"\n+        case .validation(.futureOpeningDate):\n+            return \"開封日には今日以前の日付を選んでください。\"\n+        case .pendingChanges:\n+            return \"ほかの変更の保存が終わってから、もう一度「開封する」を押してください。\"\n+        case .persistence:\n+            return \"開封を保存できませんでした。日付を変えずにもう一度「開封する」を押せます。\"\n+        case .productNotInContext, .deletionNotConfirmed, .validation:\n+            return \"開封できませんでした。入力内容と個体の状態を確認してください。\"\n+        }\n+    }\n+}\n+\n private struct ItemDateEditor: View {\n     @Environment(\\.modelContext) private var modelContext\n     @Environment(\\.dismiss) private var dismiss",
+          "patchLines": 190,
+          "truncated": false
+        },
+        {
+          "path": "src/SeasoningManager/SeasoningManagerUITests/SeasoningManagerUITests.swift",
+          "status": "M",
+          "oldPath": null,
+          "additions": 67,
+          "deletions": 0,
+          "patch": "@@ -193,6 +193,50 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n         XCTAssertTrue(productRow(name: name, type: type, unopened: 1, in: app).appears(within: 5))\n     }\n \n+    @MainActor\n+    func testOpeningOneItemRequiresConfirmationAndSavesSelectedPastDate() throws {\n+        let app = makeApplication()\n+        app.launchArguments += [\"-AppleLanguages\", \"(en)\", \"-AppleLocale\", \"en_US\"]\n+        let name = \"Olive Oil\"\n+        app.launch()\n+        XCTAssertTrue(app.navigationBars[\"商品一覧\"].appears(within: 5))\n+        app.tabBars.buttons[\"在庫\"].tap()\n+        app.buttons[\"inventory-empty-add\"].tap()\n+        app.buttons[\"item-form-register-product\"].tap()\n+        try enterProduct(name: name, type: \"Oil\", in: app)\n+        app.buttons[\"product-form-save\"].tap()\n+        app.buttons[\"item-form-save\"].tap()\n+\n+        let row = app.buttons.matching(\n+            NSPredicate(format: \"label CONTAINS %@ AND label CONTAINS %@\", name, \"期限未設定\")\n+        ).firstMatch\n+        XCTAssertTrue(row.appears(within: 5))\n+        row.tap()\n+\n+        let status = app.descendants(matching: .any).matching(identifier: \"item-detail-status\").firstMatch\n+        let openingDate = app.descendants(matching: .any).matching(identifier: \"item-detail-opening-date\").firstMatch\n+        let open = app.buttons[\"item-detail-open\"]\n+        let confirm = app.buttons[\"item-open-confirm\"]\n+        XCTAssertTrue(open.appears(within: 5))\n+        XCTAssertEqual(status.label, \"状態、未開封\")\n+        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n+\n+        _ = try selectPastOpeningDate(openingWith: open, in: app)\n+        app.buttons[\"item-open-cancel\"].tap()\n+        XCTAssertTrue(confirm.disappears(within: 5))\n+        XCTAssertTrue(open.exists)\n+        XCTAssertEqual(status.label, \"状態、未開封\")\n+        XCTAssertEqual(openingDate.label, \"開封日、未設定\")\n+\n+        let selectedDate = try selectPastOpeningDate(openingWith: open, in: app)\n+        confirm.tap()\n+        XCTAssertTrue(confirm.disappears(within: 5))\n+        XCTAssertTrue(app.navigationBars[\"個体詳細\"].exists)\n+        XCTAssertTrue(status.satisfies(NSPredicate(format: \"label == %@\", \"状態、使用中\"), within: 5))\n+        XCTAssertEqual(openingDate.label, \"開封日、\\(selectedDate)\")\n+        XCTAssertFalse(open.exists)\n+    }\n+\n     @MainActor\n     func testBackDiscardsItemInputAndNextFormCanSaveExpiration() throws {\n         let app = makeApplication()\n@@ -301,6 +345,29 @@ final class SeasoningManagerInventoryUITests: XCTestCase {\n         XCTAssertTrue(app.staticTexts[\"在庫はまだありません\"].appears(within: 5))\n     }\n \n+    @MainActor\n+    private func selectPastOpeningDate(openingWith button: XCUIElement, in app: XCUIApplication) throws -> String {\n+        let beforePresentation = Date.now\n+        button.tap()\n+        let preview = app.staticTexts[\"item-open-preview\"]\n+        XCTAssertTrue(preview.appears(within: 5), app.debugDescription)\n+        let afterPresentation = Date.now\n+        let format = Date.FormatStyle(date: .abbreviated, time: .omitted, locale: Locale(identifier: \"en_US\"))\n+        let initialPreview = preview.label\n+        let initialDate = try XCTUnwrap(\n+            [beforePresentation, afterPresentation].first { initialPreview.hasPrefix(\"「\\($0.formatted(format))」\") },\n+            initialPreview\n+        )\n+        let calendar = Calendar(identifier: .gregorian)\n+        let year = calendar.component(.year, from: initialDate)\n+        let yearWheel = app.pickerWheels.matching(NSPredicate(format: \"value == %@\", String(year))).firstMatch\n+        XCTAssertTrue(yearWheel.appears(within: 5), app.debugDescription)\n+        yearWheel.adjust(toPickerWheelValue: String(year - 1))\n+        XCTAssertTrue(preview.satisfies(NSPredicate(format: \"label CONTAINS %@\", \"\\(year - 1)」\"), within: 5))\n+        let date = try XCTUnwrap(preview.label.split(separator: \"」\", maxSplits: 1).first)\n+        return String(date.dropFirst())\n+    }\n+\n     @MainActor\n     private func selectItemProduct(name: String, type: String, in app: XCUIApplication) throws {\n         let picker = app.buttons[\"item-form-product\"]",
+          "patchLines": 81,
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "dependencies": []
+}
