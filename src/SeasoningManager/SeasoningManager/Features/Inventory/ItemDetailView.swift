@@ -5,11 +5,25 @@ import SwiftUI
 import UIKit
 
 struct ItemDetailView: View {
+    private nonisolated enum Sheet: Identifiable {
+        case editDates(Item)
+        case open(Item)
+
+        var id: String {
+            switch self {
+            case .editDates:
+                return "editDates"
+            case .open:
+                return "open"
+            }
+        }
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query private var items: [Item]
     @State private var expirationReferenceDate = Date.now
-    @State private var dateEditTarget: Item?
+    @State private var sheet: Sheet?
     @State private var showsDeletionConfirmation = false
     @State private var deletionError: String?
 
@@ -58,8 +72,15 @@ struct ItemDetailView: View {
         }
         .navigationTitle("個体詳細")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $dateEditTarget) { item in
-            ItemDateEditor(item: item)
+        .sheet(item: $sheet) { sheet in
+            switch sheet {
+            case .editDates(let item):
+                ItemDateEditor(item: item)
+            case .open(let item):
+                ItemOpeningForm { date, calendar in
+                    open(item, on: date, calendar: calendar)
+                }
+            }
         }
     }
 
@@ -69,6 +90,9 @@ struct ItemDetailView: View {
         return Form {
             Section("個体情報") {
                 LabeledContent("状態", value: detail.status)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("状態、\(detail.status)")
+                    .accessibilityIdentifier("item-detail-status")
                 LabeledContent("賞味期限") {
                     InventoryExpirationLabel(text: expiration.detailText, warningColor: expiration.warningColor)
                 }
@@ -76,9 +100,12 @@ struct ItemDetailView: View {
                 .accessibilityLabel("賞味期限、\(expiration.detailText)")
                 .accessibilityIdentifier("item-detail-expiration")
                 LabeledContent("開封日", value: detail.opening)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("開封日、\(detail.opening)")
+                    .accessibilityIdentifier("item-detail-opening-date")
                 if detail.item.status != nil {
                     Button("日付を編集") {
-                        dateEditTarget = detail.item
+                        sheet = .editDates(detail.item)
                     }
                     .accessibilityIdentifier("item-detail-edit-dates")
                 }
@@ -90,6 +117,12 @@ struct ItemDetailView: View {
             }
 
             Section {
+                if detail.item.status == .unopened {
+                    Button("この1本を開封") {
+                        sheet = .open(detail.item)
+                    }
+                    .accessibilityIdentifier("item-detail-open")
+                }
                 if let deletionError {
                     Text(deletionError)
                         .foregroundStyle(.red)
@@ -111,9 +144,20 @@ struct ItemDetailView: View {
         }
     }
 
+    private func isCurrent(_ item: Item) -> Bool {
+        _items.fetchError == nil && items.count == 1 && items.first === item && !item.isDeleted
+    }
+
+    private func open(_ item: Item, on date: Date, calendar: Calendar) -> Result<Void, ItemActions.ActionError> {
+        guard isCurrent(item) else {
+            return .failure(.itemNotInContext)
+        }
+
+        return ItemActions(context: modelContext).open(item, openingDate: date, calendar: calendar)
+    }
+
     private func delete(_ target: ItemDetailContent) {
-        guard _items.fetchError == nil, items.count == 1, items.first === target.item,
-            !target.item.isDeleted, target.item.modelContext === modelContext, target.canDeleteFromInventory
+        guard isCurrent(target.item), target.item.modelContext === modelContext, target.canDeleteFromInventory
         else {
             deletionError = "削除できる在庫が見つかりません。在庫一覧から選び直してください。"
             return
@@ -170,6 +214,84 @@ struct ItemDetailContent {
         status = item.status?.displayName ?? "不明な状態"
         expirationDate = item.expirationDate
         opening = item.openingDate?.formatted(date: .abbreviated, time: .omitted) ?? "未設定"
+    }
+}
+
+private struct ItemOpeningForm: View {
+    @Environment(\.calendar) private var calendar
+    @Environment(\.dismiss) private var dismiss
+    @State private var openingDate = Date.now
+    @State private var saveError: ItemActions.ActionError?
+
+    private let confirm: @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>
+
+    init(confirm: @escaping @MainActor (Date, Calendar) -> Result<Void, ItemActions.ActionError>) {
+        self.confirm = confirm
+    }
+
+    var body: some View {
+        let recordedDate = openingDate.formatted(date: .abbreviated, time: .omitted)
+
+        NavigationStack {
+            Form {
+                if let message = saveErrorMessage {
+                    Section {
+                        Text(message)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("item-open-error")
+                    }
+                }
+
+                Section {
+                    DatePicker("開封日", selection: $openingDate, in: ...Date.now, displayedComponents: .date)
+                        .datePickerStyle(.wheel)
+                        .accessibilityIdentifier("item-open-date")
+                } header: {
+                    Text("開封日")
+                } footer: {
+                    Text("「\(recordedDate)」を開封日として記録し、状態を使用中に変更します。")
+                        .accessibilityIdentifier("item-open-preview")
+                }
+            }
+            .navigationTitle("この1本を開封")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { dismiss() }
+                        .accessibilityIdentifier("item-open-cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("開封する", action: save)
+                        .accessibilityIdentifier("item-open-confirm")
+                }
+            }
+        }
+    }
+
+    private func save() {
+        switch confirm(openingDate, calendar) {
+        case .success:
+            dismiss()
+        case .failure(let error):
+            saveError = error
+        }
+    }
+
+    private var saveErrorMessage: String? {
+        switch saveError {
+        case nil:
+            return nil
+        case .itemNotInContext, .validation(.invalidTransition), .validation(.unknownCurrentStatus):
+            return "開封できる個体が見つかりません。在庫一覧から選び直してください。"
+        case .validation(.futureOpeningDate):
+            return "開封日には今日以前の日付を選んでください。"
+        case .pendingChanges:
+            return "ほかの変更の保存が終わってから、もう一度「開封する」を押してください。"
+        case .persistence:
+            return "開封を保存できませんでした。日付を変えずにもう一度「開封する」を押せます。"
+        case .productNotInContext, .deletionNotConfirmed, .validation:
+            return "開封できませんでした。入力内容と個体の状態を確認してください。"
+        }
     }
 }
 
